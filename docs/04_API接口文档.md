@@ -291,3 +291,51 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | --- | --- | --- | --- |
 | trade_date | date | 否 | 指定因子日期 |
 | limit | integer | 否 | 返回条数，默认 50 |
+
+## GET /api/strategies
+
+用途：查询策略配置。
+
+## POST /api/strategies/run
+
+用途：运行策略，基于指定日期或最新日期的 `factor_daily.alpha_score` 生成 Alpha 信号和目标组合。
+
+请求示例：
+
+```json
+{
+  "strategy_code": "core_etf_rotation",
+  "run_date": "2026-07-08",
+  "run_type": "manual"
+}
+```
+
+响应示例：
+
+```json
+{
+  "run_id": 1,
+  "strategy_code": "core_etf_rotation",
+  "strategy_version": "0.1.0",
+  "run_date": "2026-07-08",
+  "signal_count": 1,
+  "target_count": 3,
+  "status": "success"
+}
+```
+
+当前版本生成的是风控前目标组合，`raw_target_weight` 和 `final_target_weight` 暂时相同。后续阶段会由独立风控引擎修正 `final_target_weight`。
+
+## GET /api/strategies/latest-signals
+
+用途：查询最近一次策略运行生成的 Alpha 信号。
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| limit | integer | 否 | 返回条数，默认 100 |
+
+## GET /api/portfolio/target
+
+用途：查询最近一次策略运行生成的目标组合。

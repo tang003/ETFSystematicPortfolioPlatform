@@ -6,6 +6,8 @@ from app.api.data_quality_api import router as data_quality_router
 from app.api.factor_api import router as factor_router
 from app.api.health_api import router as health_router
 from app.api.market_api import router as market_router
+from app.api.portfolio_api import router as portfolio_router
+from app.api.strategy_api import router as strategy_router
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -20,6 +22,8 @@ def create_app() -> FastAPI:
     app.include_router(market_router, prefix=settings.api_prefix)
     app.include_router(data_quality_router, prefix=settings.api_prefix)
     app.include_router(factor_router, prefix=settings.api_prefix)
+    app.include_router(strategy_router, prefix=settings.api_prefix)
+    app.include_router(portfolio_router, prefix=settings.api_prefix)
     return app
 
 
