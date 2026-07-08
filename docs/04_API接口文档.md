@@ -440,3 +440,26 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ## GET /api/backtest/{backtest_id}/metrics
 
 用途：查询回测绩效指标。
+
+## POST /api/reports/monthly
+
+用途：生成月度调仓 Markdown 报告，并保存到 `report_log`。
+
+请求示例：
+
+```json
+{
+  "run_id": 1,
+  "report_date": "2026-07-08"
+}
+```
+
+如果不传 `run_id`，默认使用最近一次策略运行。
+
+## GET /api/reports
+
+用途：查询报告列表。
+
+## GET /api/reports/{report_id}
+
+用途：查询单份报告详情，包括 `content_markdown`。

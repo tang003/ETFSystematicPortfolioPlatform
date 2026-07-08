@@ -9,6 +9,7 @@ from app.api.health_api import router as health_router
 from app.api.market_api import router as market_router
 from app.api.portfolio_api import router as portfolio_router
 from app.api.rebalance_api import router as rebalance_router
+from app.api.report_api import router as report_router
 from app.api.risk_api import router as risk_router
 from app.api.strategy_api import router as strategy_router
 from app.core.config import get_settings
@@ -30,6 +31,7 @@ def create_app() -> FastAPI:
     app.include_router(risk_router, prefix=settings.api_prefix)
     app.include_router(rebalance_router, prefix=settings.api_prefix)
     app.include_router(backtest_router, prefix=settings.api_prefix)
+    app.include_router(report_router, prefix=settings.api_prefix)
     return app
 
 
