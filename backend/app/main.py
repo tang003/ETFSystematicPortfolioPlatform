@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.api.asset_api import router as asset_router
 from app.api.calendar_api import router as calendar_router
 from app.api.data_quality_api import router as data_quality_router
+from app.api.factor_api import router as factor_router
 from app.api.health_api import router as health_router
 from app.api.market_api import router as market_router
 from app.core.config import get_settings
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar_router, prefix=settings.api_prefix)
     app.include_router(market_router, prefix=settings.api_prefix)
     app.include_router(data_quality_router, prefix=settings.api_prefix)
+    app.include_router(factor_router, prefix=settings.api_prefix)
     return app
 
 

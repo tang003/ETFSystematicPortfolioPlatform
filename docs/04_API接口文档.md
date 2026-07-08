@@ -236,3 +236,58 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | start_date | date | 是 | 开始日期 |
 | end_date | date | 是 | 结束日期 |
 | market | string | 否 | 市场，默认 `CN` |
+
+## POST /api/factors/calculate
+
+用途：基于 `market_data_clean` 计算因子并写入 `factor_daily`。
+
+请求示例：
+
+```json
+{
+  "symbols": ["510300"],
+  "start_date": "2026-07-01",
+  "end_date": "2026-07-08"
+}
+```
+
+响应示例：
+
+```json
+{
+  "total_symbols": 1,
+  "success_count": 1,
+  "failed_count": 0,
+  "total_factor_rows": 6,
+  "results": [
+    {
+      "symbol": "510300",
+      "factor_rows": 6,
+      "status": "success",
+      "message": null
+    }
+  ]
+}
+```
+
+## GET /api/factors/{symbol}
+
+用途：查询单只 ETF 的因子历史。
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| symbol | string | 是 | ETF 代码，位于路径中 |
+| limit | integer | 否 | 返回条数，默认 100，最大 1000 |
+
+## GET /api/factors/ranking
+
+用途：查询最近一个因子日期或指定日期的 ETF 综合评分排名。
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| trade_date | date | 否 | 指定因子日期 |
+| limit | integer | 否 | 返回条数，默认 50 |
