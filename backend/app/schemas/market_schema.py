@@ -5,11 +5,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MarketSyncRequest(BaseModel):
-    symbols: list[str] | None = Field(default=None, description="ETF 代码列表；为空时同步全部启用 ETF")
-    start_date: date | None = Field(default=None, description="开始日期，默认近一年")
-    end_date: date | None = Field(default=None, description="结束日期，默认今天")
-    source: str = Field(default="akshare", description="行情来源：akshare 会在失败时自动 fallback 到 eastmoney")
-    clean_after_sync: bool = Field(default=True, description="同步 raw 后是否写入 clean 表")
+    symbols: list[str] | None = Field(default=None, description="ETF symbols; empty means all enabled ETFs")
+    start_date: date | None = Field(default=None, description="Start date; default is one year before end_date")
+    end_date: date | None = Field(default=None, description="End date; default is today")
+    source: str = Field(default="akshare", description="akshare falls back to eastmoney when possible")
+    clean_after_sync: bool = Field(default=True, description="Whether to write clean bars after raw sync")
+    max_symbols: int | None = Field(default=None, ge=1, description="Maximum symbols to sync in this request")
+    request_interval_seconds: float = Field(default=0, ge=0, le=10, description="Delay between symbols")
 
 
 class SymbolSyncResult(BaseModel):
@@ -26,6 +28,10 @@ class MarketSyncResponse(BaseModel):
     end_date: date
     source: str
     total_symbols: int
+    requested_symbols: int
+    skipped_symbols: int
+    success_count: int
+    failed_count: int
     total_raw_rows: int
     total_clean_rows: int
     total_quality_logs: int

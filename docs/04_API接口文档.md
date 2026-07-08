@@ -83,7 +83,9 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "start_date": "2025-07-08",
   "end_date": "2026-07-08",
   "source": "akshare",
-  "clean_after_sync": true
+  "clean_after_sync": true,
+  "max_symbols": 5,
+  "request_interval_seconds": 0.5
 }
 ```
 
@@ -96,6 +98,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | end_date | date | 否 | 结束日期，默认今天 |
 | source | string | 否 | 数据源，默认 `akshare` |
 | clean_after_sync | boolean | 否 | 是否同步写入 clean 表并执行质量检查 |
+| max_symbols | integer | 否 | 本次最多同步多少只 ETF，适合批量同步时分批执行 |
+| request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，降低上游压力 |
 
 响应示例：
 
@@ -105,6 +109,10 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "end_date": "2026-07-08",
   "source": "akshare",
   "total_symbols": 1,
+  "requested_symbols": 1,
+  "skipped_symbols": 0,
+  "success_count": 1,
+  "failed_count": 0,
   "total_raw_rows": 240,
   "total_clean_rows": 240,
   "total_quality_logs": 1,

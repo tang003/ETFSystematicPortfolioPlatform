@@ -19,6 +19,8 @@ def sync_market(request: MarketSyncRequest, db: Session = Depends(get_db)) -> Ma
         end_date=request.end_date,
         source=request.source,
         clean_after_sync=request.clean_after_sync,
+        max_symbols=request.max_symbols,
+        request_interval_seconds=request.request_interval_seconds,
     )
 
 
@@ -97,4 +99,3 @@ def get_symbol_bars(
         )
         for row in rows
     ]
-

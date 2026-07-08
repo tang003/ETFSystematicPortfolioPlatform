@@ -1,3 +1,4 @@
+import time
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -32,6 +33,14 @@ def resolve_symbols(db: Session, symbols: list[str] | None) -> list[str]:
             select(AssetMaster.symbol).where(AssetMaster.enabled.is_(True)).order_by(AssetMaster.symbol)
         ).all()
     )
+
+
+def limit_symbols(symbols: list[str], max_symbols: int | None) -> tuple[list[str], int]:
+    if max_symbols is None:
+        return symbols, 0
+    if max_symbols < 1:
+        raise ValueError("max_symbols must be greater than 0")
+    return symbols[:max_symbols], max(0, len(symbols) - max_symbols)
 
 
 def fetch_etf_daily_bars(symbol: str, start_date: date, end_date: date, source: str = "akshare") -> tuple[pd.DataFrame, str]:
@@ -114,12 +123,15 @@ def sync_market_data(
     end_date: date | None,
     source: str = "akshare",
     clean_after_sync: bool = True,
+    max_symbols: int | None = None,
+    request_interval_seconds: float = 0,
 ) -> dict[str, Any]:
     resolved_start, resolved_end = default_sync_dates(start_date, end_date)
-    resolved_symbols = resolve_symbols(db, symbols)
+    all_symbols = resolve_symbols(db, symbols)
+    resolved_symbols, skipped_symbols = limit_symbols(all_symbols, max_symbols)
     results: list[dict[str, Any]] = []
 
-    for symbol in resolved_symbols:
+    for index, symbol in enumerate(resolved_symbols):
         try:
             raw_frame, actual_source = fetch_etf_daily_bars(symbol, resolved_start, resolved_end, source)
             normalized_rows = normalize_market_bars(symbol, raw_frame)
@@ -159,12 +171,20 @@ def sync_market_data(
                     "message": str(exc),
                 }
             )
+        if request_interval_seconds > 0 and index < len(resolved_symbols) - 1:
+            time.sleep(request_interval_seconds)
 
+    success_count = sum(1 for item in results if item["status"] == "success")
+    failed_count = sum(1 for item in results if item["status"] == "failed")
     return {
         "start_date": resolved_start,
         "end_date": resolved_end,
         "source": source,
         "total_symbols": len(resolved_symbols),
+        "requested_symbols": len(all_symbols),
+        "skipped_symbols": skipped_symbols,
+        "success_count": success_count,
+        "failed_count": failed_count,
         "total_raw_rows": sum(item["raw_rows"] for item in results),
         "total_clean_rows": sum(item["clean_rows"] for item in results),
         "total_quality_logs": sum(item["quality_logs"] for item in results),
