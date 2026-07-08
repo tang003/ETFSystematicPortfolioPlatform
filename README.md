@@ -20,8 +20,8 @@ docker compose up --build
 - API 健康检查：http://localhost:8000/health
 - Swagger 文档：http://localhost:8000/docs
 - ETF 资产列表：http://localhost:8000/api/assets
+- Web 控制台：http://localhost:5173
 
 ## 项目文档
 
 核心维护文档位于 `docs/`。以后每完成一个阶段或版本，都需要同步更新相关设计文档和 `docs/09_开发日志.md`。
-
