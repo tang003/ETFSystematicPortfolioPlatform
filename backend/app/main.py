@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.api.asset_api import router as asset_router
+from app.api.backtest_api import router as backtest_router
 from app.api.calendar_api import router as calendar_router
 from app.api.data_quality_api import router as data_quality_router
 from app.api.factor_api import router as factor_router
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(portfolio_router, prefix=settings.api_prefix)
     app.include_router(risk_router, prefix=settings.api_prefix)
     app.include_router(rebalance_router, prefix=settings.api_prefix)
+    app.include_router(backtest_router, prefix=settings.api_prefix)
     return app
 
 

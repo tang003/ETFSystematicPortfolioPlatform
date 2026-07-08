@@ -400,3 +400,43 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | --- | --- | --- | --- |
 | run_id | integer | 否 | 策略运行 ID |
 | limit | integer | 否 | 返回条数，默认 100 |
+
+## POST /api/backtest/run
+
+用途：运行基础回测。当前版本实现等权买入持有基线回测，后续再扩展到月度策略调仓回测。
+
+请求示例：
+
+```json
+{
+  "strategy_code": "equal_weight_buy_and_hold",
+  "name": "510300 baseline",
+  "symbols": ["510300"],
+  "start_date": "2026-07-01",
+  "end_date": "2026-07-08",
+  "initial_cash": 10000,
+  "monthly_contribution": 0,
+  "fee_rate": 0.001,
+  "slippage_rate": 0.001
+}
+```
+
+## GET /api/backtest/runs
+
+用途：查询回测运行记录。
+
+## GET /api/backtest/{backtest_id}
+
+用途：查询单个回测运行配置。
+
+## GET /api/backtest/{backtest_id}/equity-curve
+
+用途：查询回测净值曲线。
+
+## GET /api/backtest/{backtest_id}/trades
+
+用途：查询回测交易记录。
+
+## GET /api/backtest/{backtest_id}/metrics
+
+用途：查询回测绩效指标。
