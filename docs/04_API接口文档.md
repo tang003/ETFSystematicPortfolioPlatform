@@ -339,3 +339,64 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ## GET /api/portfolio/target
 
 用途：查询最近一次策略运行生成的目标组合。
+
+## POST /api/risk/check
+
+用途：对指定策略运行的目标组合执行独立风控检查，修正 `target_portfolio.final_target_weight`，并写入 `risk_check_result`。
+
+请求示例：
+
+```json
+{
+  "run_id": 1
+}
+```
+
+响应示例：
+
+```json
+{
+  "run_id": 1,
+  "check_date": "2026-07-08",
+  "result_count": 1,
+  "adjusted_count": 0,
+  "status": "success"
+}
+```
+
+## GET /api/risk/results
+
+用途：查询风控检查结果。
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| run_id | integer | 否 | 策略运行 ID |
+| limit | integer | 否 | 返回条数，默认 100 |
+
+## POST /api/rebalance/generate
+
+用途：根据风控后的目标组合生成调仓建议单。
+
+请求示例：
+
+```json
+{
+  "run_id": 1,
+  "portfolio_value": 100000
+}
+```
+
+当前版本暂未接入真实当前持仓，默认当前权重为 0，以组合市值估算建议金额。
+
+## GET /api/rebalance/orders
+
+用途：查询调仓建议单。
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| run_id | integer | 否 | 策略运行 ID |
+| limit | integer | 否 | 返回条数，默认 100 |
