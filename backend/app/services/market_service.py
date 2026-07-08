@@ -4,6 +4,7 @@ from typing import Any
 
 import akshare as ak
 import pandas as pd
+import requests
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -12,12 +13,14 @@ from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean, MarketDataRaw
 from app.services.data_quality_service import add_quality_log, check_clean_bars
 
+EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+
 
 def default_sync_dates(start_date: date | None, end_date: date | None) -> tuple[date, date]:
     resolved_end = end_date or date.today()
     resolved_start = start_date or (resolved_end - timedelta(days=365))
     if resolved_start > resolved_end:
-        raise ValueError("start_date 不能晚于 end_date")
+        raise ValueError("start_date must not be later than end_date")
     return resolved_start, resolved_end
 
 
@@ -31,7 +34,23 @@ def resolve_symbols(db: Session, symbols: list[str] | None) -> list[str]:
     )
 
 
-def fetch_etf_daily_bars(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
+def fetch_etf_daily_bars(symbol: str, start_date: date, end_date: date, source: str = "akshare") -> tuple[pd.DataFrame, str]:
+    if source == "eastmoney":
+        return fetch_eastmoney_daily_bars(symbol, start_date, end_date), "eastmoney"
+    if source == "akshare":
+        try:
+            return fetch_akshare_daily_bars(symbol, start_date, end_date), "akshare"
+        except Exception as akshare_error:  # noqa: BLE001 - fallback source is intentional.
+            try:
+                return fetch_eastmoney_daily_bars(symbol, start_date, end_date), "eastmoney"
+            except Exception as eastmoney_error:  # noqa: BLE001 - keep both source failures visible.
+                raise RuntimeError(
+                    f"akshare failed: {akshare_error}; eastmoney fallback failed: {eastmoney_error}"
+                ) from eastmoney_error
+    raise ValueError("source must be one of: akshare, eastmoney")
+
+
+def fetch_akshare_daily_bars(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
     return ak.fund_etf_hist_em(
         symbol=symbol,
         period="daily",
@@ -39,6 +58,52 @@ def fetch_etf_daily_bars(symbol: str, start_date: date, end_date: date) -> pd.Da
         end_date=end_date.strftime("%Y%m%d"),
         adjust="",
     )
+
+
+def fetch_eastmoney_daily_bars(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
+    response = requests.get(
+        EASTMONEY_KLINE_URL,
+        params={
+            "secid": eastmoney_secid(symbol),
+            "fields1": "f1,f2,f3,f4,f5,f6",
+            "fields2": "f51,f52,f53,f54,f55,f56,f57",
+            "klt": "101",
+            "fqt": "0",
+            "beg": start_date.strftime("%Y%m%d"),
+            "end": end_date.strftime("%Y%m%d"),
+        },
+        timeout=15,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    response.raise_for_status()
+    payload = response.json()
+    klines = (payload.get("data") or {}).get("klines") or []
+    if not klines:
+        raise ValueError(f"{symbol} eastmoney returned no kline rows")
+
+    rows: list[dict[str, Any]] = []
+    for line in klines:
+        values = line.split(",")
+        if len(values) < 7:
+            continue
+        rows.append(
+            {
+                "date": values[0],
+                "open": values[1],
+                "close": values[2],
+                "high": values[3],
+                "low": values[4],
+                "volume": values[5],
+                "amount": values[6],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def eastmoney_secid(symbol: str) -> str:
+    if symbol.startswith(("5", "6", "9")):
+        return f"1.{symbol}"
+    return f"0.{symbol}"
 
 
 def sync_market_data(
@@ -56,9 +121,9 @@ def sync_market_data(
 
     for symbol in resolved_symbols:
         try:
-            raw_frame = fetch_etf_daily_bars(symbol, resolved_start, resolved_end)
-            normalized_rows = normalize_akshare_bars(symbol, raw_frame)
-            raw_rows = upsert_raw_bars(db, normalized_rows, source)
+            raw_frame, actual_source = fetch_etf_daily_bars(symbol, resolved_start, resolved_end, source)
+            normalized_rows = normalize_market_bars(symbol, raw_frame)
+            raw_rows = upsert_raw_bars(db, normalized_rows, actual_source)
             clean_rows = upsert_clean_bars(db, normalized_rows) if clean_after_sync else 0
             quality_logs = check_clean_bars(db, symbol, resolved_start, resolved_end) if clean_after_sync else 0
             db.commit()
@@ -69,7 +134,7 @@ def sync_market_data(
                     "clean_rows": clean_rows,
                     "quality_logs": quality_logs,
                     "status": "success",
-                    "message": None,
+                    "message": f"source={actual_source}",
                 }
             )
         except Exception as exc:  # noqa: BLE001 - API needs per-symbol failure details.
@@ -107,9 +172,9 @@ def sync_market_data(
     }
 
 
-def normalize_akshare_bars(symbol: str, frame: pd.DataFrame) -> list[dict[str, Any]]:
+def normalize_market_bars(symbol: str, frame: pd.DataFrame) -> list[dict[str, Any]]:
     if frame is None or frame.empty:
-        raise ValueError(f"{symbol} 没有获取到行情数据")
+        raise ValueError(f"{symbol} returned no market data")
 
     rows: list[dict[str, Any]] = []
     for raw_row in frame.to_dict("records"):
@@ -206,7 +271,7 @@ def _first_value(row: dict[str, Any], *keys: str) -> Any:
 
 def _to_date(value: Any) -> date:
     if value is None or pd.isna(value):
-        raise ValueError("行情数据缺少交易日期字段")
+        raise ValueError("market data is missing trade_date")
     if isinstance(value, date):
         return value
     return pd.to_datetime(value).date()

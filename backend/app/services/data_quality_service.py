@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.data_quality import DataQualityLog
-from app.models.market_data import MarketDataClean
+from app.models.market_data import MarketDataClean, TradingCalendar
 
 
 def add_quality_log(
@@ -48,27 +48,42 @@ def check_clean_bars(db: Session, symbol: str, start_date: date, end_date: date)
             trade_date=None,
             check_type="missing_data",
             status="failed",
-            message="指定区间没有 clean 行情数据",
+            message="No clean market data in requested date range",
             severity="error",
         )
         return 1
 
     log_count = 0
+    existing_trade_dates = {bar.trade_date for bar in bars}
+    expected_trade_dates = list_expected_trade_dates(db, start_date, end_date)
+    missing_dates = [trade_date for trade_date in expected_trade_dates if trade_date not in existing_trade_dates]
+    for missing_date in missing_dates:
+        add_quality_log(
+            db,
+            symbol=symbol,
+            trade_date=missing_date,
+            check_type="missing_data",
+            status="warning",
+            message="Missing clean market data for open trading day",
+            severity="warning",
+        )
+        log_count += 1
+
     previous_close: Decimal | None = None
     for bar in bars:
         issues: list[tuple[str, str, str]] = []
         if bar.close is None or bar.close <= 0:
-            issues.append(("zero_price", "failed", "收盘价为空或小于等于 0"))
+            issues.append(("zero_price", "error", "Close price is empty or <= 0"))
         if bar.open is not None and bar.open <= 0:
-            issues.append(("zero_price", "failed", "开盘价小于等于 0"))
+            issues.append(("zero_price", "error", "Open price is <= 0"))
         if bar.high is not None and bar.low is not None and bar.high < bar.low:
-            issues.append(("abnormal_price", "failed", "最高价低于最低价"))
+            issues.append(("abnormal_price", "error", "High price is lower than low price"))
         if bar.volume is not None and bar.volume <= 0:
-            issues.append(("zero_volume", "warning", "成交量为空或小于等于 0"))
+            issues.append(("zero_volume", "warning", "Volume is empty or <= 0"))
         if previous_close and bar.close:
             daily_return = (bar.close / previous_close) - Decimal("1")
             if abs(daily_return) > Decimal("0.15"):
-                issues.append(("abnormal_return", "warning", f"单日涨跌幅异常：{daily_return:.4%}"))
+                issues.append(("abnormal_return", "warning", f"Abnormal daily return: {daily_return:.4%}"))
 
         if issues:
             bar.data_status = "warning"
@@ -95,10 +110,22 @@ def check_clean_bars(db: Session, symbol: str, start_date: date, end_date: date)
         trade_date=end_date,
         check_type="cleaning_success",
         status="success",
-        message=f"完成 clean 行情质量检查，共检查 {len(bars)} 条",
+        message=f"Checked {len(bars)} clean bars; missing_open_days={len(missing_dates)}",
         severity="info",
     )
     return log_count + 1
+
+
+def list_expected_trade_dates(db: Session, start_date: date, end_date: date) -> list[date]:
+    return list(
+        db.scalars(
+            select(TradingCalendar.trade_date)
+            .where(TradingCalendar.trade_date >= start_date)
+            .where(TradingCalendar.trade_date <= end_date)
+            .where(TradingCalendar.is_open.is_(True))
+            .order_by(TradingCalendar.trade_date)
+        ).all()
+    )
 
 
 def list_quality_logs(db: Session, limit: int = 100, symbol: str | None = None) -> list[DataQualityLog]:
@@ -123,4 +150,3 @@ def get_quality_status(db: Session) -> dict:
         "latest_created_at": latest_created_at,
         "status": status,
     }
-

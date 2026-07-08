@@ -123,6 +123,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 如果 AKShare 或上游数据源暂时不可用，接口会对单个 symbol 返回 `failed`，并把错误写入 `data_quality_log`。
 
+当前实现中，`source=akshare` 会先调用 AKShare；若 AKShare ETF 日线接口失败，会自动 fallback 到东方财富 K 线 HTTP 接口。也可以显式传入 `source=eastmoney` 只使用备用源。
+
 ## GET /api/market/raw
 
 用途：查询 raw 行情。
@@ -186,3 +188,43 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ## GET /api/data-quality/status
 
 用途：查询数据质量整体状态。
+
+## POST /api/calendar/sync
+
+用途：同步 A 股交易日历，写入 `trading_calendar`。
+
+请求示例：
+
+```json
+{
+  "start_date": "2026-01-01",
+  "end_date": "2026-12-31",
+  "market": "CN"
+}
+```
+
+响应示例：
+
+```json
+{
+  "start_date": "2026-01-01",
+  "end_date": "2026-12-31",
+  "market": "CN",
+  "source": "akshare_sina",
+  "open_days": 242
+}
+```
+
+如果 AKShare 交易日历不可用，系统会使用周一到周五作为本地 fallback，响应中的 `source` 为 `weekday_fallback`。这只适合开发验证，正式数据质量检查应优先使用真实交易日历。
+
+## GET /api/calendar/trading-days
+
+用途：查询交易日历。
+
+参数：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| start_date | date | 是 | 开始日期 |
+| end_date | date | 是 | 结束日期 |
+| market | string | 否 | 市场，默认 `CN` |
