@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: quant_etf_postgres
+    environment:
+      POSTGRES_DB: quant_etf
+      POSTGRES_USER: quant_etf
+      POSTGRES_PASSWORD: quant_etf_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init_schema.sql:/docker-entrypoint-initdb.d/01_init_schema.sql:ro
+      - ./sql/seed_assets.sql:/docker-entrypoint-initdb.d/02_seed_assets.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quant_etf -d quant_etf"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: quant_etf_redis
+    ports:
+      - "6380:6379"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: quant_etf_api
+    environment:
+      APP_NAME: ${APP_NAME:-ETF Systematic Portfolio Platform}
+      APP_ENV: ${APP_ENV:-local}
+      API_PREFIX: ${API_PREFIX:-/api}
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-quant_etf}
+      POSTGRES_USER: ${POSTGRES_USER:-quant_etf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quant_etf_password}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  postgres_data:

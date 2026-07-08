@@ -1,0 +1,16 @@
+fastapi==0.116.1
+uvicorn[standard]==0.35.0
+SQLAlchemy==2.0.41
+psycopg[binary]==3.2.9
+pydantic==2.11.7
+pydantic-settings==2.10.1
+python-dotenv==1.1.1
+loguru==0.7.3
+APScheduler==3.11.0
+pandas==2.3.1
+numpy==2.3.1
+akshare==1.17.25
+redis==6.2.0
+pytest==8.4.1
+httpx==0.28.1
+
