@@ -6,6 +6,12 @@
         <el-button type="primary" :loading="actionLoading" @click="runBacktestFlow">开始回测</el-button>
       </div>
       <el-form class="action-form" label-width="92px">
+        <el-form-item label="回测模式">
+          <el-select v-model="form.strategy_code">
+            <el-option label="策略月度调仓" value="core_etf_rotation_monthly" />
+            <el-option label="等权买入持有" value="equal_weight_buy_and_hold" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="回测名称">
           <el-input v-model="form.name" />
         </el-form-item>
@@ -17,6 +23,15 @@
         </el-form-item>
         <el-form-item label="初始资金">
           <el-input-number v-model="form.initial_cash" :min="1000" :step="10000" />
+        </el-form-item>
+        <el-form-item label="每月追加">
+          <el-input-number v-model="form.monthly_contribution" :min="0" :step="1000" />
+        </el-form-item>
+        <el-form-item label="手续费率">
+          <el-input-number v-model="form.fee_rate" :min="0" :step="0.0005" :precision="4" />
+        </el-form-item>
+        <el-form-item label="滑点率">
+          <el-input-number v-model="form.slippage_rate" :min="0" :step="0.0005" :precision="4" />
         </el-form-item>
       </el-form>
     </section>
@@ -40,6 +55,18 @@
         <el-table-column prop="metric_unit" label="单位" width="120" />
       </el-table>
     </section>
+    <section class="panel span-12">
+      <h2>交易记录</h2>
+      <el-table :data="trades" height="320">
+        <el-table-column prop="trade_date" label="日期" width="120" />
+        <el-table-column prop="symbol" label="代码" width="100" />
+        <el-table-column prop="action" label="方向" width="90" />
+        <el-table-column prop="price" label="价格" width="110" />
+        <el-table-column prop="quantity" label="数量" width="140" />
+        <el-table-column prop="amount" label="金额" width="140" />
+        <el-table-column prop="reason" label="原因" min-width="220" />
+      </el-table>
+    </section>
   </div>
 </template>
 
@@ -47,11 +74,12 @@
 import { nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { fetchBacktestCurve, fetchBacktestMetrics, fetchBacktestRuns, runBacktest, type BacktestCurvePoint, type BacktestMetric, type BacktestRun } from '../api/client'
+import { fetchBacktestCurve, fetchBacktestMetrics, fetchBacktestRuns, fetchBacktestTrades, runBacktest, type BacktestCurvePoint, type BacktestMetric, type BacktestRun, type BacktestTrade } from '../api/client'
 
 const runs = ref<BacktestRun[]>([])
 const curve = ref<BacktestCurvePoint[]>([])
 const metrics = ref<BacktestMetric[]>([])
+const trades = ref<BacktestTrade[]>([])
 const loading = ref(true)
 const actionLoading = ref(false)
 const chartRef = ref<HTMLElement>()
@@ -59,7 +87,14 @@ const today = new Date().toISOString().slice(0, 10)
 const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 const dateRange = ref<[string, string]>([start, today])
 const symbolsText = ref('510300,159915')
-const form = ref({ strategy_code: 'equal_weight_buy_and_hold', name: '等权买入持有回测', initial_cash: 100000 })
+const form = ref({
+  strategy_code: 'core_etf_rotation_monthly',
+  name: '策略月度调仓回测',
+  initial_cash: 100000,
+  monthly_contribution: 3000,
+  fee_rate: 0.001,
+  slippage_rate: 0.001,
+})
 
 onMounted(refresh)
 
@@ -78,7 +113,7 @@ async function selectRun(row: BacktestRun | undefined) {
 }
 
 async function loadRun(id: number) {
-  ;[curve.value, metrics.value] = await Promise.all([fetchBacktestCurve(id), fetchBacktestMetrics(id)])
+  ;[curve.value, metrics.value, trades.value] = await Promise.all([fetchBacktestCurve(id), fetchBacktestMetrics(id), fetchBacktestTrades(id)])
   await nextTick()
   if (chartRef.value) {
     echarts.init(chartRef.value).setOption({
@@ -100,6 +135,9 @@ async function runBacktestFlow() {
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
       initial_cash: form.value.initial_cash,
+      monthly_contribution: form.value.monthly_contribution,
+      fee_rate: form.value.fee_rate,
+      slippage_rate: form.value.slippage_rate,
     })
     ElMessage.success(`回测完成，backtest_id=${String(result.backtest_id ?? '-')}`)
     await refresh()

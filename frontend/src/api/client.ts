@@ -152,6 +152,18 @@ export interface BacktestMetric {
   metric_unit: string | null
 }
 
+export interface BacktestTrade {
+  trade_date: string
+  symbol: string
+  action: string
+  price: string | null
+  quantity: string | null
+  amount: string | null
+  fee: string | null
+  slippage: string | null
+  reason: string | null
+}
+
 export interface Report {
   id: number
   run_id: number | null
@@ -219,6 +231,7 @@ export const fetchRebalanceOrders = async () => (await api.get<RebalanceOrder[]>
 export const fetchBacktestRuns = async () => (await api.get<BacktestRun[]>('/api/backtest/runs?limit=20')).data
 export const fetchBacktestCurve = async (id: number) => (await api.get<BacktestCurvePoint[]>(`/api/backtest/${id}/equity-curve`)).data
 export const fetchBacktestMetrics = async (id: number) => (await api.get<BacktestMetric[]>(`/api/backtest/${id}/metrics`)).data
+export const fetchBacktestTrades = async (id: number) => (await api.get<BacktestTrade[]>(`/api/backtest/${id}/trades`)).data
 export const fetchReports = async () => (await api.get<Report[]>('/api/reports?limit=20')).data
 export const fetchReport = async (id: number) => (await api.get<Report>(`/api/reports/${id}`)).data
 export const syncCalendar = async (payload: { start_date: string; end_date: string; market?: string }) =>

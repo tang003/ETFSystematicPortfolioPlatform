@@ -20,7 +20,7 @@ from app.core.logging import setup_logging
 def create_app() -> FastAPI:
     setup_logging()
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, version="0.15.0")
+    app = FastAPI(title=settings.app_name, version="0.16.0")
     app.include_router(health_router)
     app.include_router(asset_router, prefix=settings.api_prefix)
     app.include_router(calendar_router, prefix=settings.api_prefix)

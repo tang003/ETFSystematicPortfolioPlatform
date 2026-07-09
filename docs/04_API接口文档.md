@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.14.0-investment-plan`
+当前版本：`v0.16.0-strategy-backtest-rebalance`
 
 ## GET /health
 
@@ -548,7 +548,10 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 ## POST /api/backtest/run
 
-用途：运行基础回测。当前版本实现等权买入持有基线回测，后续再扩展到月度策略调仓回测。
+用途：运行回测。当前支持两种模式：
+
+- `equal_weight_buy_and_hold`：等权买入持有基线回测。
+- `core_etf_rotation_monthly`：策略月度调仓回测，每月第一个可交易日根据最近 Alpha 排名生成目标权重并调仓。
 
 请求示例：
 
@@ -560,7 +563,23 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "start_date": "2026-07-01",
   "end_date": "2026-07-08",
   "initial_cash": 10000,
-  "monthly_contribution": 0,
+  "monthly_contribution": 2000,
+  "fee_rate": 0.001,
+  "slippage_rate": 0.001
+}
+```
+
+策略月度调仓示例：
+
+```json
+{
+  "strategy_code": "core_etf_rotation_monthly",
+  "name": "core rotation monthly",
+  "symbols": ["510300", "510500", "159915", "511010", "511880"],
+  "start_date": "2026-01-01",
+  "end_date": "2026-07-09",
+  "initial_cash": 100000,
+  "monthly_contribution": 3000,
   "fee_rate": 0.001,
   "slippage_rate": 0.001
 }
