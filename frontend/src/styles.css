@@ -185,6 +185,47 @@ body {
   height: 320px;
 }
 
+.insight-list {
+  display: grid;
+  gap: 12px;
+}
+
+.insight-item {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.insight-item span {
+  display: block;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.insight-item strong {
+  display: block;
+  margin-top: 4px;
+  color: #111827;
+  font-size: 20px;
+}
+
+.insight-item p {
+  margin: 8px 0 0;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.el-table .workbench-row-underweight {
+  --el-table-tr-bg-color: #f0fdf4;
+}
+
+.el-table .workbench-row-overweight,
+.el-table .workbench-row-exit {
+  --el-table-tr-bg-color: #fff7ed;
+}
+
 .markdown {
   line-height: 1.65;
   white-space: normal;

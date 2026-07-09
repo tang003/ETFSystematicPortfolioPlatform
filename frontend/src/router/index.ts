@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Dashboard from '../views/Dashboard.vue'
+import PortfolioWorkbench from '../views/PortfolioWorkbench.vue'
 import Workflow from '../views/Workflow.vue'
 import Assets from '../views/Assets.vue'
 import DataHealth from '../views/DataHealth.vue'
@@ -16,6 +17,7 @@ const router = createRouter({
   routes: [
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', component: Dashboard, meta: { title: '总览' } },
+    { path: '/portfolio-workbench', component: PortfolioWorkbench, meta: { title: '组合工作台' } },
     { path: '/workflow', component: Workflow, meta: { title: '全流程向导' } },
     { path: '/assets', component: Assets, meta: { title: 'ETF 池' } },
     { path: '/data-health', component: DataHealth, meta: { title: '数据健康' } },

@@ -126,6 +126,7 @@ export interface RebalanceOrder {
   target_weight: string | null
   weight_diff: string | null
   estimated_amount: string | null
+  reason: string | null
   status: string
 }
 
