@@ -143,6 +143,10 @@ body {
   font-size: 12px;
 }
 
+.el-steps--vertical {
+  min-height: 520px;
+}
+
 .span-3 { grid-column: span 3; }
 .span-4 { grid-column: span 4; }
 .span-6 { grid-column: span 6; }

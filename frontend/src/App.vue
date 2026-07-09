@@ -10,6 +10,7 @@
       </div>
       <el-menu :default-active="$route.path" router class="nav">
         <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon><span>总览</span></el-menu-item>
+        <el-menu-item index="/workflow"><el-icon><Operation /></el-icon><span>全流程</span></el-menu-item>
         <el-menu-item index="/assets"><el-icon><Grid /></el-icon><span>ETF 池</span></el-menu-item>
         <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
         <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
@@ -36,7 +37,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { CircleCheck, DataBoard, Document, Grid, Histogram, PieChart, TrendCharts, Warning } from '@element-plus/icons-vue'
+import { CircleCheck, DataBoard, Document, Grid, Histogram, Operation, PieChart, TrendCharts, Warning } from '@element-plus/icons-vue'
 import { fetchHealth } from './api/client'
 
 const healthOk = ref(false)
