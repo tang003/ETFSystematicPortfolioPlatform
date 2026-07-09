@@ -46,7 +46,7 @@ def generate_monthly_report(
         run_id=strategy_run.id,
         report_date=resolved_report_date,
         report_type="monthly_rebalance",
-        title=f"ETF Monthly Rebalance Report - {resolved_report_date}",
+        title=f"ETF 月度调仓报告 (Monthly Rebalance Report) - {resolved_report_date}",
         file_path=None,
         content_markdown=markdown,
         status="generated",
@@ -126,9 +126,9 @@ def build_monthly_report_markdown(
     backtest_metrics: list[BacktestMetrics],
 ) -> str:
     lines = [
-        f"# ETF Monthly Rebalance Report - {report_date}",
+        f"# ETF 月度调仓报告 (Monthly Rebalance Report) - {report_date}",
         "",
-        "## Strategy Run",
+        "## 策略运行概览 (Strategy Run)",
         "",
         f"- run_id: {strategy_run.id}",
         f"- strategy_code: {strategy_run.strategy_code}",
@@ -136,30 +136,30 @@ def build_monthly_report_markdown(
         f"- run_date: {strategy_run.run_date}",
         f"- status: {strategy_run.status}",
         "",
-        "## Alpha Ranking",
+        "## Alpha 排名 (Alpha Ranking)",
         "",
     ]
-    lines.extend(markdown_table(["Rank", "Symbol", "Alpha Score", "Confidence"], signal_rows(signals)))
-    lines.extend(["", "## Target Portfolio", ""])
-    lines.extend(markdown_table(["Symbol", "Asset Class", "Raw Weight", "Final Weight", "Reason"], target_rows(targets)))
-    lines.extend(["", "## Risk Check", ""])
-    lines.extend(markdown_table(["Rule", "Status", "Before", "After", "Message"], risk_rows(risk_results)))
-    lines.extend(["", "## Rebalance Orders", ""])
-    lines.extend(markdown_table(["Symbol", "Action", "Current", "Target", "Diff", "Amount"], rebalance_rows(rebalance_orders)))
-    lines.extend(["", "## Backtest Snapshot", ""])
+    lines.extend(markdown_table(["排名 Rank", "代码 Symbol", "Alpha 分数", "置信度 Confidence"], signal_rows(signals)))
+    lines.extend(["", "## 目标组合 (Target Portfolio)", ""])
+    lines.extend(markdown_table(["代码 Symbol", "资产类别 Asset Class", "原始权重 Raw Weight", "最终权重 Final Weight", "说明 Reason"], target_rows(targets)))
+    lines.extend(["", "## 风控检查 (Risk Check)", ""])
+    lines.extend(markdown_table(["规则 Rule", "状态 Status", "调整前 Before", "调整后 After", "说明 Message"], risk_rows(risk_results)))
+    lines.extend(["", "## 调仓建议单 (Rebalance Orders)", ""])
+    lines.extend(markdown_table(["代码 Symbol", "方向 Action", "当前权重 Current", "目标权重 Target", "差异 Diff", "估算金额 Amount"], rebalance_rows(rebalance_orders)))
+    lines.extend(["", "## 回测摘要 (Backtest Snapshot)", ""])
     if backtest:
         lines.extend([f"- backtest_id: {backtest.id}", f"- name: {backtest.name}", f"- period: {backtest.start_date} to {backtest.end_date}", ""])
-        lines.extend(markdown_table(["Metric", "Value", "Unit"], metric_rows(backtest_metrics)))
+        lines.extend(markdown_table(["指标 Metric", "数值 Value", "单位 Unit"], metric_rows(backtest_metrics)))
     else:
-        lines.append("- No backtest result available.")
+        lines.append("- 暂无可用回测结果 (No backtest result available).")
     lines.extend(
         [
             "",
-            "## System Notes",
+            "## 系统说明 (System Notes)",
             "",
-            "- This report is generated for personal ETF research and review.",
-            "- It is not investment advice and does not trigger real trades.",
-            "- Rebalance orders are suggestions and require manual confirmation.",
+            "- 本报告用于个人 ETF 投研和复盘 (personal ETF research and review)。",
+            "- 本报告不是投资建议 (not investment advice)，也不会触发真实交易。",
+            "- 调仓单为建议订单 (suggested rebalance orders)，执行前需要人工确认。",
         ]
     )
     return "\n".join(lines)
@@ -244,4 +244,3 @@ def list_reports(db: Session, limit: int = 100) -> list[ReportLog]:
 
 def get_report(db: Session, report_id: int) -> ReportLog | None:
     return db.get(ReportLog, report_id)
-

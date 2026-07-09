@@ -61,11 +61,47 @@ async function selectReport(row: Report | undefined) {
 const renderedMarkdown = computed(() => markdownToHtml(selected.value?.content_markdown ?? ''))
 
 function markdownToHtml(markdown: string) {
-  return markdown
-    .replace(/^# (.*)$/gm, '<h1>$1</h1>')
-    .replace(/^## (.*)$/gm, '<h2>$1</h2>')
-    .replace(/^- (.*)$/gm, '<p>$1</p>')
-    .replace(/\n/g, '<br />')
+  const lines = markdown.split('\n')
+  const html: string[] = []
+  let tableRows: string[][] = []
+
+  const flushTable = () => {
+    if (!tableRows.length) return
+    const [headers, , ...rows] = tableRows
+    html.push('<table><thead><tr>')
+    headers.forEach((cell) => html.push(`<th>${escapeHtml(cell)}</th>`))
+    html.push('</tr></thead><tbody>')
+    rows.forEach((row) => {
+      html.push('<tr>')
+      row.forEach((cell) => html.push(`<td>${escapeHtml(cell)}</td>`))
+      html.push('</tr>')
+    })
+    html.push('</tbody></table>')
+    tableRows = []
+  }
+
+  lines.forEach((line) => {
+    if (line.startsWith('|')) {
+      tableRows.push(line.split('|').slice(1, -1).map((cell) => cell.trim()))
+      return
+    }
+    flushTable()
+    if (line.startsWith('# ')) html.push(`<h1>${escapeHtml(line.slice(2))}</h1>`)
+    else if (line.startsWith('## ')) html.push(`<h2>${escapeHtml(line.slice(3))}</h2>`)
+    else if (line.startsWith('- ')) html.push(`<p>${escapeHtml(line.slice(2))}</p>`)
+    else if (line.trim()) html.push(`<p>${escapeHtml(line)}</p>`)
+  })
+  flushTable()
+  return html.join('')
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
 }
 
 async function runReportGeneration() {
