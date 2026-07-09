@@ -158,6 +158,7 @@ def run_workflow_task(task_id: int) -> None:
                         request.end_date,
                         "CN",
                         request.calendar_source,
+                        request.incremental_sync,
                     ),
                     results,
                 )
@@ -172,6 +173,7 @@ def run_workflow_task(task_id: int) -> None:
                         start_date=request.start_date,
                         end_date=request.end_date,
                         source=request.market_source,
+                        incremental=request.incremental_sync,
                         max_symbols=request.max_symbols,
                         clean_after_sync=True,
                         request_interval_seconds=request.request_interval_seconds,

@@ -8,6 +8,7 @@ class CalendarSyncRequest(BaseModel):
     end_date: date
     market: str = Field(default="CN")
     source: str = Field(default="akshare")
+    incremental: bool = Field(default=False)
 
 
 class CalendarSyncResponse(BaseModel):
@@ -15,7 +16,9 @@ class CalendarSyncResponse(BaseModel):
     end_date: date
     market: str
     source: str
+    incremental: bool
     open_days: int
+    stored_days: int
 
 
 class TradingCalendarRead(BaseModel):

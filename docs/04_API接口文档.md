@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.18.1-tushare-frontend-controls`
+当前版本：`v0.18.2-incremental-sync`
 
 ## GET /health
 
@@ -97,6 +97,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | start_date | date | 否 | 开始日期，默认近一年 |
 | end_date | date | 否 | 结束日期，默认今天 |
 | source | string | 否 | 数据源，支持 `akshare`、`eastmoney`、`tushare`，默认 `akshare` |
+| incremental | boolean | 否 | 是否按增量模式只补最新缺口，默认 `false` |
 | clean_after_sync | boolean | 否 | 是否同步写入 clean 表并执行质量检查 |
 | max_symbols | integer | 否 | 本次最多同步多少只 ETF，适合批量同步时分批执行 |
 | request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，降低上游压力 |
@@ -137,6 +138,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 - `source=akshare`：先调用 AKShare；若失败，会自动 fallback 到东方财富 K 线 HTTP 接口。
 - `source=eastmoney`：只使用东方财富备用源。
 - `source=tushare`：调用 Tushare `fund_daily` 接口，需要在 `.env` 中配置 `TUSHARE_TOKEN`。
+- `incremental=true`：系统会先检查当前 ETF 已存的最新日期，只补后续缺口；如果已经同步到 `end_date`，则返回 `up_to_date`。
 
 注意：
 
@@ -242,12 +244,14 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | end_date | date | 是 | 结束日期 |
 | market | string | 否 | 市场，默认 `CN` |
 | source | string | 否 | 数据源，支持 `akshare`、`tushare`、`weekday`，默认 `akshare` |
+| incremental | boolean | 否 | 是否按增量模式只补最新缺口，默认 `false` |
 
 说明：
 
 - `source=tushare`：使用 Tushare `trade_cal`，适合正式交易日历同步。
 - `source=akshare`：优先调用 AKShare；失败时使用 `weekday_fallback`。
 - `source=weekday`：直接使用周一到周五，仅适合本地开发验证。
+- `incremental=true`：系统会先看 `trading_calendar` 里该市场的最新交易日，只补后续缺口。
 
 ## GET /api/calendar/trading-days
 
@@ -687,6 +691,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "max_symbols": 5,
   "calendar_source": "tushare",
   "market_source": "tushare",
+  "incremental_sync": true,
   "request_interval_seconds": 1.5,
   "strategy_code": "core_etf_rotation",
   "portfolio_value": 100000,
@@ -704,6 +709,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | max_symbols | integer | 否 | 本次后台任务最多同步多少只 ETF |
 | calendar_source | string | 否 | 日历源，支持 `tushare`、`akshare`、`weekday` |
 | market_source | string | 否 | 行情源，支持 `tushare`、`akshare`、`eastmoney` |
+| incremental_sync | boolean | 否 | 是否按增量模式同步交易日历和行情，默认 `true` |
 | request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，Tushare 建议 `1.5` 或更高 |
 | strategy_code | string | 否 | 策略代码，默认 `core_etf_rotation` |
 | portfolio_value | number | 否 | 组合市值，用于生成调仓建议金额 |

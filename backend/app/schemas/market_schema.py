@@ -9,6 +9,7 @@ class MarketSyncRequest(BaseModel):
     start_date: date | None = Field(default=None, description="Start date; default is one year before end_date")
     end_date: date | None = Field(default=None, description="End date; default is today")
     source: str = Field(default="akshare", description="akshare falls back to eastmoney when possible")
+    incremental: bool = Field(default=False, description="Only fetch missing dates after the latest stored bar")
     clean_after_sync: bool = Field(default=True, description="Whether to write clean bars after raw sync")
     max_symbols: int | None = Field(default=None, ge=1, description="Maximum symbols to sync in this request")
     request_interval_seconds: float = Field(default=0, ge=0, le=10, description="Delay between symbols")
@@ -27,10 +28,12 @@ class MarketSyncResponse(BaseModel):
     start_date: date
     end_date: date
     source: str
+    incremental: bool
     request_interval_seconds: float
     total_symbols: int
     requested_symbols: int
     skipped_symbols: int
+    up_to_date_symbols: int
     success_count: int
     failed_count: int
     total_raw_rows: int

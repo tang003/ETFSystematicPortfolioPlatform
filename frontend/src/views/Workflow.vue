@@ -32,6 +32,9 @@
         <el-form-item label="请求间隔">
           <el-input-number v-model="requestIntervalSeconds" :min="0" :max="10" :step="0.5" />
         </el-form-item>
+        <el-form-item label="增量同步">
+          <el-switch v-model="incrementalSync" />
+        </el-form-item>
         <el-form-item label="策略代码">
           <el-input v-model="strategyCode" />
         </el-form-item>
@@ -132,6 +135,7 @@ const maxSymbols = ref(10)
 const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
+const incrementalSync = ref(true)
 const strategyCode = ref('core_etf_rotation')
 const portfolioValue = ref(100000)
 const shouldGenerateReport = ref(true)
@@ -184,7 +188,9 @@ const workflowHintTitle = computed(() => {
 
 const workflowHintText = computed(() => {
   if (marketSource.value === 'tushare') {
-    return '适合正式跑小批量真实数据。建议控制 ETF 数量、缩短日期范围，并保留 1.5 秒以上的请求间隔。'
+    return incrementalSync.value
+      ? '适合正式跑小批量真实数据。已开启增量同步，建议控制 ETF 数量，并保留 1.5 秒以上的请求间隔。'
+      : '适合正式跑小批量真实数据。当前是全量模式，建议缩短日期范围，并保留 1.5 秒以上的请求间隔。'
   }
   if (marketSource.value === 'akshare') {
     return '适合快速迭代和日常开发。若上游波动，系统会自动尝试 Eastmoney 备用源。'
@@ -215,6 +221,7 @@ async function startWorkflow() {
       max_symbols: maxSymbols.value,
       calendar_source: calendarSource.value,
       market_source: marketSource.value,
+      incremental_sync: incrementalSync.value,
       request_interval_seconds: requestIntervalSeconds.value,
       strategy_code: strategyCode.value,
       portfolio_value: portfolioValue.value,

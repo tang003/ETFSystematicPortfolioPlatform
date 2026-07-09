@@ -17,10 +17,29 @@ def sync_trading_calendar(
     end_date: date,
     market: str = "CN",
     source: str = "akshare",
+    incremental: bool = False,
 ) -> dict[str, Any]:
     if start_date > end_date:
         raise ValueError("start_date must not be later than end_date")
-    rows, actual_source = fetch_calendar_rows(start_date, end_date, source=source)
+    effective_start, effective_end, up_to_date = resolve_calendar_sync_window(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        market=market,
+        incremental=incremental,
+    )
+    if up_to_date:
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "market": market,
+            "source": source,
+            "incremental": incremental,
+            "open_days": 0,
+            "stored_days": 0,
+        }
+
+    rows, actual_source = fetch_calendar_rows(effective_start, effective_end, source=source)
     payload = [{"trade_date": item, "market": market, "is_open": True} for item in rows]
     if payload:
         statement = insert(TradingCalendar).values(payload)
@@ -32,12 +51,42 @@ def sync_trading_calendar(
         )
     db.commit()
     return {
-        "start_date": start_date,
-        "end_date": end_date,
+        "start_date": effective_start,
+        "end_date": effective_end,
         "market": market,
         "source": actual_source,
+        "incremental": incremental,
         "open_days": len(rows),
+        "stored_days": len(rows),
     }
+
+
+def latest_calendar_trade_date(db: Session, market: str = "CN") -> date | None:
+    return db.scalar(
+        select(TradingCalendar.trade_date)
+        .where(TradingCalendar.market == market)
+        .order_by(TradingCalendar.trade_date.desc())
+        .limit(1)
+    )
+
+
+def resolve_calendar_sync_window(
+    db: Session,
+    *,
+    start_date: date,
+    end_date: date,
+    market: str = "CN",
+    incremental: bool = False,
+) -> tuple[date, date, bool]:
+    if not incremental:
+        return start_date, end_date, False
+    latest_trade_date = latest_calendar_trade_date(db, market=market)
+    if latest_trade_date is None:
+        return start_date, end_date, False
+    effective_start = max(start_date, latest_trade_date + timedelta(days=1))
+    if effective_start > end_date:
+        return start_date, end_date, True
+    return effective_start, end_date, False
 
 
 def fetch_calendar_rows(start_date: date, end_date: date, source: str = "akshare") -> tuple[list[date], str]:

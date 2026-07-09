@@ -18,6 +18,7 @@ def sync_market(request: MarketSyncRequest, db: Session = Depends(get_db)) -> Ma
         start_date=request.start_date,
         end_date=request.end_date,
         source=request.source,
+        incremental=request.incremental,
         clean_after_sync=request.clean_after_sync,
         max_symbols=request.max_symbols,
         request_interval_seconds=request.request_interval_seconds,

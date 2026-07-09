@@ -61,3 +61,34 @@ def test_fetch_etf_daily_bars_falls_back_to_eastmoney(monkeypatch: pytest.Monkey
     assert source == "eastmoney"
     assert len(frame) == 1
 
+
+def test_resolve_market_sync_window_uses_incremental_gap(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(market_service, "latest_market_trade_date", lambda db, symbol: date(2026, 7, 3))
+
+    sync_start, sync_end, up_to_date = market_service.resolve_market_sync_window(
+        db=None,
+        symbol="510300",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 8),
+        incremental=True,
+    )
+
+    assert sync_start == date(2026, 7, 4)
+    assert sync_end == date(2026, 7, 8)
+    assert up_to_date is False
+
+
+def test_resolve_market_sync_window_marks_up_to_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(market_service, "latest_market_trade_date", lambda db, symbol: date(2026, 7, 8))
+
+    sync_start, sync_end, up_to_date = market_service.resolve_market_sync_window(
+        db=None,
+        symbol="510300",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 8),
+        incremental=True,
+    )
+
+    assert sync_start == date(2026, 7, 1)
+    assert sync_end == date(2026, 7, 8)
+    assert up_to_date is True

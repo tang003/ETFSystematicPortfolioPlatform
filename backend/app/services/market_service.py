@@ -147,6 +147,7 @@ def sync_market_data(
     start_date: date | None,
     end_date: date | None,
     source: str = "akshare",
+    incremental: bool = False,
     clean_after_sync: bool = True,
     max_symbols: int | None = None,
     request_interval_seconds: float = 0,
@@ -156,23 +157,44 @@ def sync_market_data(
     resolved_symbols, skipped_symbols = limit_symbols(all_symbols, max_symbols)
     symbol_meta = resolve_symbol_meta(db, resolved_symbols)
     results: list[dict[str, Any]] = []
+    up_to_date_symbols = 0
     effective_interval = request_interval_seconds
     if source == "tushare" and effective_interval == 0:
         effective_interval = get_settings().tushare_request_interval_seconds
 
     for index, symbol in enumerate(resolved_symbols):
         try:
+            sync_start, sync_end, up_to_date = resolve_market_sync_window(
+                db,
+                symbol=symbol,
+                start_date=resolved_start,
+                end_date=resolved_end,
+                incremental=incremental,
+            )
+            if up_to_date:
+                up_to_date_symbols += 1
+                results.append(
+                    {
+                        "symbol": symbol,
+                        "raw_rows": 0,
+                        "clean_rows": 0,
+                        "quality_logs": 0,
+                        "status": "success",
+                        "message": "up_to_date",
+                    }
+                )
+                continue
             raw_frame, actual_source = fetch_etf_daily_bars(
                 symbol,
-                resolved_start,
-                resolved_end,
+                sync_start,
+                sync_end,
                 source,
                 symbol_meta.get(symbol).exchange if symbol in symbol_meta else None,
             )
             normalized_rows = normalize_market_bars(symbol, raw_frame)
             raw_rows = upsert_raw_bars(db, normalized_rows, actual_source)
             clean_rows = upsert_clean_bars(db, normalized_rows) if clean_after_sync else 0
-            quality_logs = check_clean_bars(db, symbol, resolved_start, resolved_end) if clean_after_sync else 0
+            quality_logs = check_clean_bars(db, symbol, sync_start, sync_end) if clean_after_sync else 0
             db.commit()
             results.append(
                 {
@@ -181,7 +203,7 @@ def sync_market_data(
                     "clean_rows": clean_rows,
                     "quality_logs": quality_logs,
                     "status": "success",
-                    "message": f"source={actual_source}",
+                    "message": f"source={actual_source}; synced={sync_start.isoformat()}~{sync_end.isoformat()}",
                 }
             )
         except Exception as exc:  # noqa: BLE001 - API needs per-symbol failure details.
@@ -215,10 +237,12 @@ def sync_market_data(
         "start_date": resolved_start,
         "end_date": resolved_end,
         "source": source,
+        "incremental": incremental,
         "request_interval_seconds": effective_interval,
         "total_symbols": len(resolved_symbols),
         "requested_symbols": len(all_symbols),
         "skipped_symbols": skipped_symbols,
+        "up_to_date_symbols": up_to_date_symbols,
         "success_count": success_count,
         "failed_count": failed_count,
         "total_raw_rows": sum(item["raw_rows"] for item in results),
@@ -226,6 +250,42 @@ def sync_market_data(
         "total_quality_logs": sum(item["quality_logs"] for item in results),
         "results": results,
     }
+
+
+def latest_market_trade_date(db: Session, symbol: str) -> date | None:
+    clean_date = db.scalar(
+        select(MarketDataClean.trade_date)
+        .where(MarketDataClean.symbol == symbol)
+        .order_by(MarketDataClean.trade_date.desc())
+        .limit(1)
+    )
+    if clean_date is not None:
+        return clean_date
+    return db.scalar(
+        select(MarketDataRaw.trade_date)
+        .where(MarketDataRaw.symbol == symbol)
+        .order_by(MarketDataRaw.trade_date.desc())
+        .limit(1)
+    )
+
+
+def resolve_market_sync_window(
+    db: Session,
+    *,
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    incremental: bool = False,
+) -> tuple[date, date, bool]:
+    if not incremental:
+        return start_date, end_date, False
+    latest_trade_date = latest_market_trade_date(db, symbol)
+    if latest_trade_date is None:
+        return start_date, end_date, False
+    effective_start = max(start_date, latest_trade_date + timedelta(days=1))
+    if effective_start > end_date:
+        return start_date, end_date, True
+    return effective_start, end_date, False
 
 
 def normalize_market_bars(symbol: str, frame: pd.DataFrame) -> list[dict[str, Any]]:

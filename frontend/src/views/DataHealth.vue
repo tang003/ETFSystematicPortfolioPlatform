@@ -34,6 +34,10 @@
           <el-input-number v-model="requestIntervalSeconds" :min="0" :max="10" :step="0.5" />
           <span class="form-note">共享 Tushare 建议 1.5 秒或更高；AKShare 可设为 0。</span>
         </el-form-item>
+        <el-form-item label="增量同步">
+          <el-switch v-model="incrementalSync" />
+          <span class="form-note">开启后优先只补库里缺失的最新区间，更省 Tushare 请求。</span>
+        </el-form-item>
         <el-form-item label="使用提示" class="span-2">
           <div class="source-hint">
             <strong>{{ sourceHintTitle }}</strong>
@@ -82,6 +86,7 @@ const maxSymbols = ref(10)
 const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
+const incrementalSync = ref(true)
 
 onMounted(refresh)
 
@@ -101,6 +106,7 @@ async function runCalendarSync() {
       end_date: dateRange.value[1],
       market: 'CN',
       source: calendarSource.value,
+      incremental: incrementalSync.value,
     }),
   )
 }
@@ -112,6 +118,7 @@ async function runMarketSync() {
       end_date: dateRange.value[1],
       symbols: splitSymbols(),
       source: marketSource.value,
+      incremental: incrementalSync.value,
       max_symbols: maxSymbols.value,
       clean_after_sync: true,
       request_interval_seconds: requestIntervalSeconds.value,
@@ -131,12 +138,19 @@ async function runQualityCheck() {
 async function runFullDataFlow() {
   actionLoading.value = true
   try {
-    await syncCalendar({ start_date: dateRange.value[0], end_date: dateRange.value[1], market: 'CN', source: calendarSource.value })
+    await syncCalendar({
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      market: 'CN',
+      source: calendarSource.value,
+      incremental: incrementalSync.value,
+    })
     await syncMarket({
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
       symbols: splitSymbols(),
       source: marketSource.value,
+      incremental: incrementalSync.value,
       max_symbols: maxSymbols.value,
       clean_after_sync: true,
       request_interval_seconds: requestIntervalSeconds.value,
@@ -177,7 +191,9 @@ const sourceHintTitle = computed(() => {
 
 const sourceHintText = computed(() => {
   if (marketSource.value === 'tushare') {
-    return '先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上，避免共享账号短时间请求过多。'
+    return incrementalSync.value
+      ? '已开启增量同步，系统会优先只补最新缺口。先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上。'
+      : '当前是全量模式。先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上，避免共享账号短时间请求过多。'
   }
   if (marketSource.value === 'akshare') {
     return '适合日常开发和大多数补数场景。若 AKShare 上游波动，系统会自动尝试 Eastmoney 备用源。'

@@ -18,6 +18,7 @@ def sync_calendar(request: CalendarSyncRequest, db: Session = Depends(get_db)) -
         end_date=request.end_date,
         market=request.market,
         source=request.source,
+        incremental=request.incremental,
     )
 
 
