@@ -3,14 +3,22 @@ INSERT INTO asset_master (
     is_cross_border, is_leveraged, is_inverse, enabled, risk_level, description
 ) VALUES
 ('510300', '沪深300ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 4, 'A股大盘核心宽基 ETF'),
+('510050', '上证50ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 4, 'A股核心蓝筹 ETF'),
 ('510500', '中证500ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 4, 'A股中盘宽基 ETF'),
 ('159915', '创业板ETF', 'SZ', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 5, 'A股成长风格 ETF'),
 ('159919', '沪深300ETF', 'SZ', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 4, '深市沪深300 ETF 备选'),
+('159928', '消费ETF', 'SZ', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 4, 'A股消费行业 ETF'),
+('510880', '红利ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 3, '高股息红利 ETF'),
+('512170', '医疗ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 5, 'A股医疗行业 ETF'),
+('512660', '军工ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 5, 'A股军工行业 ETF'),
 ('513100', '纳指ETF', 'SH', 'equity', 'US', 'CNY', TRUE, FALSE, FALSE, TRUE, 5, '跨境美国科技成长 ETF'),
 ('513500', '标普500ETF', 'SH', 'equity', 'US', 'CNY', TRUE, FALSE, FALSE, TRUE, 4, '跨境美国宽基 ETF'),
+('513050', '中概互联网ETF', 'SH', 'equity', 'CN_HK_US', 'CNY', TRUE, FALSE, FALSE, TRUE, 5, '中概互联网主题 ETF'),
+('159920', '恒生ETF', 'SZ', 'equity', 'HK', 'CNY', TRUE, FALSE, FALSE, TRUE, 4, '港股宽基 ETF'),
 ('518880', '黄金ETF', 'SH', 'gold', 'GLOBAL', 'CNY', FALSE, FALSE, FALSE, TRUE, 2, '黄金防御资产 ETF'),
 ('511010', '国债ETF', 'SH', 'bond', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 1, '国债防御资产 ETF'),
 ('511880', '银华日利ETF', 'SH', 'cash', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 1, '货币现金管理 ETF'),
+('512880', '证券ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 5, 'A股券商行业 ETF'),
 ('512800', '银行ETF', 'SH', 'equity', 'CN', 'CNY', FALSE, FALSE, FALSE, TRUE, 4, 'A股金融行业 ETF')
 ON CONFLICT (symbol) DO UPDATE SET
     name = EXCLUDED.name,
@@ -72,4 +80,3 @@ ON CONFLICT (rule_code) DO UPDATE SET
     config = EXCLUDED.config,
     enabled = EXCLUDED.enabled,
     severity = EXCLUDED.severity;
-

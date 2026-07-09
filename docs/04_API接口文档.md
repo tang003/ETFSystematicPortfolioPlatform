@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.18.2-incremental-sync`
+当前版本：`v0.18.3-asset-pool-expansion`
 
 ## GET /health
 
@@ -59,6 +59,44 @@ curl "http://localhost:8000/api/assets?enabled=true"
     "updated_at": "2026-07-08T00:00:00"
   }
 ]
+```
+
+说明：
+
+- 当前内置种子数据是用于快速启动和验证流程的样本池，不等于全市场 ETF 清单。
+- 如需扩展 ETF 池，可使用下方批量导入接口。
+
+## POST /api/assets/batch-upsert
+
+用途：批量新增或更新 ETF 主数据池。适合后续扩展完整 ETF 池、修正名称、补充风险等级和分类。
+
+请求示例：
+
+```json
+{
+  "items": [
+    {
+      "symbol": "510050",
+      "name": "上证50ETF",
+      "exchange": "SH",
+      "asset_class": "equity",
+      "asset_region": "CN",
+      "currency": "CNY",
+      "enabled": true,
+      "risk_level": 4,
+      "description": "A股核心蓝筹 ETF"
+    }
+  ]
+}
+```
+
+响应示例：
+
+```json
+{
+  "total": 1,
+  "inserted_or_updated": 1
+}
 ```
 
 后续计划接口：

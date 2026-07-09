@@ -16,6 +16,21 @@ export interface Asset {
   is_cross_border: boolean
 }
 
+export interface AssetUpsertItem {
+  symbol: string
+  name: string
+  exchange?: string | null
+  asset_class?: string
+  asset_region?: string | null
+  currency?: string
+  is_cross_border?: boolean
+  is_leveraged?: boolean
+  is_inverse?: boolean
+  enabled?: boolean
+  risk_level?: number
+  description?: string | null
+}
+
 export interface DataQualityStatus {
   total_logs: number
   error_logs: number
@@ -243,6 +258,8 @@ export interface WorkflowTask {
 
 export const fetchHealth = async () => (await api.get('/health')).data
 export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
+export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =>
+  (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
