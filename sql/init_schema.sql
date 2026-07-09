@@ -182,6 +182,35 @@ CREATE TABLE IF NOT EXISTS holding_analysis_result (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS investment_plan (
+    id BIGSERIAL PRIMARY KEY,
+    plan_name VARCHAR(100) NOT NULL,
+    run_id BIGINT REFERENCES strategy_run(id),
+    start_date DATE NOT NULL,
+    months INTEGER NOT NULL,
+    monthly_amount NUMERIC(24, 4) NOT NULL,
+    total_budget NUMERIC(24, 4) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'active',
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS investment_plan_suggestion (
+    id BIGSERIAL PRIMARY KEY,
+    plan_id BIGINT NOT NULL REFERENCES investment_plan(id),
+    run_id BIGINT REFERENCES strategy_run(id),
+    suggestion_date DATE NOT NULL,
+    period_no INTEGER NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    target_weight NUMERIC(10, 6),
+    current_weight NUMERIC(10, 6),
+    gap_weight NUMERIC(10, 6),
+    suggested_amount NUMERIC(24, 4) NOT NULL,
+    action_suggestion VARCHAR(30) NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS risk_rule (
     id SERIAL PRIMARY KEY,
     rule_code VARCHAR(100) NOT NULL UNIQUE,
@@ -333,5 +362,7 @@ CREATE INDEX IF NOT EXISTS idx_strategy_run_date ON strategy_run(run_date);
 CREATE INDEX IF NOT EXISTS idx_rebalance_order_date ON rebalance_order(order_date);
 CREATE INDEX IF NOT EXISTS idx_portfolio_position_date ON portfolio_position(position_date);
 CREATE INDEX IF NOT EXISTS idx_holding_analysis_date ON holding_analysis_result(analysis_date);
+CREATE INDEX IF NOT EXISTS idx_investment_plan_status ON investment_plan(status);
+CREATE INDEX IF NOT EXISTS idx_investment_plan_suggestion_plan ON investment_plan_suggestion(plan_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_task_status ON workflow_task(status);
 CREATE INDEX IF NOT EXISTS idx_workflow_task_step_task ON workflow_task_step(task_id);

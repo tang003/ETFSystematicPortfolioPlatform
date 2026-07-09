@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.13.0-holdings-analysis`
+当前版本：`v0.14.0-investment-plan`
 
 ## GET /health
 
@@ -423,6 +423,67 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ## GET /api/portfolio/holdings/analysis
 
 用途：查询最近一次持仓分析结果。
+
+## POST /api/portfolio/investment-plans
+
+用途：创建定投计划。系统只保存计划和生成建议，不会扣款，不会下单。
+
+请求示例：
+
+```json
+{
+  "plan_name": "核心 ETF 月定投",
+  "run_id": 5,
+  "start_date": "2026-07-09",
+  "months": 12,
+  "monthly_amount": 3000,
+  "note": "每月固定投入，优先补足低配 ETF"
+}
+```
+
+响应：返回计划详情，包含 `id`、`total_budget` 和状态。
+
+## GET /api/portfolio/investment-plans
+
+用途：查询最近创建的定投计划。
+
+## POST /api/portfolio/investment-plans/{plan_id}/analyze
+
+用途：为某个定投计划生成某一期的投入建议。当前算法会优先把本期定投资金分配给“目标权重大于当前权重”的 ETF，并按权重缺口比例分配；如果没有低配资产，则按目标权重分配。
+
+请求示例：
+
+```json
+{
+  "period_no": 1,
+  "suggestion_date": "2026-07-09"
+}
+```
+
+响应示例：
+
+```json
+[
+  {
+    "plan_id": 1,
+    "run_id": 5,
+    "suggestion_date": "2026-07-09",
+    "period_no": 1,
+    "symbol": "511010",
+    "target_weight": "0.250000",
+    "current_weight": "0.000000",
+    "gap_weight": "0.250000",
+    "suggested_amount": "3000.0000",
+    "action_suggestion": "INVEST",
+    "reason": "511010 当前权重低于目标权重，优先分配本期定投资金 3000.0000 元。",
+    "created_at": "2026-07-09T10:00:00"
+  }
+]
+```
+
+## GET /api/portfolio/investment-plans/{plan_id}/suggestions
+
+用途：查询某个定投计划已经生成的投入建议。
 
 ## POST /api/risk/check
 

@@ -79,6 +79,34 @@ export interface HoldingAnalysis {
   created_at: string
 }
 
+export interface InvestmentPlan {
+  id: number
+  plan_name: string
+  run_id: number | null
+  start_date: string
+  months: number
+  monthly_amount: string
+  total_budget: string
+  status: string
+  note: string | null
+  created_at: string
+}
+
+export interface InvestmentPlanSuggestion {
+  plan_id: number
+  run_id: number | null
+  suggestion_date: string
+  period_no: number
+  symbol: string
+  target_weight: string | null
+  current_weight: string | null
+  gap_weight: string | null
+  suggested_amount: string
+  action_suggestion: string
+  reason: string | null
+  created_at: string
+}
+
 export interface RiskResult {
   run_id: number | null
   check_date: string
@@ -178,6 +206,13 @@ export const savePositionSnapshot = async (payload: { position_date: string; pos
 export const analyzeHoldings = async (payload: { run_id?: number; analysis_date?: string }) =>
   (await api.post<HoldingAnalysis[]>('/api/portfolio/holdings/analyze', payload)).data
 export const fetchHoldingAnalysis = async () => (await api.get<HoldingAnalysis[]>('/api/portfolio/holdings/analysis')).data
+export const createInvestmentPlan = async (payload: { plan_name: string; run_id?: number; start_date: string; months: number; monthly_amount: number; note?: string }) =>
+  (await api.post<InvestmentPlan>('/api/portfolio/investment-plans', payload)).data
+export const fetchInvestmentPlans = async () => (await api.get<InvestmentPlan[]>('/api/portfolio/investment-plans')).data
+export const analyzeInvestmentPlan = async (planId: number, payload: { period_no: number; suggestion_date?: string }) =>
+  (await api.post<InvestmentPlanSuggestion[]>(`/api/portfolio/investment-plans/${planId}/analyze`, payload)).data
+export const fetchInvestmentPlanSuggestions = async (planId: number) =>
+  (await api.get<InvestmentPlanSuggestion[]>(`/api/portfolio/investment-plans/${planId}/suggestions`)).data
 export const fetchRiskResults = async () => (await api.get<RiskResult[]>('/api/risk/results?limit=50')).data
 export const fetchRebalanceOrders = async () => (await api.get<RebalanceOrder[]>('/api/rebalance/orders?limit=50')).data
 export const fetchBacktestRuns = async () => (await api.get<BacktestRun[]>('/api/backtest/runs?limit=20')).data

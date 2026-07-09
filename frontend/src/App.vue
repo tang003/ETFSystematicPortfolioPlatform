@@ -16,6 +16,7 @@
         <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
         <el-menu-item index="/portfolio"><el-icon><PieChart /></el-icon><span>目标组合</span></el-menu-item>
         <el-menu-item index="/holdings"><el-icon><Wallet /></el-icon><span>当前持仓</span></el-menu-item>
+        <el-menu-item index="/investment-plans"><el-icon><Money /></el-icon><span>定投计划</span></el-menu-item>
         <el-menu-item index="/risk-rebalance"><el-icon><Warning /></el-icon><span>风控调仓</span></el-menu-item>
         <el-menu-item index="/backtest"><el-icon><Histogram /></el-icon><span>回测</span></el-menu-item>
         <el-menu-item index="/reports"><el-icon><Document /></el-icon><span>报告</span></el-menu-item>
@@ -38,7 +39,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { CircleCheck, DataBoard, Document, Grid, Histogram, Operation, PieChart, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
+import { CircleCheck, DataBoard, Document, Grid, Histogram, Money, Operation, PieChart, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
 import { fetchHealth } from './api/client'
 
 const healthOk = ref(false)

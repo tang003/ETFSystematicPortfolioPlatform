@@ -59,3 +59,49 @@ class HoldingAnalysisRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class InvestmentPlanCreate(BaseModel):
+    plan_name: str
+    run_id: int | None = None
+    start_date: date
+    months: int
+    monthly_amount: Decimal
+    note: str | None = None
+
+
+class InvestmentPlanAnalyzeRequest(BaseModel):
+    period_no: int = 1
+    suggestion_date: date | None = None
+
+
+class InvestmentPlanRead(BaseModel):
+    id: int
+    plan_name: str
+    run_id: int | None
+    start_date: date
+    months: int
+    monthly_amount: Decimal
+    total_budget: Decimal
+    status: str
+    note: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class InvestmentPlanSuggestionRead(BaseModel):
+    plan_id: int
+    run_id: int | None
+    suggestion_date: date
+    period_no: int
+    symbol: str
+    target_weight: Decimal | None
+    current_weight: Decimal | None
+    gap_weight: Decimal | None
+    suggested_amount: Decimal
+    action_suggestion: str
+    reason: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

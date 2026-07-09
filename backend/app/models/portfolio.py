@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -47,5 +47,38 @@ class HoldingAnalysisResult(Base):
     weight_diff: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     action_suggestion: Mapped[str] = mapped_column(String(30), nullable=False)
     alpha_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class InvestmentPlan(Base):
+    __tablename__ = "investment_plan"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    plan_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("strategy_run.id"))
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    months: Mapped[int] = mapped_column(Integer, nullable=False)
+    monthly_amount: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    total_budget: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class InvestmentPlanSuggestion(Base):
+    __tablename__ = "investment_plan_suggestion"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    plan_id: Mapped[int] = mapped_column(ForeignKey("investment_plan.id"), nullable=False)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("strategy_run.id"))
+    suggestion_date: Mapped[date] = mapped_column(Date, nullable=False)
+    period_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    target_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    current_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    gap_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    suggested_amount: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    action_suggestion: Mapped[str] = mapped_column(String(30), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

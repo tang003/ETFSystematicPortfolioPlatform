@@ -1,15 +1,25 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.schemas.portfolio_schema import (
     HoldingAnalysisRead,
     HoldingAnalysisRequest,
+    InvestmentPlanAnalyzeRequest,
+    InvestmentPlanCreate,
+    InvestmentPlanRead,
+    InvestmentPlanSuggestionRead,
     PortfolioPositionRead,
     PortfolioSnapshotRequest,
     TargetPortfolioRead,
 )
 from app.services.holding_service import analyze_holdings, list_holding_analysis, list_positions, upsert_position_snapshot
+from app.services.investment_plan_service import (
+    analyze_investment_plan,
+    create_investment_plan,
+    list_investment_plans,
+    list_investment_suggestions,
+)
 from app.services.strategy_service import latest_target_portfolio
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -44,3 +54,44 @@ def run_holding_analysis(
 @router.get("/holdings/analysis", response_model=list[HoldingAnalysisRead])
 def get_holding_analysis(db: Session = Depends(get_db)) -> list[HoldingAnalysisRead]:
     return list_holding_analysis(db)
+
+
+@router.post("/investment-plans", response_model=InvestmentPlanRead)
+def create_plan(
+    request: InvestmentPlanCreate,
+    db: Session = Depends(get_db),
+) -> InvestmentPlanRead:
+    try:
+        return create_investment_plan(db, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/investment-plans", response_model=list[InvestmentPlanRead])
+def get_plans(db: Session = Depends(get_db)) -> list[InvestmentPlanRead]:
+    return list_investment_plans(db)
+
+
+@router.post("/investment-plans/{plan_id}/analyze", response_model=list[InvestmentPlanSuggestionRead])
+def run_investment_plan_analysis(
+    plan_id: int,
+    request: InvestmentPlanAnalyzeRequest,
+    db: Session = Depends(get_db),
+) -> list[InvestmentPlanSuggestionRead]:
+    try:
+        return analyze_investment_plan(
+            db,
+            plan_id=plan_id,
+            period_no=request.period_no,
+            suggestion_date=request.suggestion_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/investment-plans/{plan_id}/suggestions", response_model=list[InvestmentPlanSuggestionRead])
+def get_investment_plan_suggestions(
+    plan_id: int,
+    db: Session = Depends(get_db),
+) -> list[InvestmentPlanSuggestionRead]:
+    return list_investment_suggestions(db, plan_id=plan_id)
