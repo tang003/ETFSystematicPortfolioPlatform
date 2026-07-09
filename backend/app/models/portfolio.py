@@ -34,3 +34,18 @@ class PortfolioPosition(Base):
     cost_basis: Mapped[Decimal | None] = mapped_column(Numeric(24, 4))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+
+class HoldingAnalysisResult(Base):
+    __tablename__ = "holding_analysis_result"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("strategy_run.id"))
+    analysis_date: Mapped[date] = mapped_column(Date, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    current_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    target_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    weight_diff: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    action_suggestion: Mapped[str] = mapped_column(String(30), nullable=False)
+    alpha_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

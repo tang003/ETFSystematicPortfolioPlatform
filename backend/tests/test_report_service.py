@@ -74,11 +74,10 @@ def test_build_monthly_report_markdown_contains_core_sections() -> None:
         backtest_metrics=[Metric()],
     )
 
-    assert "# ETF Monthly Rebalance Report - 2026-07-08" in markdown
-    assert "## Alpha Ranking" in markdown
-    assert "## Target Portfolio" in markdown
-    assert "## Risk Check" in markdown
-    assert "## Rebalance Orders" in markdown
-    assert "## Backtest Snapshot" in markdown
+    assert "# ETF 月度调仓报告 (Monthly Rebalance Report) - 2026-07-08" in markdown
+    assert "## Alpha 排名 (Alpha Ranking)" in markdown
+    assert "## 目标组合 (Target Portfolio)" in markdown
+    assert "## 风控检查 (Risk Check)" in markdown
+    assert "## 调仓建议单 (Rebalance Orders)" in markdown
+    assert "## 回测摘要 (Backtest Snapshot)" in markdown
     assert "510300" in markdown
-

@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.1.0-phase1`
+当前版本：`v0.13.0-holdings-analysis`
 
 ## GET /health
 
@@ -340,6 +340,90 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 用途：查询最近一次策略运行生成的目标组合。
 
+## POST /api/portfolio/positions
+
+用途：保存用户当前 ETF 持仓快照。系统会按本次快照的总市值自动计算每只 ETF 的当前权重。
+
+请求示例：
+
+```json
+{
+  "position_date": "2026-07-09",
+  "positions": [
+    {
+      "symbol": "510300",
+      "quantity": 1000,
+      "market_value": 30000,
+      "cost_basis": 28000
+    },
+    {
+      "symbol": "511880",
+      "quantity": 2000,
+      "market_value": 20000,
+      "cost_basis": 20000
+    }
+  ]
+}
+```
+
+参数说明：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| position_date | date | 是 | 持仓快照日期 |
+| positions | array | 是 | ETF 持仓列表 |
+| positions[].symbol | string | 是 | ETF 代码 |
+| positions[].quantity | number | 否 | 持有份额，可填 0 或空 |
+| positions[].market_value | number | 是 | 当前市值，用于计算权重 |
+| positions[].cost_basis | number | 否 | 持仓成本 |
+
+响应：返回保存后的持仓列表，包含系统计算出的 `weight`。
+
+## GET /api/portfolio/positions
+
+用途：查询最近一次持仓快照。
+
+## POST /api/portfolio/holdings/analyze
+
+用途：把当前持仓与目标组合做对比，生成持仓建议。建议动作包括：
+
+- `ADD`：当前权重明显低于目标权重，建议加仓。
+- `REDUCE`：当前权重明显高于目标权重，建议减仓。
+- `HOLD`：当前权重接近目标权重，建议持有。
+- `REDUCE_OR_EXIT`：当前持有但目标组合不再配置，建议减仓或退出。
+
+请求示例：
+
+```json
+{
+  "run_id": 1,
+  "analysis_date": "2026-07-09"
+}
+```
+
+响应示例：
+
+```json
+[
+  {
+    "run_id": 1,
+    "analysis_date": "2026-07-09",
+    "symbol": "510300",
+    "current_weight": "0.600000",
+    "target_weight": "0.400000",
+    "weight_diff": "-0.200000",
+    "action_suggestion": "REDUCE",
+    "alpha_score": "44.4887",
+    "reason": "当前权重高于目标权重 20.00%，建议考虑减仓；alpha_score=44.4887",
+    "created_at": "2026-07-09T10:00:00"
+  }
+]
+```
+
+## GET /api/portfolio/holdings/analysis
+
+用途：查询最近一次持仓分析结果。
+
 ## POST /api/risk/check
 
 用途：对指定策略运行的目标组合执行独立风控检查，修正 `target_portfolio.final_target_weight`，并写入 `risk_check_result`。
@@ -388,7 +472,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 }
 ```
 
-当前版本暂未接入真实当前持仓，默认当前权重为 0，以组合市值估算建议金额。
+如果已经通过 `/api/portfolio/positions` 保存当前持仓，系统会使用持仓快照中的真实 `current_weight` 计算差额和建议金额；如果没有持仓快照，则当前权重按 0 处理。
 
 ## GET /api/rebalance/orders
 

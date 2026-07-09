@@ -56,6 +56,29 @@ export interface TargetPortfolio {
   reason: string | null
 }
 
+export interface PortfolioPosition {
+  position_date: string
+  symbol: string
+  quantity: string | null
+  market_value: string | null
+  weight: string | null
+  cost_basis: string | null
+  created_at: string
+}
+
+export interface HoldingAnalysis {
+  run_id: number | null
+  analysis_date: string
+  symbol: string
+  current_weight: string | null
+  target_weight: string | null
+  weight_diff: string | null
+  action_suggestion: string
+  alpha_score: string | null
+  reason: string | null
+  created_at: string
+}
+
 export interface RiskResult {
   run_id: number | null
   check_date: string
@@ -149,6 +172,12 @@ export const fetchDataQualityStatus = async () => (await api.get<DataQualityStat
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
+export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data
+export const savePositionSnapshot = async (payload: { position_date: string; positions: Array<{ symbol: string; quantity?: number; market_value: number; cost_basis?: number }> }) =>
+  (await api.post<PortfolioPosition[]>('/api/portfolio/positions', payload)).data
+export const analyzeHoldings = async (payload: { run_id?: number; analysis_date?: string }) =>
+  (await api.post<HoldingAnalysis[]>('/api/portfolio/holdings/analyze', payload)).data
+export const fetchHoldingAnalysis = async () => (await api.get<HoldingAnalysis[]>('/api/portfolio/holdings/analysis')).data
 export const fetchRiskResults = async () => (await api.get<RiskResult[]>('/api/risk/results?limit=50')).data
 export const fetchRebalanceOrders = async () => (await api.get<RebalanceOrder[]>('/api/rebalance/orders?limit=50')).data
 export const fetchBacktestRuns = async () => (await api.get<BacktestRun[]>('/api/backtest/runs?limit=20')).data

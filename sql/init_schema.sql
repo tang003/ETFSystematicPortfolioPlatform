@@ -168,6 +168,20 @@ CREATE TABLE IF NOT EXISTS portfolio_position (
     UNIQUE(position_date, symbol)
 );
 
+CREATE TABLE IF NOT EXISTS holding_analysis_result (
+    id BIGSERIAL PRIMARY KEY,
+    run_id BIGINT REFERENCES strategy_run(id),
+    analysis_date DATE NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    current_weight NUMERIC(10, 6),
+    target_weight NUMERIC(10, 6),
+    weight_diff NUMERIC(10, 6),
+    action_suggestion VARCHAR(30) NOT NULL,
+    alpha_score NUMERIC(10, 4),
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS risk_rule (
     id SERIAL PRIMARY KEY,
     rule_code VARCHAR(100) NOT NULL UNIQUE,
@@ -317,5 +331,7 @@ CREATE INDEX IF NOT EXISTS idx_market_data_clean_symbol_date ON market_data_clea
 CREATE INDEX IF NOT EXISTS idx_factor_daily_symbol_date ON factor_daily(symbol, trade_date);
 CREATE INDEX IF NOT EXISTS idx_strategy_run_date ON strategy_run(run_date);
 CREATE INDEX IF NOT EXISTS idx_rebalance_order_date ON rebalance_order(order_date);
+CREATE INDEX IF NOT EXISTS idx_portfolio_position_date ON portfolio_position(position_date);
+CREATE INDEX IF NOT EXISTS idx_holding_analysis_date ON holding_analysis_result(analysis_date);
 CREATE INDEX IF NOT EXISTS idx_workflow_task_status ON workflow_task(status);
 CREATE INDEX IF NOT EXISTS idx_workflow_task_step_task ON workflow_task_step(task_id);

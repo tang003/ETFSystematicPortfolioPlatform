@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.portfolio import TargetPortfolio
 from app.models.rebalance import RebalanceOrder
 from app.models.risk import RiskCheckResult, RiskRule
+from app.services.holding_service import current_weight_map
 
 MIN_REBALANCE_DIFF = Decimal("0.05")
 
@@ -244,8 +245,9 @@ def generate_rebalance_orders(db: Session, *, run_id: int, portfolio_value: Deci
     db.flush()
 
     orders: list[RebalanceOrder] = []
+    current_weights = current_weight_map(db, position_date=order_date) or current_weight_map(db)
     for target in targets:
-        current_weight = Decimal("0")
+        current_weight = current_weights.get(target.symbol, Decimal("0"))
         target_weight = Decimal(target.final_target_weight or 0)
         diff = target_weight - current_weight
         action = rebalance_action(diff)
@@ -261,7 +263,7 @@ def generate_rebalance_orders(db: Session, *, run_id: int, portfolio_value: Deci
                 target_weight=target_weight.quantize(Decimal("0.000001")),
                 weight_diff=diff.quantize(Decimal("0.000001")),
                 estimated_amount=(portfolio_value * diff).quantize(Decimal("0.0001")),
-                reason=f"Move from current_weight={current_weight} to target_weight={target_weight}",
+                reason=f"从当前权重 current_weight={current_weight} 调整到目标权重 target_weight={target_weight}",
                 status="pending",
             )
         )
@@ -283,4 +285,3 @@ def list_rebalance_orders(db: Session, run_id: int | None = None, limit: int = 1
     if run_id is not None:
         query = query.where(RebalanceOrder.run_id == run_id)
     return list(db.scalars(query).all())
-

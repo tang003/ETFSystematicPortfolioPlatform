@@ -3,7 +3,7 @@ from app.models.market_data import EtfNavPremium, MarketDataClean, MarketDataRaw
 from app.models.data_quality import DataQualityLog
 from app.models.factor import FactorDaily
 from app.models.strategy import AlphaSignal, StrategyConfig, StrategyRun
-from app.models.portfolio import PortfolioPosition, TargetPortfolio
+from app.models.portfolio import HoldingAnalysisResult, PortfolioPosition, TargetPortfolio
 from app.models.risk import RiskCheckResult, RiskRule
 from app.models.rebalance import RebalanceOrder
 from app.models.backtest import BacktestEquityCurve, BacktestMetrics, BacktestRun, BacktestTrade
@@ -21,6 +21,7 @@ __all__ = [
     "DataQualityLog",
     "EtfNavPremium",
     "FactorDaily",
+    "HoldingAnalysisResult",
     "MarketDataClean",
     "MarketDataRaw",
     "PerformanceAttribution",
