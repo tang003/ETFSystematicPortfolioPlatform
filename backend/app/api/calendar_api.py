@@ -12,7 +12,13 @@ router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 @router.post("/sync", response_model=CalendarSyncResponse)
 def sync_calendar(request: CalendarSyncRequest, db: Session = Depends(get_db)) -> CalendarSyncResponse:
-    return sync_trading_calendar(db, start_date=request.start_date, end_date=request.end_date, market=request.market)
+    return sync_trading_calendar(
+        db,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        market=request.market,
+        source=request.source,
+    )
 
 
 @router.get("/trading-days", response_model=list[TradingCalendarRead])
@@ -23,4 +29,3 @@ def get_trading_days(
     db: Session = Depends(get_db),
 ) -> list[TradingCalendarRead]:
     return list_trading_calendar(db, start_date=start_date, end_date=end_date, market=market)
-

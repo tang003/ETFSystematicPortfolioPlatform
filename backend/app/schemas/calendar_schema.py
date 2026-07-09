@@ -7,6 +7,7 @@ class CalendarSyncRequest(BaseModel):
     start_date: date
     end_date: date
     market: str = Field(default="CN")
+    source: str = Field(default="akshare")
 
 
 class CalendarSyncResponse(BaseModel):
@@ -24,4 +25,3 @@ class TradingCalendarRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-

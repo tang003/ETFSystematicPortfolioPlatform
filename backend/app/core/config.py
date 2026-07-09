@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     redis_port: int = 6379
 
     log_level: str = Field(default="INFO")
+    tushare_token: str | None = None
+    tushare_request_interval_seconds: float = Field(default=1.5)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
@@ -38,4 +40,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

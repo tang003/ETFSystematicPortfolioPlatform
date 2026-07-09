@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.17.0-factor-research-lab`
+当前版本：`v0.18.0-tushare-source-ready`
 
 ## GET /health
 
@@ -73,7 +73,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 ## POST /api/market/sync
 
-用途：从 AKShare 同步 ETF 日线行情，写入 `market_data_raw`，并可同步写入 `market_data_clean` 和数据质量日志。
+用途：同步 ETF 日线行情，写入 `market_data_raw`，并可同步写入 `market_data_clean` 和数据质量日志。
 
 请求示例：
 
@@ -96,7 +96,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | symbols | string[] | 否 | ETF 代码列表；为空时同步全部启用 ETF |
 | start_date | date | 否 | 开始日期，默认近一年 |
 | end_date | date | 否 | 结束日期，默认今天 |
-| source | string | 否 | 数据源，默认 `akshare` |
+| source | string | 否 | 数据源，支持 `akshare`、`eastmoney`、`tushare`，默认 `akshare` |
 | clean_after_sync | boolean | 否 | 是否同步写入 clean 表并执行质量检查 |
 | max_symbols | integer | 否 | 本次最多同步多少只 ETF，适合批量同步时分批执行 |
 | request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，降低上游压力 |
@@ -108,6 +108,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "start_date": "2025-07-08",
   "end_date": "2026-07-08",
   "source": "akshare",
+  "request_interval_seconds": 0.5,
   "total_symbols": 1,
   "requested_symbols": 1,
   "skipped_symbols": 0,
@@ -131,7 +132,16 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 如果 AKShare 或上游数据源暂时不可用，接口会对单个 symbol 返回 `failed`，并把错误写入 `data_quality_log`。
 
-当前实现中，`source=akshare` 会先调用 AKShare；若 AKShare ETF 日线接口失败，会自动 fallback 到东方财富 K 线 HTTP 接口。也可以显式传入 `source=eastmoney` 只使用备用源。
+当前实现中：
+
+- `source=akshare`：先调用 AKShare；若失败，会自动 fallback 到东方财富 K 线 HTTP 接口。
+- `source=eastmoney`：只使用东方财富备用源。
+- `source=tushare`：调用 Tushare `fund_daily` 接口，需要在 `.env` 中配置 `TUSHARE_TOKEN`。
+
+注意：
+
+- 共享 Tushare 账号建议显式传较小的 `max_symbols`，并设置 `request_interval_seconds`，避免短时间内过多请求。
+- 如果 Tushare 返回权限不足，接口会保留单个 ETF 的失败原因，不会自动高频重试。
 
 ## GET /api/market/raw
 
@@ -207,7 +217,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
 {
   "start_date": "2026-01-01",
   "end_date": "2026-12-31",
-  "market": "CN"
+  "market": "CN",
+  "source": "tushare"
 }
 ```
 
@@ -218,12 +229,25 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "start_date": "2026-01-01",
   "end_date": "2026-12-31",
   "market": "CN",
-  "source": "akshare_sina",
+  "source": "tushare_trade_cal",
   "open_days": 242
 }
 ```
 
-如果 AKShare 交易日历不可用，系统会使用周一到周五作为本地 fallback，响应中的 `source` 为 `weekday_fallback`。这只适合开发验证，正式数据质量检查应优先使用真实交易日历。
+请求参数补充：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| start_date | date | 是 | 开始日期 |
+| end_date | date | 是 | 结束日期 |
+| market | string | 否 | 市场，默认 `CN` |
+| source | string | 否 | 数据源，支持 `akshare`、`tushare`、`weekday`，默认 `akshare` |
+
+说明：
+
+- `source=tushare`：使用 Tushare `trade_cal`，适合正式交易日历同步。
+- `source=akshare`：优先调用 AKShare；失败时使用 `weekday_fallback`。
+- `source=weekday`：直接使用周一到周五，仅适合本地开发验证。
 
 ## GET /api/calendar/trading-days
 

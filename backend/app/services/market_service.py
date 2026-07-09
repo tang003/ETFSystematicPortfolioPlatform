@@ -10,9 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean, MarketDataRaw
 from app.services.data_quality_service import add_quality_log, check_clean_bars
+from app.services.tushare_service import fetch_fund_daily, to_tushare_code
 
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
 
@@ -35,6 +37,13 @@ def resolve_symbols(db: Session, symbols: list[str] | None) -> list[str]:
     )
 
 
+def resolve_symbol_meta(db: Session, symbols: list[str]) -> dict[str, AssetMaster]:
+    if not symbols:
+        return {}
+    rows = db.scalars(select(AssetMaster).where(AssetMaster.symbol.in_(symbols))).all()
+    return {row.symbol: row for row in rows}
+
+
 def limit_symbols(symbols: list[str], max_symbols: int | None) -> tuple[list[str], int]:
     if max_symbols is None:
         return symbols, 0
@@ -43,9 +52,17 @@ def limit_symbols(symbols: list[str], max_symbols: int | None) -> tuple[list[str
     return symbols[:max_symbols], max(0, len(symbols) - max_symbols)
 
 
-def fetch_etf_daily_bars(symbol: str, start_date: date, end_date: date, source: str = "akshare") -> tuple[pd.DataFrame, str]:
+def fetch_etf_daily_bars(
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    source: str = "akshare",
+    exchange: str | None = None,
+) -> tuple[pd.DataFrame, str]:
     if source == "eastmoney":
         return fetch_eastmoney_daily_bars(symbol, start_date, end_date), "eastmoney"
+    if source == "tushare":
+        return fetch_tushare_daily_bars(symbol, start_date, end_date, exchange), "tushare"
     if source == "akshare":
         try:
             return fetch_akshare_daily_bars(symbol, start_date, end_date), "akshare"
@@ -56,7 +73,7 @@ def fetch_etf_daily_bars(symbol: str, start_date: date, end_date: date, source: 
                 raise RuntimeError(
                     f"akshare failed: {akshare_error}; eastmoney fallback failed: {eastmoney_error}"
                 ) from eastmoney_error
-    raise ValueError("source must be one of: akshare, eastmoney")
+    raise ValueError("source must be one of: akshare, eastmoney, tushare")
 
 
 def fetch_akshare_daily_bars(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
@@ -109,6 +126,14 @@ def fetch_eastmoney_daily_bars(symbol: str, start_date: date, end_date: date) ->
     return pd.DataFrame(rows)
 
 
+def fetch_tushare_daily_bars(symbol: str, start_date: date, end_date: date, exchange: str | None = None) -> pd.DataFrame:
+    ts_code = to_tushare_code(symbol, exchange)
+    frame = fetch_fund_daily(ts_code, start_date, end_date)
+    if frame is None or frame.empty:
+        raise ValueError(f"{symbol} tushare returned no fund_daily rows")
+    return frame
+
+
 def eastmoney_secid(symbol: str) -> str:
     if symbol.startswith(("5", "6", "9")):
         return f"1.{symbol}"
@@ -129,11 +154,21 @@ def sync_market_data(
     resolved_start, resolved_end = default_sync_dates(start_date, end_date)
     all_symbols = resolve_symbols(db, symbols)
     resolved_symbols, skipped_symbols = limit_symbols(all_symbols, max_symbols)
+    symbol_meta = resolve_symbol_meta(db, resolved_symbols)
     results: list[dict[str, Any]] = []
+    effective_interval = request_interval_seconds
+    if source == "tushare" and effective_interval == 0:
+        effective_interval = get_settings().tushare_request_interval_seconds
 
     for index, symbol in enumerate(resolved_symbols):
         try:
-            raw_frame, actual_source = fetch_etf_daily_bars(symbol, resolved_start, resolved_end, source)
+            raw_frame, actual_source = fetch_etf_daily_bars(
+                symbol,
+                resolved_start,
+                resolved_end,
+                source,
+                symbol_meta.get(symbol).exchange if symbol in symbol_meta else None,
+            )
             normalized_rows = normalize_market_bars(symbol, raw_frame)
             raw_rows = upsert_raw_bars(db, normalized_rows, actual_source)
             clean_rows = upsert_clean_bars(db, normalized_rows) if clean_after_sync else 0
@@ -171,8 +206,8 @@ def sync_market_data(
                     "message": str(exc),
                 }
             )
-        if request_interval_seconds > 0 and index < len(resolved_symbols) - 1:
-            time.sleep(request_interval_seconds)
+        if effective_interval > 0 and index < len(resolved_symbols) - 1:
+            time.sleep(effective_interval)
 
     success_count = sum(1 for item in results if item["status"] == "success")
     failed_count = sum(1 for item in results if item["status"] == "failed")
@@ -180,6 +215,7 @@ def sync_market_data(
         "start_date": resolved_start,
         "end_date": resolved_end,
         "source": source,
+        "request_interval_seconds": effective_interval,
         "total_symbols": len(resolved_symbols),
         "requested_symbols": len(all_symbols),
         "skipped_symbols": skipped_symbols,
@@ -207,7 +243,7 @@ def normalize_market_bars(symbol: str, frame: pd.DataFrame) -> list[dict[str, An
                 "high": _to_decimal(_first_value(raw_row, "最高", "high")),
                 "low": _to_decimal(_first_value(raw_row, "最低", "low")),
                 "close": _to_decimal(_first_value(raw_row, "收盘", "close")),
-                "volume": _to_decimal(_first_value(raw_row, "成交量", "volume")),
+                "volume": _to_decimal(_first_value(raw_row, "成交量", "volume", "vol")),
                 "amount": _to_decimal(_first_value(raw_row, "成交额", "amount")),
                 "raw_payload": _json_safe(raw_row),
             }

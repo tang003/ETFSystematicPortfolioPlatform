@@ -27,6 +27,7 @@ class MarketSyncResponse(BaseModel):
     start_date: date
     end_date: date
     source: str
+    request_interval_seconds: float
     total_symbols: int
     requested_symbols: int
     skipped_symbols: int

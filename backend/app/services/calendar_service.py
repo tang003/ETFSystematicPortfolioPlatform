@@ -8,12 +8,19 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models.market_data import TradingCalendar
+from app.services.tushare_service import fetch_trade_calendar
 
 
-def sync_trading_calendar(db: Session, start_date: date, end_date: date, market: str = "CN") -> dict[str, Any]:
+def sync_trading_calendar(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    market: str = "CN",
+    source: str = "akshare",
+) -> dict[str, Any]:
     if start_date > end_date:
         raise ValueError("start_date must not be later than end_date")
-    rows, source = fetch_calendar_rows(start_date, end_date)
+    rows, actual_source = fetch_calendar_rows(start_date, end_date, source=source)
     payload = [{"trade_date": item, "market": market, "is_open": True} for item in rows]
     if payload:
         statement = insert(TradingCalendar).values(payload)
@@ -24,18 +31,35 @@ def sync_trading_calendar(db: Session, start_date: date, end_date: date, market:
             )
         )
     db.commit()
-    return {"start_date": start_date, "end_date": end_date, "market": market, "source": source, "open_days": len(rows)}
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "market": market,
+        "source": actual_source,
+        "open_days": len(rows),
+    }
 
 
-def fetch_calendar_rows(start_date: date, end_date: date) -> tuple[list[date], str]:
-    try:
-        frame = ak.tool_trade_date_hist_sina()
-        dates = parse_akshare_calendar(frame, start_date, end_date)
-        if dates:
-            return dates, "akshare_sina"
-    except Exception:  # noqa: BLE001 - weekday fallback keeps local development usable.
-        pass
-    return weekday_calendar(start_date, end_date), "weekday_fallback"
+def fetch_calendar_rows(start_date: date, end_date: date, source: str = "akshare") -> tuple[list[date], str]:
+    if source == "tushare":
+        frame = fetch_trade_calendar(start_date, end_date)
+        dates = parse_tushare_calendar(frame, start_date, end_date)
+        return dates, "tushare_trade_cal"
+
+    if source == "akshare":
+        try:
+            frame = ak.tool_trade_date_hist_sina()
+            dates = parse_akshare_calendar(frame, start_date, end_date)
+            if dates:
+                return dates, "akshare_sina"
+        except Exception:  # noqa: BLE001 - weekday fallback keeps local development usable.
+            pass
+        return weekday_calendar(start_date, end_date), "weekday_fallback"
+
+    if source == "weekday":
+        return weekday_calendar(start_date, end_date), "weekday_fallback"
+
+    raise ValueError("source must be one of: akshare, tushare, weekday")
 
 
 def parse_akshare_calendar(frame: pd.DataFrame, start_date: date, end_date: date) -> list[date]:
@@ -43,6 +67,14 @@ def parse_akshare_calendar(frame: pd.DataFrame, start_date: date, end_date: date
         return []
     first_column = frame.columns[0]
     dates = [pd.to_datetime(value).date() for value in frame[first_column].dropna().tolist()]
+    return sorted(item for item in dates if start_date <= item <= end_date)
+
+
+def parse_tushare_calendar(frame: pd.DataFrame, start_date: date, end_date: date) -> list[date]:
+    if frame is None or frame.empty:
+        return []
+    open_frame = frame[frame["is_open"].astype(str) == "1"]
+    dates = [pd.to_datetime(value).date() for value in open_frame["cal_date"].dropna().tolist()]
     return sorted(item for item in dates if start_date <= item <= end_date)
 
 
