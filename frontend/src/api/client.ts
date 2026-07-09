@@ -111,6 +111,11 @@ export interface Report {
   created_at: string
 }
 
+export interface RunSummary {
+  status: string
+  [key: string]: unknown
+}
+
 export const fetchHealth = async () => (await api.get('/health')).data
 export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
@@ -124,4 +129,30 @@ export const fetchBacktestCurve = async (id: number) => (await api.get<BacktestC
 export const fetchBacktestMetrics = async (id: number) => (await api.get<BacktestMetric[]>(`/api/backtest/${id}/metrics`)).data
 export const fetchReports = async () => (await api.get<Report[]>('/api/reports?limit=20')).data
 export const fetchReport = async (id: number) => (await api.get<Report>(`/api/reports/${id}`)).data
-
+export const syncCalendar = async (payload: { start_date: string; end_date: string; market?: string }) =>
+  (await api.post<RunSummary>('/api/calendar/sync', payload)).data
+export const syncMarket = async (payload: { symbols?: string[]; start_date?: string; end_date?: string; max_symbols?: number; clean_after_sync?: boolean }) =>
+  (await api.post<RunSummary>('/api/market/sync', payload)).data
+export const checkDataQuality = async (payload: { symbols: string[]; start_date: string; end_date: string }) =>
+  (await api.post<RunSummary[]>('/api/data-quality/check', payload)).data
+export const calculateFactors = async (payload: { symbols?: string[]; start_date?: string; end_date?: string }) =>
+  (await api.post<RunSummary>('/api/factors/calculate', payload)).data
+export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
+  (await api.post<RunSummary>('/api/strategies/run', payload)).data
+export const checkRisk = async (payload: { run_id: number }) =>
+  (await api.post<RunSummary>('/api/risk/check', payload)).data
+export const generateRebalanceOrders = async (payload: { run_id: number; portfolio_value?: number }) =>
+  (await api.post<RunSummary>('/api/rebalance/generate', payload)).data
+export const runBacktest = async (payload: {
+  strategy_code: string
+  name?: string
+  symbols?: string[]
+  start_date: string
+  end_date: string
+  initial_cash?: number
+  monthly_contribution?: number
+  fee_rate?: number
+  slippage_rate?: number
+}) => (await api.post<RunSummary>('/api/backtest/run', payload)).data
+export const generateMonthlyReport = async (payload: { run_id?: number; report_date?: string }) =>
+  (await api.post<RunSummary>('/api/reports/monthly', payload)).data

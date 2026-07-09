@@ -12,16 +12,15 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/dashboard' },
-    { path: '/dashboard', component: Dashboard, meta: { title: 'Dashboard' } },
-    { path: '/assets', component: Assets, meta: { title: 'ETF Pool' } },
-    { path: '/data-health', component: DataHealth, meta: { title: 'Data Health' } },
-    { path: '/factors', component: Factors, meta: { title: 'Factor Ranking' } },
-    { path: '/portfolio', component: Portfolio, meta: { title: 'Target Portfolio' } },
-    { path: '/risk-rebalance', component: RiskRebalance, meta: { title: 'Risk & Rebalance' } },
-    { path: '/backtest', component: Backtest, meta: { title: 'Backtest' } },
-    { path: '/reports', component: Reports, meta: { title: 'Reports' } },
+    { path: '/dashboard', component: Dashboard, meta: { title: '总览' } },
+    { path: '/assets', component: Assets, meta: { title: 'ETF 池' } },
+    { path: '/data-health', component: DataHealth, meta: { title: '数据健康' } },
+    { path: '/factors', component: Factors, meta: { title: '因子排名' } },
+    { path: '/portfolio', component: Portfolio, meta: { title: '目标组合' } },
+    { path: '/risk-rebalance', component: RiskRebalance, meta: { title: '风控调仓' } },
+    { path: '/backtest', component: Backtest, meta: { title: '回测' } },
+    { path: '/reports', component: Reports, meta: { title: '报告' } },
   ],
 })
 
 export default router
-

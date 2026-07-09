@@ -4,19 +4,19 @@
       <div class="brand">
         <div class="brand-mark">ETF</div>
         <div>
-          <div class="brand-title">Portfolio Platform</div>
-          <div class="brand-subtitle">Systematic Console</div>
+          <div class="brand-title">系统化资产配置</div>
+          <div class="brand-subtitle">ETF 控制台</div>
         </div>
       </div>
       <el-menu :default-active="$route.path" router class="nav">
-        <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon><span>Dashboard</span></el-menu-item>
-        <el-menu-item index="/assets"><el-icon><Grid /></el-icon><span>ETF Pool</span></el-menu-item>
-        <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>Data Health</span></el-menu-item>
-        <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>Factors</span></el-menu-item>
-        <el-menu-item index="/portfolio"><el-icon><PieChart /></el-icon><span>Portfolio</span></el-menu-item>
-        <el-menu-item index="/risk-rebalance"><el-icon><Warning /></el-icon><span>Risk & Orders</span></el-menu-item>
-        <el-menu-item index="/backtest"><el-icon><Histogram /></el-icon><span>Backtest</span></el-menu-item>
-        <el-menu-item index="/reports"><el-icon><Document /></el-icon><span>Reports</span></el-menu-item>
+        <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon><span>总览</span></el-menu-item>
+        <el-menu-item index="/assets"><el-icon><Grid /></el-icon><span>ETF 池</span></el-menu-item>
+        <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
+        <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
+        <el-menu-item index="/portfolio"><el-icon><PieChart /></el-icon><span>目标组合</span></el-menu-item>
+        <el-menu-item index="/risk-rebalance"><el-icon><Warning /></el-icon><span>风控调仓</span></el-menu-item>
+        <el-menu-item index="/backtest"><el-icon><Histogram /></el-icon><span>回测</span></el-menu-item>
+        <el-menu-item index="/reports"><el-icon><Document /></el-icon><span>报告</span></el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -25,7 +25,7 @@
           <h1>{{ $route.meta.title }}</h1>
           <p>ETF Systematic Portfolio Platform</p>
         </div>
-        <el-tag :type="healthOk ? 'success' : 'danger'" round>{{ healthOk ? 'API Online' : 'API Offline' }}</el-tag>
+        <el-tag :type="healthOk ? 'success' : 'danger'" round>{{ healthOk ? 'API 正常' : 'API 异常' }}</el-tag>
       </el-header>
       <el-main class="content">
         <router-view />
@@ -50,4 +50,3 @@ onMounted(async () => {
   }
 })
 </script>
-

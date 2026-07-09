@@ -1,25 +1,25 @@
 <template>
   <div class="page-grid" v-loading="loading">
-    <section class="panel span-3"><div class="metric">Enabled ETFs<strong>{{ assets.length }}</strong></div></section>
-    <section class="panel span-3"><div class="metric">Data Logs<strong>{{ quality?.total_logs ?? 0 }}</strong></div></section>
-    <section class="panel span-3"><div class="metric">Factor Rows<strong>{{ factors.length }}</strong></div></section>
-    <section class="panel span-3"><div class="metric">Target Positions<strong>{{ targets.length }}</strong></div></section>
+    <section class="panel span-3"><div class="metric">启用 ETF<strong>{{ assets.length }}</strong></div></section>
+    <section class="panel span-3"><div class="metric">数据日志<strong>{{ quality?.total_logs ?? 0 }}</strong></div></section>
+    <section class="panel span-3"><div class="metric">因子记录<strong>{{ factors.length }}</strong></div></section>
+    <section class="panel span-3"><div class="metric">目标持仓<strong>{{ targets.length }}</strong></div></section>
     <section class="panel span-6">
-      <h2>Alpha Ranking</h2>
+      <h2>Alpha 排名</h2>
       <div ref="rankingChart" class="chart"></div>
     </section>
     <section class="panel span-6">
-      <h2>Target Allocation</h2>
+      <h2>目标权重</h2>
       <div ref="portfolioChart" class="chart"></div>
     </section>
     <section class="panel span-12">
-      <h2>Recent Orders</h2>
+      <h2>最近调仓单</h2>
       <el-table :data="orders" height="260">
-        <el-table-column prop="symbol" label="Symbol" width="120" />
-        <el-table-column prop="action" label="Action" width="120" />
-        <el-table-column prop="target_weight" label="Target" width="120" />
-        <el-table-column prop="estimated_amount" label="Amount" />
-        <el-table-column prop="status" label="Status" width="120" />
+        <el-table-column prop="symbol" label="代码" width="120" />
+        <el-table-column prop="action" label="方向" width="120" />
+        <el-table-column prop="target_weight" label="目标权重" width="120" />
+        <el-table-column prop="estimated_amount" label="估算金额" />
+        <el-table-column prop="status" label="状态" width="120" />
       </el-table>
     </section>
   </div>
@@ -77,4 +77,3 @@ function renderCharts() {
   }
 }
 </script>
-
