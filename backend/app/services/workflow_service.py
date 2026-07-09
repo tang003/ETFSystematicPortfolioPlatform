@@ -30,6 +30,8 @@ WORKFLOW_STEPS = [
     ("report", "生成月度报告"),
 ]
 
+TERMINAL_STATUSES = {"success", "failed", "cancelled", "partial_success"}
+
 
 def ensure_workflow_tables() -> None:
     Base.metadata.create_all(bind=engine, tables=[WorkflowTask.__table__, WorkflowTaskStep.__table__])
@@ -81,69 +83,141 @@ def list_workflow_tasks(db: Session, limit: int = 20) -> list[WorkflowTask]:
     return list(db.scalars(select(WorkflowTask).order_by(WorkflowTask.created_at.desc()).limit(limit)).all())
 
 
+def cancel_workflow_task(db: Session, task_id: int) -> WorkflowTask:
+    task, steps = get_workflow_task(db, task_id)
+    if task is None:
+        raise ValueError(f"Workflow task not found: {task_id}")
+    if task.status in TERMINAL_STATUSES:
+        return task
+    task.status = "cancelled"
+    task.error_message = "任务已取消"
+    task.finished_at = datetime.utcnow()
+    for step in steps:
+        if step.status == "running":
+            step.status = "cancelled"
+            step.message = "任务取消时该步骤正在执行"
+            step.finished_at = datetime.utcnow()
+        elif step.status == "pending":
+            step.status = "skipped"
+            step.message = "任务已取消，跳过未执行步骤"
+            step.finished_at = datetime.utcnow()
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def reset_failed_steps_for_retry(db: Session, task_id: int) -> WorkflowTask:
+    task, steps = get_workflow_task(db, task_id)
+    if task is None:
+        raise ValueError(f"Workflow task not found: {task_id}")
+    failed_seen = False
+    for step in steps:
+        if step.status == "failed":
+            failed_seen = True
+        if failed_seen and step.status in {"failed", "pending", "skipped"}:
+            step.status = "pending"
+            step.message = None
+            step.result_payload = None
+            step.started_at = None
+            step.finished_at = None
+    if not failed_seen:
+        raise ValueError("No failed step found for retry")
+    task.status = "pending"
+    task.current_step = None
+    task.error_message = None
+    task.finished_at = None
+    db.commit()
+    db.refresh(task)
+    return task
+
+
 def run_workflow_task(task_id: int) -> None:
     ensure_workflow_tables()
     db = SessionLocal()
     try:
         task = db.get(WorkflowTask, task_id)
-        if task is None:
+        if task is None or task.status == "cancelled":
             return
         request = WorkflowRunRequest.model_validate(task.request_payload)
         mark_task_running(db, task)
-        results: dict[str, Any] = {}
+        results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
 
-        execute_step(db, task, "calendar", lambda: sync_trading_calendar(db, request.start_date, request.end_date, "CN"), results)
-        execute_step(
-            db,
-            task,
-            "market",
-            lambda: sync_market_data(
-                db,
-                symbols=request.symbols,
-                start_date=request.start_date,
-                end_date=request.end_date,
-                max_symbols=request.max_symbols,
-                clean_after_sync=True,
-                request_interval_seconds=0,
-            ),
-            results,
-        )
-        if request.symbols:
-            execute_step(db, task, "quality", lambda: run_quality_checks(db, request.symbols or [], request.start_date, request.end_date), results)
-        else:
-            skip_step(db, task, "quality", "未指定 ETF 代码，跳过前端指定范围的数据质量检查。")
-        execute_step(
-            db,
-            task,
-            "factors",
-            lambda: calculate_factors(db, symbols=request.symbols, start_date=request.start_date, end_date=request.end_date),
-            results,
-        )
-        strategy_result = execute_step(
-            db,
-            task,
-            "strategy",
-            lambda: run_strategy(db, strategy_code=request.strategy_code, run_date=request.end_date, run_type="workflow"),
-            results,
-        )
-        run_id = int(strategy_result["run_id"])
-        execute_step(db, task, "risk", lambda: run_risk_check(db, run_id=run_id), results)
-        execute_step(db, task, "rebalance", lambda: generate_rebalance_orders(db, run_id=run_id, portfolio_value=request.portfolio_value), results)
-        if request.generate_report:
-            execute_step(db, task, "report", lambda: generate_monthly_report(db, run_id=run_id, report_date=request.end_date), results)
-        else:
-            skip_step(db, task, "report", "本次任务未选择生成报告。")
+        run_id = existing_run_id(task)
+        for step_key, _ in WORKFLOW_STEPS:
+            if is_step_done(db, task.id, step_key):
+                continue
+            check_cancelled(db, task.id)
+            if step_key == "calendar":
+                execute_step(db, task, step_key, lambda: sync_trading_calendar(db, request.start_date, request.end_date, "CN"), results)
+            elif step_key == "market":
+                execute_step(
+                    db,
+                    task,
+                    step_key,
+                    lambda: sync_market_data(
+                        db,
+                        symbols=request.symbols,
+                        start_date=request.start_date,
+                        end_date=request.end_date,
+                        max_symbols=request.max_symbols,
+                        clean_after_sync=True,
+                        request_interval_seconds=0,
+                    ),
+                    results,
+                )
+            elif step_key == "quality":
+                if request.symbols:
+                    execute_step(db, task, step_key, lambda: run_quality_checks(db, request.symbols or [], request.start_date, request.end_date), results)
+                else:
+                    skip_step(db, task, step_key, "未指定 ETF 代码，跳过指定范围的数据质量检查。")
+            elif step_key == "factors":
+                execute_step(
+                    db,
+                    task,
+                    step_key,
+                    lambda: calculate_factors(db, symbols=request.symbols, start_date=request.start_date, end_date=request.end_date),
+                    results,
+                )
+            elif step_key == "strategy":
+                strategy_result = execute_step(
+                    db,
+                    task,
+                    step_key,
+                    lambda: run_strategy(db, strategy_code=request.strategy_code, run_date=request.end_date, run_type="workflow"),
+                    results,
+                )
+                run_id = int(strategy_result["run_id"])
+                task.result_payload = json_ready({"run_id": run_id, "steps": results})
+                db.commit()
+            elif step_key == "risk":
+                run_id = require_run_id(run_id)
+                execute_step(db, task, step_key, lambda: run_risk_check(db, run_id=run_id), results)
+            elif step_key == "rebalance":
+                run_id = require_run_id(run_id)
+                execute_step(db, task, step_key, lambda: generate_rebalance_orders(db, run_id=run_id, portfolio_value=request.portfolio_value), results)
+            elif step_key == "report":
+                run_id = require_run_id(run_id)
+                if request.generate_report:
+                    execute_step(db, task, step_key, lambda: generate_monthly_report(db, run_id=run_id, report_date=request.end_date), results)
+                else:
+                    skip_step(db, task, step_key, "本次任务未选择生成报告。")
 
-        task.status = "success"
+        task.status = final_status_for_steps(db, task.id)
         task.current_step = None
         task.result_payload = json_ready({"run_id": run_id, "steps": results})
         task.finished_at = datetime.utcnow()
         db.commit()
+    except WorkflowCancelled:
+        db.rollback()
     except Exception as exc:  # noqa: BLE001 - persist task failure for UI polling.
         db.rollback()
         fail_task(db, task_id, str(exc))
     finally:
         db.close()
+
+
+class WorkflowCancelled(Exception):
+    pass
 
 
 def execute_step(
@@ -159,15 +233,20 @@ def execute_step(
     task.current_step = step_key
     step.status = "running"
     step.started_at = now
+    step.finished_at = None
     step.message = "开始执行"
     db.commit()
 
     result = action()
+    db.refresh(task)
+    if task.status == "cancelled":
+        raise WorkflowCancelled()
     step.status = "success"
     step.result_payload = json_ready(result)
     step.message = summarize_result(result)
     step.finished_at = datetime.utcnow()
     results[step_key] = json_ready(result)
+    task.result_payload = json_ready({"run_id": existing_run_id(task), "steps": results})
     db.commit()
     return result
 
@@ -219,6 +298,39 @@ def load_step(db: Session, task_id: int, step_key: str) -> WorkflowTaskStep:
     if step is None:
         raise ValueError(f"Workflow step not found: {step_key}")
     return step
+
+
+def is_step_done(db: Session, task_id: int, step_key: str) -> bool:
+    step = load_step(db, task_id, step_key)
+    return step.status in {"success", "skipped"}
+
+
+def check_cancelled(db: Session, task_id: int) -> None:
+    task = db.get(WorkflowTask, task_id)
+    if task and task.status == "cancelled":
+        raise WorkflowCancelled()
+
+
+def existing_run_id(task: WorkflowTask) -> int | None:
+    if not task.result_payload:
+        return None
+    value = task.result_payload.get("run_id")
+    return int(value) if value is not None else None
+
+
+def require_run_id(run_id: int | None) -> int:
+    if run_id is None:
+        raise ValueError("Missing run_id from strategy step")
+    return run_id
+
+
+def final_status_for_steps(db: Session, task_id: int) -> str:
+    steps = list(db.scalars(select(WorkflowTaskStep).where(WorkflowTaskStep.task_id == task_id)).all())
+    if any(step.status == "failed" for step in steps):
+        return "failed"
+    if any(step.status == "skipped" for step in steps):
+        return "partial_success"
+    return "success"
 
 
 def summarize_result(result: dict[str, Any]) -> str:

@@ -26,7 +26,7 @@
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="running" @click="startWorkflow">创建后台任务</el-button>
-          <el-button :disabled="running" @click="resetTask">重置状态</el-button>
+          <el-button :disabled="running" @click="resetTask">重置</el-button>
         </el-form-item>
       </el-form>
     </section>
@@ -37,6 +37,9 @@
         <div class="task-tags">
           <el-tag v-if="task" type="info">task_id: {{ task.id }}</el-tag>
           <el-tag v-if="runId" type="success">run_id: {{ runId }}</el-tag>
+          <el-button size="small" :disabled="!task" @click="refreshTask">刷新</el-button>
+          <el-button size="small" type="warning" :disabled="!canCancel" @click="cancelTask">取消</el-button>
+          <el-button size="small" type="primary" :disabled="!canRetry" @click="retryFailed">重试失败步骤</el-button>
         </div>
       </div>
       <el-steps :active="activeStep" finish-status="success" process-status="process" direction="vertical">
@@ -44,25 +47,39 @@
       </el-steps>
     </section>
 
-    <section class="panel span-12">
+    <section class="panel span-5">
+      <div class="panel-header">
+        <h2>最近任务</h2>
+        <el-button text @click="loadTasks">刷新</el-button>
+      </div>
+      <el-table :data="tasks" height="360" highlight-current-row @current-change="selectTask">
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">{{ statusText(row.status) }}</template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" min-width="170" />
+      </el-table>
+    </section>
+
+    <section class="panel span-7">
       <div class="panel-header">
         <h2>任务日志</h2>
-        <el-button text :disabled="!task || running" @click="refreshTask">刷新</el-button>
+        <el-tag v-if="task?.error_message" type="danger">{{ task.error_message }}</el-tag>
       </div>
-      <el-table :data="logs" height="320">
+      <el-table :data="logs" height="360">
         <el-table-column prop="time" label="时间" width="170" />
         <el-table-column prop="step" label="步骤" width="170" />
         <el-table-column prop="status" label="状态" width="110" />
-        <el-table-column prop="message" label="说明" min-width="360" />
+        <el-table-column prop="message" label="说明" min-width="300" />
       </el-table>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchWorkflowTask, startWorkflowTask, type WorkflowTask, type WorkflowTaskStep } from '../api/client'
+import { cancelWorkflowTask, fetchWorkflowTask, fetchWorkflowTasks, retryFailedWorkflowTask, startWorkflowTask, type WorkflowTask, type WorkflowTaskStep } from '../api/client'
 
 type StepStatus = 'wait' | 'process' | 'finish' | 'error' | 'success'
 
@@ -93,8 +110,11 @@ const strategyCode = ref('core_etf_rotation')
 const portfolioValue = ref(100000)
 const shouldGenerateReport = ref(true)
 const task = ref<WorkflowTask>()
+const tasks = ref<WorkflowTask[]>([])
 const running = ref(false)
 let timer: number | undefined
+
+onMounted(loadTasks)
 
 const displaySteps = computed<DisplayStep[]>(() => {
   if (!task.value?.steps.length) return defaultSteps()
@@ -117,18 +137,19 @@ const activeStep = computed(() => {
 const taskStatusText = computed(() => {
   if (running.value) return '执行中'
   if (!task.value) return '待执行'
-  const statusMap: Record<string, string> = { pending: '等待中', running: '执行中', success: '已完成', failed: '失败' }
-  return statusMap[task.value.status] || task.value.status
+  return statusText(task.value.status)
 })
 
 const taskStatusType = computed(() => {
   if (!task.value) return 'info'
-  if (task.value.status === 'success') return 'success'
-  if (task.value.status === 'failed') return 'danger'
+  if (task.value.status === 'success' || task.value.status === 'partial_success') return 'success'
+  if (task.value.status === 'failed' || task.value.status === 'cancelled') return 'danger'
   return 'warning'
 })
 
 const runId = computed(() => Number(task.value?.result_payload?.run_id || 0) || undefined)
+const canCancel = computed(() => task.value && ['pending', 'running'].includes(task.value.status))
+const canRetry = computed(() => task.value?.status === 'failed' && task.value.steps.some((step) => step.status === 'failed'))
 
 const logs = computed(() => {
   if (!task.value) return []
@@ -156,6 +177,7 @@ async function startWorkflow() {
       generate_report: shouldGenerateReport.value,
     })
     task.value = await fetchWorkflowTask(response.task_id)
+    await loadTasks()
     ElMessage.success(`后台任务已创建，task_id=${response.task_id}`)
     startPolling(response.task_id)
   } catch (error) {
@@ -169,16 +191,50 @@ async function refreshTask() {
   task.value = await fetchWorkflowTask(task.value.id)
 }
 
+async function loadTasks() {
+  tasks.value = await fetchWorkflowTasks()
+}
+
+async function selectTask(row: WorkflowTask | undefined) {
+  if (!row) return
+  stopPolling()
+  task.value = await fetchWorkflowTask(row.id)
+  running.value = ['pending', 'running'].includes(task.value.status)
+  if (running.value) startPolling(task.value.id)
+}
+
+async function cancelTask() {
+  if (!task.value) return
+  task.value = await cancelWorkflowTask(task.value.id)
+  running.value = false
+  stopPolling()
+  await loadTasks()
+  ElMessage.warning('任务已取消')
+}
+
+async function retryFailed() {
+  if (!task.value) return
+  const response = await retryFailedWorkflowTask(task.value.id)
+  task.value = await fetchWorkflowTask(response.task_id)
+  running.value = true
+  await loadTasks()
+  ElMessage.success('已重新执行失败步骤')
+  startPolling(response.task_id)
+}
+
 function startPolling(taskId: number) {
   stopPolling()
   timer = window.setInterval(async () => {
     try {
       task.value = await fetchWorkflowTask(taskId)
-      if (task.value.status === 'success' || task.value.status === 'failed') {
+      if (['success', 'partial_success', 'failed', 'cancelled'].includes(task.value.status)) {
         running.value = false
         stopPolling()
+        await loadTasks()
         if (task.value.status === 'success') ElMessage.success('后台流程执行完成')
+        if (task.value.status === 'partial_success') ElMessage.warning('后台流程部分完成')
         if (task.value.status === 'failed') ElMessage.error(task.value.error_message || '后台流程执行失败')
+        if (task.value.status === 'cancelled') ElMessage.warning('后台流程已取消')
       }
     } catch (error) {
       running.value = false
@@ -217,13 +273,21 @@ function defaultSteps(): DisplayStep[] {
 function mapStepStatus(status: string): StepStatus {
   if (status === 'running') return 'process'
   if (status === 'success') return 'finish'
-  if (status === 'failed') return 'error'
+  if (status === 'failed' || status === 'cancelled') return 'error'
   if (status === 'skipped') return 'success'
   return 'wait'
 }
 
 function statusText(status: string) {
-  const statusMap: Record<string, string> = { pending: '等待', running: '执行中', success: '完成', failed: '失败', skipped: '跳过' }
+  const statusMap: Record<string, string> = {
+    pending: '等待',
+    running: '执行中',
+    success: '完成',
+    partial_success: '部分完成',
+    failed: '失败',
+    cancelled: '已取消',
+    skipped: '跳过',
+  }
   return statusMap[status] || status
 }
 

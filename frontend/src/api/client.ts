@@ -194,3 +194,9 @@ export const startWorkflowTask = async (payload: {
 }) => (await api.post<{ task_id: number; status: string }>('/api/workflows/run', payload)).data
 export const fetchWorkflowTask = async (taskId: number) =>
   (await api.get<WorkflowTask>(`/api/workflows/${taskId}`)).data
+export const fetchWorkflowTasks = async () =>
+  (await api.get<WorkflowTask[]>('/api/workflows?limit=20')).data
+export const cancelWorkflowTask = async (taskId: number) =>
+  (await api.post<WorkflowTask>(`/api/workflows/${taskId}/cancel`)).data
+export const retryFailedWorkflowTask = async (taskId: number) =>
+  (await api.post<{ task_id: number; status: string }>(`/api/workflows/${taskId}/retry-failed`)).data

@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from app.services.workflow_service import WORKFLOW_STEPS, json_ready, summarize_result
+from app.services.workflow_service import WORKFLOW_STEPS, json_ready, require_run_id, summarize_result
 
 
 def test_json_ready_serializes_dates_and_decimals() -> None:
@@ -37,3 +37,12 @@ def test_workflow_steps_keep_expected_order() -> None:
         "rebalance",
         "report",
     ]
+
+
+def test_require_run_id_rejects_missing_value() -> None:
+    try:
+        require_run_id(None)
+    except ValueError as exc:
+        assert "run_id" in str(exc)
+    else:
+        raise AssertionError("require_run_id should fail when run_id is missing")
