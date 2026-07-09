@@ -30,35 +30,70 @@
     <section class="panel span-8">
       <div class="panel-header">
         <h2>ETF 主数据</h2>
-        <el-tag type="success">共 {{ assets.length }} 只</el-tag>
+        <div class="task-tags">
+          <el-tag type="success">共 {{ filteredAssets.length }} 只</el-tag>
+          <el-button @click="copyEnabledSymbols">复制已启用代码</el-button>
+        </div>
       </div>
-      <el-table :data="assets" height="680">
-      <el-table-column prop="symbol" label="代码" width="120" />
-      <el-table-column prop="name" label="名称" min-width="180" />
-      <el-table-column prop="exchange" label="交易所" width="110" />
-      <el-table-column prop="asset_class" label="资产类别" width="120" />
-      <el-table-column prop="asset_region" label="区域" width="120" />
-      <el-table-column prop="risk_level" label="风险等级" width="100" />
-      <el-table-column label="跨境" width="100">
+      <el-form class="action-form" label-width="84px">
+        <el-form-item label="搜索">
+          <el-input v-model="keyword" placeholder="代码 / 名称" />
+        </el-form-item>
+        <el-form-item label="启用状态">
+          <el-select v-model="enabledFilter">
+            <el-option label="全部" value="all" />
+            <el-option label="仅启用" value="enabled" />
+            <el-option label="仅停用" value="disabled" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="资产类别">
+          <el-select v-model="assetClassFilter">
+            <el-option label="全部" value="all" />
+            <el-option v-for="item in assetClassOptions" :key="item" :label="item" :value="item" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="区域">
+          <el-select v-model="assetRegionFilter">
+            <el-option label="全部" value="all" />
+            <el-option v-for="item in assetRegionOptions" :key="item" :label="item" :value="item" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <el-table :data="filteredAssets" height="620">
+      <el-table-column prop="symbol" label="代码" width="110" />
+      <el-table-column prop="name" label="名称" min-width="170" />
+      <el-table-column prop="exchange" label="交易所" width="90" />
+      <el-table-column prop="asset_class" label="资产类别" width="110" />
+      <el-table-column prop="asset_region" label="区域" width="110" />
+      <el-table-column prop="risk_level" label="风险等级" width="96" />
+      <el-table-column label="跨境" width="90">
         <template #default="{ row }"><el-tag :type="row.is_cross_border ? 'warning' : 'info'">{{ row.is_cross_border ? '是' : '否' }}</el-tag></template>
       </el-table-column>
-      <el-table-column label="启用" width="100">
-        <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag></template>
+      <el-table-column label="启用研究" width="120">
+        <template #default="{ row }">
+          <el-switch :model-value="row.enabled" :loading="togglingSymbol === row.symbol" @change="(value: string | number | boolean) => toggleAsset(row.symbol, value)" />
+        </template>
       </el-table-column>
+      <el-table-column prop="description" label="说明" min-width="220" />
       </el-table>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchUpsertAssets, fetchAssets, type Asset, type AssetUpsertItem } from '../api/client'
+import { batchUpsertAssets, fetchAssets, updateAsset, type Asset, type AssetUpsertItem } from '../api/client'
 
 const assets = ref<Asset[]>([])
 const loading = ref(true)
 const actionLoading = ref(false)
 const importText = ref('')
+const keyword = ref('')
+const enabledFilter = ref<'all' | 'enabled' | 'disabled'>('all')
+const assetClassFilter = ref('all')
+const assetRegionFilter = ref('all')
+const togglingSymbol = ref('')
 
 const presetAssets: AssetUpsertItem[] = [
   { symbol: '510050', name: '上证50ETF', exchange: 'SH', asset_class: 'equity', asset_region: 'CN', risk_level: 4, description: 'A股核心蓝筹 ETF' },
@@ -115,6 +150,27 @@ async function submitImport() {
   }
 }
 
+async function toggleAsset(symbol: string, enabled: string | number | boolean) {
+  togglingSymbol.value = symbol
+  try {
+    await updateAsset(symbol, { enabled: Boolean(enabled) })
+    const asset = assets.value.find((item) => item.symbol === symbol)
+    if (asset) asset.enabled = Boolean(enabled)
+    ElMessage.success(`已${enabled ? '启用' : '停用'} ${symbol}`)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '更新失败')
+    await refresh()
+  } finally {
+    togglingSymbol.value = ''
+  }
+}
+
+async function copyEnabledSymbols() {
+  const text = assets.value.filter((item) => item.enabled).map((item) => item.symbol).join(',')
+  await navigator.clipboard.writeText(text)
+  ElMessage.success('已复制已启用 ETF 代码')
+}
+
 function parseImportText(value: string): AssetUpsertItem[] {
   return value
     .split(/\r?\n/)
@@ -137,4 +193,28 @@ function parseImportText(value: string): AssetUpsertItem[] {
     })
     .filter((item) => item.symbol && item.name)
 }
+
+const assetClassOptions = computed(() =>
+  Array.from(new Set(assets.value.map((item) => item.asset_class).filter(Boolean))).sort(),
+)
+
+const assetRegionOptions = computed(() =>
+  Array.from(new Set(assets.value.map((item) => item.asset_region).filter(Boolean) as string[])).sort(),
+)
+
+const filteredAssets = computed(() =>
+  assets.value.filter((item) => {
+    const matchesKeyword =
+      !keyword.value ||
+      item.symbol.toLowerCase().includes(keyword.value.toLowerCase()) ||
+      item.name.toLowerCase().includes(keyword.value.toLowerCase())
+    const matchesEnabled =
+      enabledFilter.value === 'all' ||
+      (enabledFilter.value === 'enabled' && item.enabled) ||
+      (enabledFilter.value === 'disabled' && !item.enabled)
+    const matchesClass = assetClassFilter.value === 'all' || item.asset_class === assetClassFilter.value
+    const matchesRegion = assetRegionFilter.value === 'all' || item.asset_region === assetRegionFilter.value
+    return matchesKeyword && matchesEnabled && matchesClass && matchesRegion
+  }),
+)
 </script>

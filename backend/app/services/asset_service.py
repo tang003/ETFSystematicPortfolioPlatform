@@ -38,3 +38,25 @@ def batch_upsert_assets(db: Session, items: list[AssetUpsertItem]) -> int:
     )
     db.commit()
     return len(payload)
+
+
+def update_asset(
+    db: Session,
+    symbol: str,
+    *,
+    enabled: bool | None = None,
+    risk_level: int | None = None,
+    description: str | None = None,
+) -> AssetMaster | None:
+    asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == symbol))
+    if asset is None:
+        return None
+    if enabled is not None:
+        asset.enabled = enabled
+    if risk_level is not None:
+        asset.risk_level = risk_level
+    if description is not None:
+        asset.description = description
+    db.commit()
+    db.refresh(asset)
+    return asset

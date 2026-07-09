@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.18.3-asset-pool-expansion`
+当前版本：`v0.18.4-asset-pool-controls`
 
 ## GET /health
 
@@ -98,6 +98,20 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "inserted_or_updated": 1
 }
 ```
+
+## PATCH /api/assets/{symbol}
+
+用途：更新单只 ETF 主数据的研究状态或基础属性。当前前端主要用它来控制“启用 / 停用研究池”。
+
+请求示例：
+
+```json
+{
+  "enabled": false
+}
+```
+
+响应：返回更新后的 ETF 主数据对象。
 
 后续计划接口：
 

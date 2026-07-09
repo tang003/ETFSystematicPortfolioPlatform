@@ -44,3 +44,9 @@ class AssetBatchUpsertRequest(BaseModel):
 class AssetBatchUpsertResponse(BaseModel):
     total: int
     inserted_or_updated: int
+
+
+class AssetUpdateRequest(BaseModel):
+    enabled: bool | None = None
+    risk_level: int | None = Field(default=None, ge=1, le=5)
+    description: str | None = None

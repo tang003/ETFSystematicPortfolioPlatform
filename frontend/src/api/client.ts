@@ -11,9 +11,11 @@ export interface Asset {
   exchange: string | null
   asset_class: string
   asset_region: string | null
+  currency?: string
   enabled: boolean
   risk_level: number
   is_cross_border: boolean
+  description?: string | null
 }
 
 export interface AssetUpsertItem {
@@ -260,6 +262,8 @@ export const fetchHealth = async () => (await api.get('/health')).data
 export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
 export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =>
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
+export const updateAsset = async (symbol: string, payload: { enabled?: boolean; risk_level?: number; description?: string | null }) =>
+  (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data

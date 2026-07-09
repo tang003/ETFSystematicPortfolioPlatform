@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.schemas.asset_schema import AssetBatchUpsertRequest, AssetBatchUpsertResponse, AssetRead
-from app.services.asset_service import batch_upsert_assets, list_assets
+from app.schemas.asset_schema import AssetBatchUpsertRequest, AssetBatchUpsertResponse, AssetRead, AssetUpdateRequest
+from app.services.asset_service import batch_upsert_assets, list_assets, update_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -23,3 +23,21 @@ def upsert_assets(
 ) -> AssetBatchUpsertResponse:
     count = batch_upsert_assets(db=db, items=request.items)
     return AssetBatchUpsertResponse(total=len(request.items), inserted_or_updated=count)
+
+
+@router.patch("/{symbol}", response_model=AssetRead)
+def patch_asset(
+    symbol: str,
+    request: AssetUpdateRequest,
+    db: Session = Depends(get_db),
+) -> AssetRead:
+    asset = update_asset(
+        db=db,
+        symbol=symbol,
+        enabled=request.enabled,
+        risk_level=request.risk_level,
+        description=request.description,
+    )
+    if asset is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return asset
