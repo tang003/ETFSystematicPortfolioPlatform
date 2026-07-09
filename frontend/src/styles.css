@@ -143,6 +143,13 @@ body {
   font-size: 12px;
 }
 
+.task-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .el-steps--vertical {
   min-height: 520px;
 }

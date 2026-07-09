@@ -1,0 +1,50 @@
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class WorkflowRunRequest(BaseModel):
+    symbols: list[str] | None = None
+    start_date: date
+    end_date: date
+    max_symbols: int | None = Field(default=10, ge=1)
+    strategy_code: str = Field(default="core_etf_rotation")
+    portfolio_value: Decimal = Field(default=Decimal("100000"), gt=0)
+    generate_report: bool = True
+
+
+class WorkflowTaskCreateResponse(BaseModel):
+    task_id: int
+    status: str
+
+
+class WorkflowTaskStepRead(BaseModel):
+    id: int
+    task_id: int
+    step_key: str
+    step_name: str
+    sort_order: int
+    status: str
+    message: str | None
+    result_payload: dict | None
+    started_at: datetime | None
+    finished_at: datetime | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WorkflowTaskRead(BaseModel):
+    id: int
+    task_type: str
+    status: str
+    current_step: str | None
+    request_payload: dict
+    result_payload: dict | None
+    error_message: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    steps: list[WorkflowTaskStepRead]
+
+    model_config = ConfigDict(from_attributes=True)

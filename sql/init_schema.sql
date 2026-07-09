@@ -285,10 +285,37 @@ CREATE TABLE IF NOT EXISTS report_log (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS workflow_task (
+    id BIGSERIAL PRIMARY KEY,
+    task_type VARCHAR(50) NOT NULL DEFAULT 'full_rebalance',
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    current_step VARCHAR(50),
+    request_payload JSONB NOT NULL,
+    result_payload JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS workflow_task_step (
+    id BIGSERIAL PRIMARY KEY,
+    task_id BIGINT NOT NULL REFERENCES workflow_task(id),
+    step_key VARCHAR(50) NOT NULL,
+    step_name VARCHAR(100) NOT NULL,
+    sort_order INTEGER NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    message TEXT,
+    result_payload JSONB,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_asset_master_enabled ON asset_master(enabled);
 CREATE INDEX IF NOT EXISTS idx_market_data_raw_symbol_date ON market_data_raw(symbol, trade_date);
 CREATE INDEX IF NOT EXISTS idx_market_data_clean_symbol_date ON market_data_clean(symbol, trade_date);
 CREATE INDEX IF NOT EXISTS idx_factor_daily_symbol_date ON factor_daily(symbol, trade_date);
 CREATE INDEX IF NOT EXISTS idx_strategy_run_date ON strategy_run(run_date);
 CREATE INDEX IF NOT EXISTS idx_rebalance_order_date ON rebalance_order(order_date);
-
+CREATE INDEX IF NOT EXISTS idx_workflow_task_status ON workflow_task(status);
+CREATE INDEX IF NOT EXISTS idx_workflow_task_step_task ON workflow_task_step(task_id);

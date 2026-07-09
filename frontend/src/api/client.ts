@@ -116,6 +116,33 @@ export interface RunSummary {
   [key: string]: unknown
 }
 
+export interface WorkflowTaskStep {
+  id: number
+  task_id: number
+  step_key: string
+  step_name: string
+  sort_order: number
+  status: string
+  message: string | null
+  result_payload: Record<string, unknown> | null
+  started_at: string | null
+  finished_at: string | null
+}
+
+export interface WorkflowTask {
+  id: number
+  task_type: string
+  status: string
+  current_step: string | null
+  request_payload: Record<string, unknown>
+  result_payload: Record<string, unknown> | null
+  error_message: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  steps: WorkflowTaskStep[]
+}
+
 export const fetchHealth = async () => (await api.get('/health')).data
 export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
@@ -156,3 +183,14 @@ export const runBacktest = async (payload: {
 }) => (await api.post<RunSummary>('/api/backtest/run', payload)).data
 export const generateMonthlyReport = async (payload: { run_id?: number; report_date?: string }) =>
   (await api.post<RunSummary>('/api/reports/monthly', payload)).data
+export const startWorkflowTask = async (payload: {
+  symbols?: string[]
+  start_date: string
+  end_date: string
+  max_symbols?: number
+  strategy_code: string
+  portfolio_value?: number
+  generate_report?: boolean
+}) => (await api.post<{ task_id: number; status: string }>('/api/workflows/run', payload)).data
+export const fetchWorkflowTask = async (taskId: number) =>
+  (await api.get<WorkflowTask>(`/api/workflows/${taskId}`)).data

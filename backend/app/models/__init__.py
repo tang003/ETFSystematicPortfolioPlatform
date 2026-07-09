@@ -9,6 +9,7 @@ from app.models.rebalance import RebalanceOrder
 from app.models.backtest import BacktestEquityCurve, BacktestMetrics, BacktestRun, BacktestTrade
 from app.models.attribution import PerformanceAttribution
 from app.models.report import ReportLog
+from app.models.workflow import WorkflowTask, WorkflowTaskStep
 
 __all__ = [
     "AlphaSignal",
@@ -32,5 +33,6 @@ __all__ = [
     "StrategyRun",
     "TargetPortfolio",
     "TradingCalendar",
+    "WorkflowTask",
+    "WorkflowTaskStep",
 ]
-

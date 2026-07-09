@@ -3,7 +3,7 @@
     <section class="panel span-4">
       <div class="panel-header">
         <h2>流程参数</h2>
-        <el-tag :type="running ? 'warning' : 'info'">{{ running ? '执行中' : '待执行' }}</el-tag>
+        <el-tag :type="running ? 'warning' : taskStatusType">{{ taskStatusText }}</el-tag>
       </div>
       <el-form label-width="92px">
         <el-form-item label="日期范围">
@@ -25,31 +25,34 @@
           <el-switch v-model="shouldGenerateReport" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="running" @click="runWorkflow">运行完整流程</el-button>
-          <el-button :disabled="running" @click="resetSteps">重置状态</el-button>
+          <el-button type="primary" :loading="running" @click="startWorkflow">创建后台任务</el-button>
+          <el-button :disabled="running" @click="resetTask">重置状态</el-button>
         </el-form-item>
       </el-form>
     </section>
 
     <section class="panel span-8">
       <div class="panel-header">
-        <h2>执行步骤</h2>
-        <el-tag v-if="latestRunId" type="success">run_id: {{ latestRunId }}</el-tag>
+        <h2>任务进度</h2>
+        <div class="task-tags">
+          <el-tag v-if="task" type="info">task_id: {{ task.id }}</el-tag>
+          <el-tag v-if="runId" type="success">run_id: {{ runId }}</el-tag>
+        </div>
       </div>
       <el-steps :active="activeStep" finish-status="success" process-status="process" direction="vertical">
-        <el-step v-for="step in steps" :key="step.key" :title="step.title" :description="step.description" :status="step.status" />
+        <el-step v-for="step in displaySteps" :key="step.key" :title="step.title" :description="step.description" :status="step.status" />
       </el-steps>
     </section>
 
     <section class="panel span-12">
       <div class="panel-header">
-        <h2>执行日志</h2>
-        <el-button text @click="logs = []">清空</el-button>
+        <h2>任务日志</h2>
+        <el-button text :disabled="!task || running" @click="refreshTask">刷新</el-button>
       </div>
       <el-table :data="logs" height="320">
-        <el-table-column prop="time" label="时间" width="160" />
-        <el-table-column prop="step" label="步骤" width="160" />
-        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column prop="time" label="时间" width="170" />
+        <el-table-column prop="step" label="步骤" width="170" />
+        <el-table-column prop="status" label="状态" width="110" />
         <el-table-column prop="message" label="说明" min-width="360" />
       </el-table>
     </section>
@@ -57,24 +60,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { calculateFactors, checkDataQuality, checkRisk, generateMonthlyReport, generateRebalanceOrders, runStrategy, syncCalendar, syncMarket } from '../api/client'
+import { fetchWorkflowTask, startWorkflowTask, type WorkflowTask, type WorkflowTaskStep } from '../api/client'
 
 type StepStatus = 'wait' | 'process' | 'finish' | 'error' | 'success'
 
-interface WorkflowStep {
+interface DisplayStep {
   key: string
   title: string
   description: string
   status: StepStatus
 }
 
-interface WorkflowLog {
-  time: string
-  step: string
-  status: string
-  message: string
+const stepDescriptions: Record<string, string> = {
+  calendar: '写入 A 股交易日历，用于缺失数据检查。',
+  market: '拉取原始行情并清洗到 clean 表。',
+  quality: '检查日期范围内的缺失交易日。',
+  factors: '生成趋势、动量、波动、回撤、流动性等评分。',
+  strategy: '生成 Alpha 信号和目标组合。',
+  risk: '检查组合约束并写入风控结果。',
+  rebalance: '按目标权重和组合市值生成建议订单。',
+  report: '汇总策略、组合、风控、调仓和回测信息。',
 }
 
 const today = new Date().toISOString().slice(0, 10)
@@ -85,111 +92,152 @@ const maxSymbols = ref(10)
 const strategyCode = ref('core_etf_rotation')
 const portfolioValue = ref(100000)
 const shouldGenerateReport = ref(true)
+const task = ref<WorkflowTask>()
 const running = ref(false)
-const latestRunId = ref<number>()
-const logs = ref<WorkflowLog[]>([])
-const steps = ref<WorkflowStep[]>(createSteps())
+let timer: number | undefined
 
-const activeStep = computed(() => {
-  const index = steps.value.findIndex((step) => step.status === 'process')
-  if (index >= 0) return index
-  const failed = steps.value.findIndex((step) => step.status === 'error')
-  if (failed >= 0) return failed
-  return steps.value.filter((step) => step.status === 'finish' || step.status === 'success').length
+const displaySteps = computed<DisplayStep[]>(() => {
+  if (!task.value?.steps.length) return defaultSteps()
+  return task.value.steps.map((step) => ({
+    key: step.step_key,
+    title: step.step_name,
+    description: step.message || stepDescriptions[step.step_key] || '',
+    status: mapStepStatus(step.status),
+  }))
 })
 
-async function runWorkflow() {
+const activeStep = computed(() => {
+  const index = displaySteps.value.findIndex((step) => step.status === 'process')
+  if (index >= 0) return index
+  const failed = displaySteps.value.findIndex((step) => step.status === 'error')
+  if (failed >= 0) return failed
+  return displaySteps.value.filter((step) => step.status === 'finish' || step.status === 'success').length
+})
+
+const taskStatusText = computed(() => {
+  if (running.value) return '执行中'
+  if (!task.value) return '待执行'
+  const statusMap: Record<string, string> = { pending: '等待中', running: '执行中', success: '已完成', failed: '失败' }
+  return statusMap[task.value.status] || task.value.status
+})
+
+const taskStatusType = computed(() => {
+  if (!task.value) return 'info'
+  if (task.value.status === 'success') return 'success'
+  if (task.value.status === 'failed') return 'danger'
+  return 'warning'
+})
+
+const runId = computed(() => Number(task.value?.result_payload?.run_id || 0) || undefined)
+
+const logs = computed(() => {
+  if (!task.value) return []
+  return task.value.steps
+    .filter((step) => step.status !== 'pending' || step.message)
+    .map((step) => ({
+      time: step.finished_at || step.started_at || task.value?.created_at || '',
+      step: step.step_name,
+      status: statusText(step.status),
+      message: step.message || summarizePayload(step),
+    }))
+    .reverse()
+})
+
+async function startWorkflow() {
   running.value = true
-  resetSteps()
   try {
-    const symbols = splitSymbols()
-    await executeStep('calendar', () => syncCalendar({ start_date: dateRange.value[0], end_date: dateRange.value[1], market: 'CN' }))
-    await executeStep('market', () => syncMarket({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols, max_symbols: maxSymbols.value, clean_after_sync: true }))
-    if (symbols.length) {
-      await executeStep('quality', () => checkDataQuality({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols }))
-    } else {
-      skipStep('quality', '未填写 ETF 代码，跳过缺失数据检查。')
-    }
-    await executeStep('factors', () => calculateFactors({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols }))
-    const strategyResult = await executeStep('strategy', () => runStrategy({ strategy_code: strategyCode.value, run_date: dateRange.value[1], run_type: 'manual' }))
-    const runId = Number(strategyResult.run_id)
-    if (!Number.isFinite(runId)) throw new Error('策略运行结果缺少有效 run_id')
-    latestRunId.value = runId
-    await executeStep('risk', () => checkRisk({ run_id: runId }))
-    await executeStep('rebalance', () => generateRebalanceOrders({ run_id: runId, portfolio_value: portfolioValue.value }))
-    if (shouldGenerateReport.value) {
-      await executeStep('report', () => generateMonthlyReport({ run_id: runId, report_date: dateRange.value[1] }))
-    } else {
-      skipStep('report', '已关闭报告生成。')
-    }
-    ElMessage.success('完整流程执行完成')
+    const response = await startWorkflowTask({
+      symbols: splitSymbols(),
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      max_symbols: maxSymbols.value,
+      strategy_code: strategyCode.value,
+      portfolio_value: portfolioValue.value,
+      generate_report: shouldGenerateReport.value,
+    })
+    task.value = await fetchWorkflowTask(response.task_id)
+    ElMessage.success(`后台任务已创建，task_id=${response.task_id}`)
+    startPolling(response.task_id)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '流程执行失败')
-  } finally {
     running.value = false
+    ElMessage.error(error instanceof Error ? error.message : '任务创建失败')
   }
 }
 
-async function executeStep(key: string, action: () => Promise<Record<string, unknown> | Record<string, unknown>[]>) {
-  setStepStatus(key, 'process')
-  addLog(key, '执行中', '开始执行')
-  try {
-    const result = await action()
-    setStepStatus(key, 'finish')
-    addLog(key, '完成', summarizeResult(result))
-    return Array.isArray(result) ? {} : result
-  } catch (error) {
-    setStepStatus(key, 'error')
-    addLog(key, '失败', error instanceof Error ? error.message : '执行失败')
-    throw error
+async function refreshTask() {
+  if (!task.value) return
+  task.value = await fetchWorkflowTask(task.value.id)
+}
+
+function startPolling(taskId: number) {
+  stopPolling()
+  timer = window.setInterval(async () => {
+    try {
+      task.value = await fetchWorkflowTask(taskId)
+      if (task.value.status === 'success' || task.value.status === 'failed') {
+        running.value = false
+        stopPolling()
+        if (task.value.status === 'success') ElMessage.success('后台流程执行完成')
+        if (task.value.status === 'failed') ElMessage.error(task.value.error_message || '后台流程执行失败')
+      }
+    } catch (error) {
+      running.value = false
+      stopPolling()
+      ElMessage.error(error instanceof Error ? error.message : '任务轮询失败')
+    }
+  }, 2000)
+}
+
+function resetTask() {
+  stopPolling()
+  running.value = false
+  task.value = undefined
+}
+
+function stopPolling() {
+  if (timer) {
+    window.clearInterval(timer)
+    timer = undefined
   }
 }
 
-function skipStep(key: string, message: string) {
-  setStepStatus(key, 'success')
-  addLog(key, '跳过', message)
-}
-
-function resetSteps() {
-  latestRunId.value = undefined
-  steps.value = createSteps()
-}
-
-function createSteps(): WorkflowStep[] {
+function defaultSteps(): DisplayStep[] {
   return [
-    { key: 'calendar', title: '同步交易日历', description: '写入 A 股交易日历，用于缺失数据检查。', status: 'wait' },
-    { key: 'market', title: '同步 ETF 行情', description: '拉取原始行情并清洗到 clean 表。', status: 'wait' },
-    { key: 'quality', title: '检查数据质量', description: '检查日期范围内的缺失交易日。', status: 'wait' },
-    { key: 'factors', title: '计算因子', description: '生成趋势、动量、波动、回撤、流动性等评分。', status: 'wait' },
-    { key: 'strategy', title: '运行策略', description: '生成 Alpha 信号和目标组合。', status: 'wait' },
-    { key: 'risk', title: '执行风控', description: '检查组合约束并写入风控结果。', status: 'wait' },
-    { key: 'rebalance', title: '生成调仓单', description: '按目标权重和组合市值生成建议订单。', status: 'wait' },
-    { key: 'report', title: '生成月度报告', description: '汇总策略、组合、风控、调仓和回测信息。', status: 'wait' },
+    { key: 'calendar', title: '同步交易日历', description: stepDescriptions.calendar, status: 'wait' },
+    { key: 'market', title: '同步 ETF 行情', description: stepDescriptions.market, status: 'wait' },
+    { key: 'quality', title: '检查数据质量', description: stepDescriptions.quality, status: 'wait' },
+    { key: 'factors', title: '计算因子', description: stepDescriptions.factors, status: 'wait' },
+    { key: 'strategy', title: '运行策略', description: stepDescriptions.strategy, status: 'wait' },
+    { key: 'risk', title: '执行风控', description: stepDescriptions.risk, status: 'wait' },
+    { key: 'rebalance', title: '生成调仓单', description: stepDescriptions.rebalance, status: 'wait' },
+    { key: 'report', title: '生成月度报告', description: stepDescriptions.report, status: 'wait' },
   ]
 }
 
-function setStepStatus(key: string, status: StepStatus) {
-  const step = steps.value.find((item) => item.key === key)
-  if (step) step.status = status
+function mapStepStatus(status: string): StepStatus {
+  if (status === 'running') return 'process'
+  if (status === 'success') return 'finish'
+  if (status === 'failed') return 'error'
+  if (status === 'skipped') return 'success'
+  return 'wait'
 }
 
-function addLog(step: string, status: string, message: string) {
-  logs.value.unshift({ time: new Date().toLocaleTimeString(), step: stepTitle(step), status, message })
+function statusText(status: string) {
+  const statusMap: Record<string, string> = { pending: '等待', running: '执行中', success: '完成', failed: '失败', skipped: '跳过' }
+  return statusMap[status] || status
 }
 
-function stepTitle(key: string) {
-  return steps.value.find((step) => step.key === key)?.title ?? key
-}
-
-function summarizeResult(result: Record<string, unknown> | Record<string, unknown>[]) {
-  if (Array.isArray(result)) return `返回 ${result.length} 条结果`
-  const entries = Object.entries(result)
+function summarizePayload(step: WorkflowTaskStep) {
+  if (!step.result_payload) return ''
+  return Object.entries(step.result_payload)
     .filter(([key]) => ['status', 'success_count', 'failed_count', 'total_clean_rows', 'total_factor_rows', 'run_id', 'target_count', 'result_count', 'order_count', 'id'].includes(key))
     .map(([key, value]) => `${key}=${String(value)}`)
-  return entries.length ? entries.join('，') : '执行成功'
+    .join('，')
 }
 
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
 }
+
+onBeforeUnmount(stopPolling)
 </script>

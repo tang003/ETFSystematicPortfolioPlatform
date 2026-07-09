@@ -12,6 +12,7 @@ from app.api.rebalance_api import router as rebalance_router
 from app.api.report_api import router as report_router
 from app.api.risk_api import router as risk_router
 from app.api.strategy_api import router as strategy_router
+from app.api.workflow_api import router as workflow_router
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -19,7 +20,7 @@ from app.core.logging import setup_logging
 def create_app() -> FastAPI:
     setup_logging()
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, version="0.1.0")
+    app = FastAPI(title=settings.app_name, version="0.11.0")
     app.include_router(health_router)
     app.include_router(asset_router, prefix=settings.api_prefix)
     app.include_router(calendar_router, prefix=settings.api_prefix)
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     app.include_router(rebalance_router, prefix=settings.api_prefix)
     app.include_router(backtest_router, prefix=settings.api_prefix)
     app.include_router(report_router, prefix=settings.api_prefix)
+    app.include_router(workflow_router, prefix=settings.api_prefix)
     return app
 
 
