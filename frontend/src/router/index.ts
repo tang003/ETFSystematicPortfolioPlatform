@@ -5,6 +5,7 @@ import Workflow from '../views/Workflow.vue'
 import Assets from '../views/Assets.vue'
 import DataHealth from '../views/DataHealth.vue'
 import Factors from '../views/Factors.vue'
+import FactorResearch from '../views/FactorResearch.vue'
 import Portfolio from '../views/Portfolio.vue'
 import Holdings from '../views/Holdings.vue'
 import InvestmentPlans from '../views/InvestmentPlans.vue'
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: '/assets', component: Assets, meta: { title: 'ETF 池' } },
     { path: '/data-health', component: DataHealth, meta: { title: '数据健康' } },
     { path: '/factors', component: Factors, meta: { title: '因子排名' } },
+    { path: '/factor-research', component: FactorResearch, meta: { title: '因子研究' } },
     { path: '/portfolio', component: Portfolio, meta: { title: '目标组合' } },
     { path: '/holdings', component: Holdings, meta: { title: '当前持仓' } },
     { path: '/investment-plans', component: InvestmentPlans, meta: { title: '定投计划' } },

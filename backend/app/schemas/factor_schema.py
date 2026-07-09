@@ -53,3 +53,43 @@ class FactorRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class FactorResearchRequest(BaseModel):
+    start_date: date | None = None
+    end_date: date | None = None
+    forward_days: int = Field(default=20, ge=1, le=250)
+    quantiles: int = Field(default=3, ge=2, le=10)
+
+
+class FactorIcMetric(BaseModel):
+    factor_name: str
+    observations: int
+    mean_ic: Decimal | None
+    mean_rank_ic: Decimal | None
+    positive_ic_ratio: Decimal | None
+    effective: bool
+
+
+class FactorCorrelationMetric(BaseModel):
+    factor_x: str
+    factor_y: str
+    correlation: Decimal | None
+
+
+class FactorQuantileReturnMetric(BaseModel):
+    factor_name: str
+    quantile: int
+    mean_forward_return: Decimal | None
+    observations: int
+
+
+class FactorResearchResponse(BaseModel):
+    start_date: date | None
+    end_date: date | None
+    forward_days: int
+    quantiles: int
+    factor_count: int
+    sample_count: int
+    ic_metrics: list[FactorIcMetric]
+    correlations: list[FactorCorrelationMetric]
+    quantile_returns: list[FactorQuantileReturnMetric]

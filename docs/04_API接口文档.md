@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.16.0-strategy-backtest-rebalance`
+当前版本：`v0.17.0-factor-research-lab`
 
 ## GET /health
 
@@ -291,6 +291,27 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | --- | --- | --- | --- |
 | trade_date | date | 否 | 指定因子日期 |
 | limit | integer | 否 | 返回条数，默认 50 |
+
+## POST /api/factors/research
+
+用途：运行因子研究，计算 IC、Rank IC、因子相关性和分组未来收益。
+
+请求示例：
+
+```json
+{
+  "start_date": "2026-01-01",
+  "end_date": "2026-07-09",
+  "forward_days": 20,
+  "quantiles": 3
+}
+```
+
+响应字段：
+
+- `ic_metrics`：每个因子的平均 IC、平均 Rank IC、IC 为正比例和有效性判断。
+- `correlations`：因子两两相关性矩阵。
+- `quantile_returns`：按因子值分组后的平均未来收益。
 
 ## GET /api/strategies
 

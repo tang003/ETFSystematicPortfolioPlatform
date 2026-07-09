@@ -46,6 +46,40 @@ export interface Factor {
   alpha_score: string | null
 }
 
+export interface FactorIcMetric {
+  factor_name: string
+  observations: number
+  mean_ic: string | null
+  mean_rank_ic: string | null
+  positive_ic_ratio: string | null
+  effective: boolean
+}
+
+export interface FactorCorrelationMetric {
+  factor_x: string
+  factor_y: string
+  correlation: string | null
+}
+
+export interface FactorQuantileReturnMetric {
+  factor_name: string
+  quantile: number
+  mean_forward_return: string | null
+  observations: number
+}
+
+export interface FactorResearchResult {
+  start_date: string | null
+  end_date: string | null
+  forward_days: number
+  quantiles: number
+  factor_count: number
+  sample_count: number
+  ic_metrics: FactorIcMetric[]
+  correlations: FactorCorrelationMetric[]
+  quantile_returns: FactorQuantileReturnMetric[]
+}
+
 export interface TargetPortfolio {
   run_id: number | null
   portfolio_date: string
@@ -242,6 +276,8 @@ export const checkDataQuality = async (payload: { symbols: string[]; start_date:
   (await api.post<RunSummary[]>('/api/data-quality/check', payload)).data
 export const calculateFactors = async (payload: { symbols?: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<RunSummary>('/api/factors/calculate', payload)).data
+export const researchFactors = async (payload: { start_date?: string; end_date?: string; forward_days: number; quantiles: number }) =>
+  (await api.post<FactorResearchResult>('/api/factors/research', payload)).data
 export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
 export const checkRisk = async (payload: { run_id: number }) =>

@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.schemas.factor_schema import FactorCalculateRequest, FactorCalculateResponse, FactorRead
+from app.schemas.factor_schema import FactorCalculateRequest, FactorCalculateResponse, FactorRead, FactorResearchRequest, FactorResearchResponse
+from app.services.factor_research_service import analyze_factor_research
 from app.services.factor_service import calculate_factors, latest_factor_ranking, list_factors
 
 router = APIRouter(prefix="/factors", tags=["factors"])
@@ -27,6 +28,20 @@ def get_factor_ranking(
     return latest_factor_ranking(db, trade_date=trade_date, limit=limit)
 
 
+@router.post("/research", response_model=FactorResearchResponse)
+def research_factors(
+    request: FactorResearchRequest,
+    db: Session = Depends(get_db),
+) -> FactorResearchResponse:
+    return analyze_factor_research(
+        db,
+        start_date=request.start_date,
+        end_date=request.end_date,
+        forward_days=request.forward_days,
+        quantiles=request.quantiles,
+    )
+
+
 @router.get("/{symbol}", response_model=list[FactorRead])
 def get_symbol_factors(
     symbol: str,
@@ -34,4 +49,3 @@ def get_symbol_factors(
     db: Session = Depends(get_db),
 ) -> list[FactorRead]:
     return list_factors(db, symbol=symbol, limit=limit)
-
