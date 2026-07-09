@@ -148,7 +148,19 @@ def run_workflow_task(task_id: int) -> None:
                 continue
             check_cancelled(db, task.id)
             if step_key == "calendar":
-                execute_step(db, task, step_key, lambda: sync_trading_calendar(db, request.start_date, request.end_date, "CN"), results)
+                execute_step(
+                    db,
+                    task,
+                    step_key,
+                    lambda: sync_trading_calendar(
+                        db,
+                        request.start_date,
+                        request.end_date,
+                        "CN",
+                        request.calendar_source,
+                    ),
+                    results,
+                )
             elif step_key == "market":
                 execute_step(
                     db,
@@ -159,9 +171,10 @@ def run_workflow_task(task_id: int) -> None:
                         symbols=request.symbols,
                         start_date=request.start_date,
                         end_date=request.end_date,
+                        source=request.market_source,
                         max_symbols=request.max_symbols,
                         clean_after_sync=True,
-                        request_interval_seconds=0,
+                        request_interval_seconds=request.request_interval_seconds,
                     ),
                     results,
                 )

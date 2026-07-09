@@ -15,6 +15,23 @@
         <el-form-item label="同步数量">
           <el-input-number v-model="maxSymbols" :min="1" :max="50" />
         </el-form-item>
+        <el-form-item label="日历源">
+          <el-select v-model="calendarSource">
+            <el-option label="Tushare trade_cal" value="tushare" />
+            <el-option label="AKShare" value="akshare" />
+            <el-option label="Weekday fallback" value="weekday" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="行情源">
+          <el-select v-model="marketSource">
+            <el-option label="Tushare fund_daily" value="tushare" />
+            <el-option label="AKShare + Eastmoney fallback" value="akshare" />
+            <el-option label="Eastmoney only" value="eastmoney" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="请求间隔">
+          <el-input-number v-model="requestIntervalSeconds" :min="0" :max="10" :step="0.5" />
+        </el-form-item>
         <el-form-item label="策略代码">
           <el-input v-model="strategyCode" />
         </el-form-item>
@@ -23,6 +40,12 @@
         </el-form-item>
         <el-form-item label="生成报告">
           <el-switch v-model="shouldGenerateReport" />
+        </el-form-item>
+        <el-form-item label="流程提示" class="workflow-hint-item">
+          <div class="source-hint">
+            <strong>{{ workflowHintTitle }}</strong>
+            <p>{{ workflowHintText }}</p>
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="running" @click="startWorkflow">创建后台任务</el-button>
@@ -106,6 +129,9 @@ const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().
 const dateRange = ref<[string, string]>([lastYear, today])
 const symbolsText = ref('510300,159915')
 const maxSymbols = ref(10)
+const calendarSource = ref('tushare')
+const marketSource = ref('tushare')
+const requestIntervalSeconds = ref(1.5)
 const strategyCode = ref('core_etf_rotation')
 const portfolioValue = ref(100000)
 const shouldGenerateReport = ref(true)
@@ -150,6 +176,21 @@ const taskStatusType = computed(() => {
 const runId = computed(() => Number(task.value?.result_payload?.run_id || 0) || undefined)
 const canCancel = computed(() => task.value && ['pending', 'running'].includes(task.value.status))
 const canRetry = computed(() => task.value?.status === 'failed' && task.value.steps.some((step) => step.status === 'failed'))
+const workflowHintTitle = computed(() => {
+  if (marketSource.value === 'tushare') return '低频真实数据模式'
+  if (marketSource.value === 'akshare') return '快速开发模式'
+  return '备用行情模式'
+})
+
+const workflowHintText = computed(() => {
+  if (marketSource.value === 'tushare') {
+    return '适合正式跑小批量真实数据。建议控制 ETF 数量、缩短日期范围，并保留 1.5 秒以上的请求间隔。'
+  }
+  if (marketSource.value === 'akshare') {
+    return '适合快速迭代和日常开发。若上游波动，系统会自动尝试 Eastmoney 备用源。'
+  }
+  return '只用 Eastmoney 作为排障和补位来源，建议先在小范围内验证结果。'
+})
 
 const logs = computed(() => {
   if (!task.value) return []
@@ -172,6 +213,9 @@ async function startWorkflow() {
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
       max_symbols: maxSymbols.value,
+      calendar_source: calendarSource.value,
+      market_source: marketSource.value,
+      request_interval_seconds: requestIntervalSeconds.value,
       strategy_code: strategyCode.value,
       portfolio_value: portfolioValue.value,
       generate_report: shouldGenerateReport.value,

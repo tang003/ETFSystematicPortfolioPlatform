@@ -12,9 +12,33 @@
         <el-form-item label="ETF 代码">
           <el-input v-model="symbolsText" placeholder="留空代表全部启用 ETF，多个代码用逗号分隔" />
         </el-form-item>
+        <el-form-item label="日历源">
+          <el-select v-model="calendarSource">
+            <el-option label="Tushare trade_cal" value="tushare" />
+            <el-option label="AKShare" value="akshare" />
+            <el-option label="Weekday fallback" value="weekday" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="行情源">
+          <el-select v-model="marketSource">
+            <el-option label="Tushare fund_daily" value="tushare" />
+            <el-option label="AKShare + Eastmoney fallback" value="akshare" />
+            <el-option label="Eastmoney only" value="eastmoney" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="同步数量">
           <el-input-number v-model="maxSymbols" :min="1" :max="50" />
           <span class="form-note">避免一次请求过久，默认先同步 10 只。</span>
+        </el-form-item>
+        <el-form-item label="请求间隔">
+          <el-input-number v-model="requestIntervalSeconds" :min="0" :max="10" :step="0.5" />
+          <span class="form-note">共享 Tushare 建议 1.5 秒或更高；AKShare 可设为 0。</span>
+        </el-form-item>
+        <el-form-item label="使用提示" class="span-2">
+          <div class="source-hint">
+            <strong>{{ sourceHintTitle }}</strong>
+            <p>{{ sourceHintText }}</p>
+          </div>
         </el-form-item>
         <el-form-item>
           <el-button :loading="actionLoading" @click="runCalendarSync">同步交易日历</el-button>
@@ -42,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { checkDataQuality, fetchDataQualityLogs, fetchDataQualityStatus, syncCalendar, syncMarket, type DataQualityLog, type DataQualityStatus } from '../api/client'
 
@@ -55,6 +79,9 @@ const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().
 const dateRange = ref<[string, string]>([lastMonth, today])
 const symbolsText = ref('')
 const maxSymbols = ref(10)
+const calendarSource = ref('tushare')
+const marketSource = ref('tushare')
+const requestIntervalSeconds = ref(1.5)
 
 onMounted(refresh)
 
@@ -68,11 +95,28 @@ async function refresh() {
 }
 
 async function runCalendarSync() {
-  await withAction('交易日历同步完成', () => syncCalendar({ start_date: dateRange.value[0], end_date: dateRange.value[1], market: 'CN' }))
+  await withAction('交易日历同步完成', () =>
+    syncCalendar({
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      market: 'CN',
+      source: calendarSource.value,
+    }),
+  )
 }
 
 async function runMarketSync() {
-  await withAction('行情同步完成', () => syncMarket({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols: splitSymbols(), max_symbols: maxSymbols.value, clean_after_sync: true }))
+  await withAction('行情同步完成', () =>
+    syncMarket({
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      symbols: splitSymbols(),
+      source: marketSource.value,
+      max_symbols: maxSymbols.value,
+      clean_after_sync: true,
+      request_interval_seconds: requestIntervalSeconds.value,
+    }),
+  )
 }
 
 async function runQualityCheck() {
@@ -87,8 +131,16 @@ async function runQualityCheck() {
 async function runFullDataFlow() {
   actionLoading.value = true
   try {
-    await syncCalendar({ start_date: dateRange.value[0], end_date: dateRange.value[1], market: 'CN' })
-    await syncMarket({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols: splitSymbols(), max_symbols: maxSymbols.value, clean_after_sync: true })
+    await syncCalendar({ start_date: dateRange.value[0], end_date: dateRange.value[1], market: 'CN', source: calendarSource.value })
+    await syncMarket({
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      symbols: splitSymbols(),
+      source: marketSource.value,
+      max_symbols: maxSymbols.value,
+      clean_after_sync: true,
+      request_interval_seconds: requestIntervalSeconds.value,
+    })
     const symbols = splitSymbols()
     if (symbols.length) await checkDataQuality({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols })
     ElMessage.success('数据更新流程已完成')
@@ -116,4 +168,20 @@ async function withAction(successMessage: string, action: () => Promise<unknown>
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
 }
+
+const sourceHintTitle = computed(() => {
+  if (marketSource.value === 'tushare') return '共享 Tushare 建议'
+  if (marketSource.value === 'akshare') return '开发与补数建议'
+  return '备用源建议'
+})
+
+const sourceHintText = computed(() => {
+  if (marketSource.value === 'tushare') {
+    return '先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上，避免共享账号短时间请求过多。'
+  }
+  if (marketSource.value === 'akshare') {
+    return '适合日常开发和大多数补数场景。若 AKShare 上游波动，系统会自动尝试 Eastmoney 备用源。'
+  }
+  return 'Eastmoney 适合作为备用数据源排障，不建议长期当作唯一正式来源。'
+})
 </script>

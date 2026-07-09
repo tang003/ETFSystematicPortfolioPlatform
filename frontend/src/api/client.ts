@@ -268,9 +268,17 @@ export const fetchBacktestMetrics = async (id: number) => (await api.get<Backtes
 export const fetchBacktestTrades = async (id: number) => (await api.get<BacktestTrade[]>(`/api/backtest/${id}/trades`)).data
 export const fetchReports = async () => (await api.get<Report[]>('/api/reports?limit=20')).data
 export const fetchReport = async (id: number) => (await api.get<Report>(`/api/reports/${id}`)).data
-export const syncCalendar = async (payload: { start_date: string; end_date: string; market?: string }) =>
+export const syncCalendar = async (payload: { start_date: string; end_date: string; market?: string; source?: string }) =>
   (await api.post<RunSummary>('/api/calendar/sync', payload)).data
-export const syncMarket = async (payload: { symbols?: string[]; start_date?: string; end_date?: string; max_symbols?: number; clean_after_sync?: boolean }) =>
+export const syncMarket = async (payload: {
+  symbols?: string[]
+  start_date?: string
+  end_date?: string
+  source?: string
+  max_symbols?: number
+  clean_after_sync?: boolean
+  request_interval_seconds?: number
+}) =>
   (await api.post<RunSummary>('/api/market/sync', payload)).data
 export const checkDataQuality = async (payload: { symbols: string[]; start_date: string; end_date: string }) =>
   (await api.post<RunSummary[]>('/api/data-quality/check', payload)).data
@@ -302,6 +310,9 @@ export const startWorkflowTask = async (payload: {
   start_date: string
   end_date: string
   max_symbols?: number
+  calendar_source?: string
+  market_source?: string
+  request_interval_seconds?: number
   strategy_code: string
   portfolio_value?: number
   generate_report?: boolean

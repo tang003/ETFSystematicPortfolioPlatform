@@ -143,10 +143,36 @@ body {
   margin-bottom: 12px;
 }
 
+.action-form .workflow-hint-item,
+.action-form .span-2 {
+  grid-column: 1 / -1;
+}
+
 .form-note {
   margin-left: 10px;
   color: #6b7280;
   font-size: 12px;
+}
+
+.source-hint {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #dbe4ea;
+  border-radius: 6px;
+  background: #f8fbfc;
+}
+
+.source-hint strong {
+  display: block;
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.source-hint p {
+  margin: 6px 0 0;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .task-tags {

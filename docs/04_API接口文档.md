@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.18.0-tushare-source-ready`
+当前版本：`v0.18.1-tushare-frontend-controls`
 
 ## GET /health
 
@@ -672,3 +672,44 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ## GET /api/reports/{report_id}
 
 用途：查询单份报告详情，包括 `content_markdown`。
+
+## POST /api/workflows/run
+
+用途：创建后台全流程任务，由后端异步串联交易日历、行情、数据质量、因子、策略、风控、调仓和报告步骤。
+
+请求示例：
+
+```json
+{
+  "symbols": ["510300", "159915"],
+  "start_date": "2026-01-01",
+  "end_date": "2026-07-09",
+  "max_symbols": 5,
+  "calendar_source": "tushare",
+  "market_source": "tushare",
+  "request_interval_seconds": 1.5,
+  "strategy_code": "core_etf_rotation",
+  "portfolio_value": 100000,
+  "generate_report": true
+}
+```
+
+参数说明：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| symbols | string[] | 否 | ETF 代码列表；为空时使用全部启用 ETF |
+| start_date | date | 是 | 开始日期 |
+| end_date | date | 是 | 结束日期 |
+| max_symbols | integer | 否 | 本次后台任务最多同步多少只 ETF |
+| calendar_source | string | 否 | 日历源，支持 `tushare`、`akshare`、`weekday` |
+| market_source | string | 否 | 行情源，支持 `tushare`、`akshare`、`eastmoney` |
+| request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，Tushare 建议 `1.5` 或更高 |
+| strategy_code | string | 否 | 策略代码，默认 `core_etf_rotation` |
+| portfolio_value | number | 否 | 组合市值，用于生成调仓建议金额 |
+| generate_report | boolean | 否 | 是否在流程末尾生成月度报告 |
+
+说明：
+
+- `calendar_source` 和 `market_source` 允许前端控制真实数据源与备用数据源。
+- 使用共享 Tushare 账号时，建议同时控制 `max_symbols` 和 `request_interval_seconds`。
