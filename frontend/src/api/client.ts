@@ -130,10 +130,16 @@ export interface TargetPortfolio {
 export interface PortfolioPosition {
   position_date: string
   symbol: string
+  position_name: string | null
+  asset_type: string | null
   quantity: string | null
+  current_price: string | null
+  cost_price: string | null
   market_value: string | null
   weight: string | null
   cost_basis: string | null
+  unrealized_pnl: string | null
+  unrealized_pnl_rate: string | null
   created_at: string
 }
 
@@ -293,7 +299,19 @@ export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
 export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data
-export const savePositionSnapshot = async (payload: { position_date: string; positions: Array<{ symbol: string; quantity?: number; market_value: number; cost_basis?: number }> }) =>
+export const savePositionSnapshot = async (payload: {
+  position_date: string
+  positions: Array<{
+    symbol: string
+    position_name?: string
+    asset_type?: string
+    quantity?: number
+    current_price?: number
+    cost_price?: number
+    market_value?: number
+    cost_basis?: number
+  }>
+}) =>
   (await api.post<PortfolioPosition[]>('/api/portfolio/positions', payload)).data
 export const analyzeHoldings = async (payload: { run_id?: number; analysis_date?: string }) =>
   (await api.post<HoldingAnalysis[]>('/api/portfolio/holdings/analyze', payload)).data

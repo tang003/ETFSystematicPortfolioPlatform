@@ -28,10 +28,16 @@ class PortfolioPosition(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     position_date: Mapped[date] = mapped_column(Date, nullable=False)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    position_name: Mapped[str | None] = mapped_column(String(100))
+    asset_type: Mapped[str | None] = mapped_column(String(30))
     quantity: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
+    current_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
+    cost_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     market_value: Mapped[Decimal | None] = mapped_column(Numeric(24, 4))
     weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     cost_basis: Mapped[Decimal | None] = mapped_column(Numeric(24, 4))
+    unrealized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(24, 4))
+    unrealized_pnl_rate: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

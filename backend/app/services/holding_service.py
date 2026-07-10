@@ -19,25 +19,69 @@ def ensure_holding_tables() -> None:
 
 def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> list[PortfolioPosition]:
     db.execute(delete(PortfolioPosition).where(PortfolioPosition.position_date == request.position_date))
-    total_value = sum((item.market_value for item in request.positions), Decimal("0"))
+    normalized = [normalize_position_input(item) for item in request.positions if item.symbol.strip()]
+    total_value = sum((item["market_value"] for item in normalized), Decimal("0"))
     if total_value <= 0:
         raise ValueError("Total market value must be greater than 0")
 
     rows = [
         PortfolioPosition(
             position_date=request.position_date,
-            symbol=item.symbol.strip(),
-            quantity=item.quantity,
-            market_value=item.market_value,
-            weight=(item.market_value / total_value).quantize(Decimal("0.000001")),
-            cost_basis=item.cost_basis,
+            symbol=item["symbol"],
+            position_name=item["position_name"],
+            asset_type=item["asset_type"],
+            quantity=item["quantity"],
+            current_price=item["current_price"],
+            cost_price=item["cost_price"],
+            market_value=item["market_value"],
+            weight=(item["market_value"] / total_value).quantize(Decimal("0.000001")),
+            cost_basis=item["cost_basis"],
+            unrealized_pnl=item["unrealized_pnl"],
+            unrealized_pnl_rate=item["unrealized_pnl_rate"],
         )
-        for item in request.positions
-        if item.symbol.strip()
+        for item in normalized
     ]
     db.add_all(rows)
     db.commit()
     return list_positions(db, position_date=request.position_date)
+
+
+def normalize_position_input(item) -> dict:
+    quantity = item.quantity or Decimal("0")
+    current_price = item.current_price
+    cost_price = item.cost_price
+    market_value = item.market_value
+    cost_basis = item.cost_basis
+
+    if market_value is None and quantity > 0 and current_price is not None:
+        market_value = (quantity * current_price).quantize(Decimal("0.0001"))
+    if cost_basis is None and quantity > 0 and cost_price is not None:
+        cost_basis = (quantity * cost_price).quantize(Decimal("0.0001"))
+    if current_price is None and quantity > 0 and market_value is not None:
+        current_price = (market_value / quantity).quantize(Decimal("0.000001"))
+    if cost_price is None and quantity > 0 and cost_basis is not None:
+        cost_price = (cost_basis / quantity).quantize(Decimal("0.000001"))
+    if market_value is None or market_value <= 0:
+        raise ValueError(f"Position {item.symbol} must provide market_value or quantity/current_price")
+
+    unrealized_pnl = None
+    unrealized_pnl_rate = None
+    if cost_basis is not None and cost_basis > 0:
+        unrealized_pnl = (market_value - cost_basis).quantize(Decimal("0.0001"))
+        unrealized_pnl_rate = (unrealized_pnl / cost_basis).quantize(Decimal("0.000001"))
+
+    return {
+        "symbol": item.symbol.strip(),
+        "position_name": item.position_name.strip() if item.position_name else None,
+        "asset_type": (item.asset_type or "etf").strip().lower(),
+        "quantity": quantity,
+        "current_price": current_price,
+        "cost_price": cost_price,
+        "market_value": market_value,
+        "cost_basis": cost_basis,
+        "unrealized_pnl": unrealized_pnl,
+        "unrealized_pnl_rate": unrealized_pnl_rate,
+    }
 
 
 def latest_position_date(db: Session) -> date | None:

@@ -19,8 +19,12 @@ class TargetPortfolioRead(BaseModel):
 
 class PortfolioPositionUpsert(BaseModel):
     symbol: str
+    position_name: str | None = None
+    asset_type: str | None = None
     quantity: Decimal | None = None
-    market_value: Decimal
+    current_price: Decimal | None = None
+    cost_price: Decimal | None = None
+    market_value: Decimal | None = None
     cost_basis: Decimal | None = None
 
 
@@ -32,10 +36,16 @@ class PortfolioSnapshotRequest(BaseModel):
 class PortfolioPositionRead(BaseModel):
     position_date: date
     symbol: str
+    position_name: str | None
+    asset_type: str | None
     quantity: Decimal | None
+    current_price: Decimal | None
+    cost_price: Decimal | None
     market_value: Decimal | None
     weight: Decimal | None
     cost_basis: Decimal | None
+    unrealized_pnl: Decimal | None
+    unrealized_pnl_rate: Decimal | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

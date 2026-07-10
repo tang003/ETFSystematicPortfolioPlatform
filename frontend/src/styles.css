@@ -154,6 +154,35 @@ body {
   font-size: 12px;
 }
 
+.section-note {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 8px 0 14px;
+}
+
+.profit-up {
+  color: #dc2626;
+}
+
+.profit-down {
+  color: #16a34a;
+}
+
 .source-hint {
   width: 100%;
   padding: 12px 14px;

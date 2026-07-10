@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.23.0-durable-workflow-worker`
+当前版本：`v0.26.0-broker-style-holdings`
 
 ## 认证约定
 
@@ -483,16 +483,20 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "position_date": "2026-07-09",
   "positions": [
     {
-      "symbol": "510300",
-      "quantity": 1000,
-      "market_value": 30000,
-      "cost_basis": 28000
+      "symbol": "513050",
+      "position_name": "中概互联",
+      "asset_type": "etf",
+      "quantity": 1700,
+      "current_price": 1.092,
+      "cost_price": 1.151
     },
     {
-      "symbol": "511880",
-      "quantity": 2000,
-      "market_value": 20000,
-      "cost_basis": 20000
+      "symbol": "000519",
+      "position_name": "中兵红箭",
+      "asset_type": "stock",
+      "quantity": 100,
+      "current_price": 23.29,
+      "cost_price": 23.34
     }
   ]
 }
@@ -503,13 +507,17 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
 | position_date | date | 是 | 持仓快照日期 |
-| positions | array | 是 | ETF 持仓列表 |
-| positions[].symbol | string | 是 | ETF 代码 |
-| positions[].quantity | number | 否 | 持有份额，可填 0 或空 |
-| positions[].market_value | number | 是 | 当前市值，用于计算权重 |
-| positions[].cost_basis | number | 否 | 持仓成本 |
+| positions | array | 是 | 持仓列表，可包含 ETF、场内基金、股票或其他资产 |
+| positions[].symbol | string | 是 | 证券代码 |
+| positions[].position_name | string | 否 | 持仓名称 |
+| positions[].asset_type | string | 否 | 资产类型：`etf`、`stock`、`cash`、`other` |
+| positions[].quantity | number | 否 | 持有份额 |
+| positions[].current_price | number | 否 | 当前价格；与数量一起可自动计算当前市值 |
+| positions[].cost_price | number | 否 | 成本价格；与数量一起可自动计算持仓成本 |
+| positions[].market_value | number | 否 | 当前市值；兼容旧录入方式 |
+| positions[].cost_basis | number | 否 | 持仓成本；兼容旧录入方式 |
 
-响应：返回保存后的持仓列表，包含系统计算出的 `weight`。
+响应：返回保存后的持仓列表，包含系统计算出的 `market_value`、`cost_basis`、`unrealized_pnl`、`unrealized_pnl_rate` 和 `weight`。
 
 ## GET /api/portfolio/positions
 
