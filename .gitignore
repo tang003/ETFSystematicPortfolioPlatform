@@ -16,4 +16,7 @@ node_modules/
 frontend/node_modules/
 *.log
 *.tsbuildinfo
+backups/
+*.dump
+*.dump.sha256
 .DS_Store

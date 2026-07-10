@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.21.0-production-deployment`
+当前版本：`v0.22.0-database-operations`
 
 ## 认证约定
 
