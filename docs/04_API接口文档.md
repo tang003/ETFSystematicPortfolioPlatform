@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.27.0-auto-resolved-holdings`
+当前版本：`v0.28.0-holdings-dialog-editor`
 
 ## 认证约定
 

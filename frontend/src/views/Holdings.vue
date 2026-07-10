@@ -4,11 +4,11 @@
       <div class="panel-header">
         <div>
           <h2>录入当前持仓</h2>
-          <p class="section-note">只需填写代码、持仓数量和成本价；名称、类型、现价由系统根据资产池和最新行情自动补全。</p>
+          <p class="section-note">通过弹窗维护持仓，列表只展示已录入结果；名称、类型、现价由系统根据资产池和最新行情自动补全。</p>
         </div>
         <div class="header-actions">
-          <el-button @click="addRow">新增一行</el-button>
-          <el-button :loading="actionLoading" @click="resolveRows">自动补全</el-button>
+          <el-button type="primary" @click="openAddDialog">新增持仓</el-button>
+          <el-button :loading="actionLoading" @click="resolveRows">刷新现价</el-button>
           <el-button type="primary" :loading="actionLoading" @click="saveSnapshot">保存持仓快照</el-button>
           <el-button type="success" :loading="actionLoading" @click="runAnalysis">运行持仓分析</el-button>
         </div>
@@ -36,28 +36,24 @@
         type="info"
         :closable="false"
         show-icon
-        title="如果名称或现价为空，先点击自动补全；仍为空说明该代码还没有进入资产池或尚未同步行情。"
+        title="新增或编辑时只填代码、持仓数量和成本价；如果名称或现价为空，请先同步资产池或行情。"
       />
 
-      <el-table :data="draftRows" height="380">
-        <el-table-column label="代码" width="130">
-          <template #default="{ row }">
-            <el-input v-model="row.symbol" placeholder="513050" @change="resolveRows" />
-          </template>
-        </el-table-column>
-        <el-table-column label="持仓数量" width="150">
-          <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :step="100" /></template>
-        </el-table-column>
-        <el-table-column label="成本价" width="130">
-          <template #default="{ row }"><el-input-number v-model="row.cost_price" :min="0" :precision="3" :step="0.001" /></template>
-        </el-table-column>
-        <el-table-column label="名称" min-width="140">
+      <el-table :data="visibleRows" height="380" empty-text="暂无持仓，点击“新增持仓”开始录入">
+        <el-table-column prop="symbol" label="代码" width="110" />
+        <el-table-column label="名称" min-width="130">
           <template #default="{ row }">{{ row.position_name || '待补全' }}</template>
         </el-table-column>
-        <el-table-column label="类型" width="110">
+        <el-table-column label="类型" width="100">
           <template #default="{ row }"><el-tag size="small">{{ assetTypeText(row.asset_type) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="现价" width="120">
+        <el-table-column label="持仓数量" width="120">
+          <template #default="{ row }">{{ formatQuantity(row.quantity) }}</template>
+        </el-table-column>
+        <el-table-column label="成本价" width="110">
+          <template #default="{ row }">{{ formatPrice(row.cost_price) }}</template>
+        </el-table-column>
+        <el-table-column label="现价" width="110">
           <template #default="{ row }">{{ row.current_price ? formatPrice(row.current_price) : '-' }}</template>
         </el-table-column>
         <el-table-column label="价格日期" width="120">
@@ -74,16 +70,76 @@
             <span :class="profitClass(rowPnl(row))">{{ formatMoney(rowPnl(row)) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" min-width="170">
+        <el-table-column label="状态" min-width="150">
           <template #default="{ row }">
             <el-tag v-if="row.resolved" size="small" type="success">已补全</el-tag>
             <span v-else class="muted">{{ row.resolve_message || '等待补全' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
-          <template #default="{ $index }"><el-button text type="danger" @click="removeRow($index)">删除</el-button></template>
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row, $index }">
+            <el-button text type="primary" @click="openEditDialog(row, $index)">编辑</el-button>
+            <el-button text type="success" @click="openTopupDialog(row, $index)">补仓</el-button>
+            <el-button text type="danger" @click="removeRow($index)">删除</el-button>
+          </template>
         </el-table-column>
       </el-table>
+
+      <el-dialog v-model="positionDialog.visible" :title="dialogTitle" width="520px">
+        <el-form label-width="104px">
+          <el-form-item label="证券代码" required>
+            <el-input
+              v-model="positionForm.symbol"
+              :disabled="positionDialog.mode === 'topup'"
+              placeholder="例如 513050"
+              @change="resolveDialogSymbol"
+            />
+          </el-form-item>
+
+          <template v-if="positionDialog.mode === 'topup'">
+            <el-form-item label="当前数量">
+              <span>{{ formatQuantity(activeRow?.quantity || 0) }}</span>
+            </el-form-item>
+            <el-form-item label="当前成本价">
+              <span>{{ formatPrice(activeRow?.cost_price || 0) }}</span>
+            </el-form-item>
+            <el-form-item label="追加数量" required>
+              <el-input-number v-model="positionForm.topup_quantity" :min="0" :step="100" />
+            </el-form-item>
+            <el-form-item label="补仓成交价" required>
+              <el-input-number v-model="positionForm.topup_price" :min="0" :precision="3" :step="0.001" />
+            </el-form-item>
+            <el-form-item label="补仓后">
+              <span>数量 {{ formatQuantity(topupPreview.quantity) }}，成本价 {{ formatPrice(topupPreview.costPrice) }}</span>
+            </el-form-item>
+          </template>
+
+          <template v-else>
+            <el-form-item label="持仓数量" required>
+              <el-input-number v-model="positionForm.quantity" :min="0" :step="100" />
+            </el-form-item>
+            <el-form-item label="成本价" required>
+              <el-input-number v-model="positionForm.cost_price" :min="0" :precision="3" :step="0.001" />
+            </el-form-item>
+          </template>
+
+          <el-form-item label="系统补全">
+            <div class="dialog-resolve">
+              <span>{{ positionForm.position_name || '待补全名称' }}</span>
+              <el-tag size="small">{{ assetTypeText(positionForm.asset_type) }}</el-tag>
+              <span>现价 {{ positionForm.current_price ? formatPrice(positionForm.current_price) : '-' }}</span>
+            </div>
+          </el-form-item>
+          <el-form-item v-if="positionForm.resolve_message" label="提示">
+            <span class="muted">{{ positionForm.resolve_message }}</span>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="positionDialog.visible = false">取消</el-button>
+          <el-button :loading="actionLoading" @click="resolveDialogSymbol">补全信息</el-button>
+          <el-button type="primary" @click="confirmPositionDialog">确定</el-button>
+        </template>
+      </el-dialog>
     </section>
 
     <section class="panel span-5">
@@ -129,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   analyzeHoldings,
@@ -153,14 +209,50 @@ interface DraftPosition {
   resolve_message: string
 }
 
+type DialogMode = 'add' | 'edit' | 'topup'
+
 const loading = ref(false)
 const actionLoading = ref(false)
 const positionDate = ref(new Date().toISOString().slice(0, 10))
 const runId = ref(1)
 const positions = ref<PortfolioPosition[]>([])
 const analysis = ref<HoldingAnalysis[]>([])
-const draftRows = ref<DraftPosition[]>([emptyRow()])
+const draftRows = ref<DraftPosition[]>([])
+const positionDialog = reactive({ visible: false, mode: 'add' as DialogMode, index: -1 })
+const positionForm = reactive({
+  symbol: '',
+  position_name: '',
+  asset_type: 'etf' as DraftPosition['asset_type'],
+  quantity: 0,
+  current_price: 0,
+  cost_price: 0,
+  price_date: '',
+  resolved: false,
+  resolve_message: '',
+  topup_quantity: 0,
+  topup_price: 0,
+})
 
+const visibleRows = computed(() => draftRows.value.filter((row) => row.symbol.trim()))
+const activeRow = computed(() => (positionDialog.index >= 0 ? draftRows.value[positionDialog.index] : null))
+const dialogTitle = computed(() => {
+  if (positionDialog.mode === 'edit') return '编辑持仓'
+  if (positionDialog.mode === 'topup') return '补仓'
+  return '新增持仓'
+})
+const topupPreview = computed(() => {
+  const row = activeRow.value
+  const currentQuantity = Number(row?.quantity || 0)
+  const currentCost = Number(row?.cost_price || 0)
+  const addQuantity = Number(positionForm.topup_quantity || 0)
+  const addPrice = Number(positionForm.topup_price || 0)
+  const quantity = currentQuantity + addQuantity
+  const costBasis = currentQuantity * currentCost + addQuantity * addPrice
+  return {
+    quantity,
+    costPrice: quantity > 0 ? costBasis / quantity : 0,
+  }
+})
 const draftSummary = computed(() => {
   const marketValue = draftRows.value.reduce((sum, row) => sum + rowMarketValue(row), 0)
   const costBasis = draftRows.value.reduce((sum, row) => sum + rowCostBasis(row), 0)
@@ -179,40 +271,59 @@ async function refresh() {
   loading.value = true
   try {
     ;[positions.value, analysis.value] = await Promise.all([fetchPositions(), fetchHoldingAnalysis()])
-    if (positions.value.length) {
-      draftRows.value = positions.value.map((item) => ({
-        symbol: item.symbol,
-        position_name: item.position_name || '',
-        asset_type: normalizeAssetType(item.asset_type),
-        quantity: Number(item.quantity || 0),
-        current_price: Number(item.current_price || 0),
-        cost_price: Number(item.cost_price || 0),
-        price_date: item.position_date,
-        resolved: Boolean(item.position_name && item.current_price),
-        resolve_message: '',
-      }))
-    }
+    draftRows.value = positions.value.map(positionToDraft)
   } finally {
     loading.value = false
   }
 }
 
-function emptyRow(): DraftPosition {
+function positionToDraft(item: PortfolioPosition): DraftPosition {
   return {
-    symbol: '',
-    position_name: '',
-    asset_type: 'etf',
-    quantity: 0,
-    current_price: 0,
-    cost_price: 0,
-    price_date: '',
-    resolved: false,
+    symbol: item.symbol,
+    position_name: item.position_name || '',
+    asset_type: normalizeAssetType(item.asset_type),
+    quantity: Number(item.quantity || 0),
+    current_price: Number(item.current_price || 0),
+    cost_price: Number(item.cost_price || 0),
+    price_date: item.position_date,
+    resolved: Boolean(item.position_name && item.current_price),
     resolve_message: '',
   }
 }
 
-function addRow() {
-  draftRows.value.push(emptyRow())
+function resetPositionForm(row?: DraftPosition) {
+  positionForm.symbol = row?.symbol || ''
+  positionForm.position_name = row?.position_name || ''
+  positionForm.asset_type = normalizeAssetType(row?.asset_type || 'etf')
+  positionForm.quantity = Number(row?.quantity || 0)
+  positionForm.current_price = Number(row?.current_price || 0)
+  positionForm.cost_price = Number(row?.cost_price || 0)
+  positionForm.price_date = row?.price_date || ''
+  positionForm.resolved = Boolean(row?.resolved)
+  positionForm.resolve_message = row?.resolve_message || ''
+  positionForm.topup_quantity = 0
+  positionForm.topup_price = Number(row?.current_price || row?.cost_price || 0)
+}
+
+function openAddDialog() {
+  positionDialog.mode = 'add'
+  positionDialog.index = -1
+  resetPositionForm()
+  positionDialog.visible = true
+}
+
+function openEditDialog(row: DraftPosition, index: number) {
+  positionDialog.mode = 'edit'
+  positionDialog.index = index
+  resetPositionForm(row)
+  positionDialog.visible = true
+}
+
+function openTopupDialog(row: DraftPosition, index: number) {
+  positionDialog.mode = 'topup'
+  positionDialog.index = index
+  resetPositionForm(row)
+  positionDialog.visible = true
 }
 
 function removeRow(index: number) {
@@ -222,39 +333,106 @@ function removeRow(index: number) {
 async function resolveRows() {
   const symbols = draftRows.value.map((row) => row.symbol.trim()).filter(Boolean)
   if (!symbols.length) {
-    ElMessage.warning('请先填写代码')
+    ElMessage.warning('请先新增持仓')
     return
   }
   actionLoading.value = true
   try {
     const details = await resolvePositionSymbols(symbols)
     const detailMap = new Map(details.map((item) => [item.symbol, item]))
-    draftRows.value = draftRows.value.map((row) => {
-      const symbol = row.symbol.trim()
-      const detail = detailMap.get(symbol)
-      if (!detail) return row
-      return {
-        ...row,
-        symbol,
-        position_name: detail.position_name || row.position_name,
-        asset_type: normalizeAssetType(detail.asset_type),
-        current_price: Number(detail.current_price || 0),
-        price_date: detail.price_date || '',
-        resolved: detail.resolved,
-        resolve_message: detail.message || '',
-      }
-    })
+    draftRows.value = draftRows.value.map((row) => applyResolveDetail(row, detailMap.get(row.symbol.trim())))
     const unresolvedCount = details.filter((item) => !item.resolved).length
     if (unresolvedCount) {
       ElMessage.warning(`${unresolvedCount} 个代码未完全补全，请检查资产池或行情同步状态`)
     } else {
-      ElMessage.success('名称、类型和现价已补全')
+      ElMessage.success('名称、类型和现价已刷新')
+    }
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '刷新失败'))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function resolveDialogSymbol() {
+  const symbol = positionForm.symbol.trim()
+  if (!symbol) {
+    ElMessage.warning('请先填写代码')
+    return
+  }
+  actionLoading.value = true
+  try {
+    const [detail] = await resolvePositionSymbols([symbol])
+    if (!detail) return
+    positionForm.symbol = detail.symbol
+    positionForm.position_name = detail.position_name || positionForm.position_name
+    positionForm.asset_type = normalizeAssetType(detail.asset_type)
+    positionForm.current_price = Number(detail.current_price || 0)
+    positionForm.price_date = detail.price_date || ''
+    positionForm.resolved = detail.resolved
+    positionForm.resolve_message = detail.message || ''
+    if (!detail.resolved) {
+      ElMessage.warning(detail.message || '该代码未完全补全')
     }
   } catch (error) {
     ElMessage.error(errorMessage(error, '补全失败'))
   } finally {
     actionLoading.value = false
   }
+}
+
+function confirmPositionDialog() {
+  const symbol = positionForm.symbol.trim()
+  if (!symbol) {
+    ElMessage.warning('请填写代码')
+    return
+  }
+
+  if (positionDialog.mode === 'topup') {
+    if (!activeRow.value) return
+    if (Number(positionForm.topup_quantity || 0) <= 0 || Number(positionForm.topup_price || 0) <= 0) {
+      ElMessage.warning('请填写有效的追加数量和补仓成交价')
+      return
+    }
+    draftRows.value[positionDialog.index] = {
+      ...activeRow.value,
+      quantity: roundNumber(topupPreview.value.quantity, 4),
+      cost_price: roundNumber(topupPreview.value.costPrice, 6),
+    }
+    positionDialog.visible = false
+    ElMessage.success('补仓信息已更新，请记得保存持仓快照')
+    return
+  }
+
+  if (Number(positionForm.quantity || 0) <= 0 || Number(positionForm.cost_price || 0) <= 0) {
+    ElMessage.warning('请填写有效的持仓数量和成本价')
+    return
+  }
+
+  const duplicateIndex = draftRows.value.findIndex((row, index) => row.symbol === symbol && index !== positionDialog.index)
+  if (duplicateIndex >= 0) {
+    ElMessage.warning('该代码已存在，请使用编辑或补仓')
+    return
+  }
+
+  const row: DraftPosition = {
+    symbol,
+    position_name: positionForm.position_name,
+    asset_type: positionForm.asset_type,
+    quantity: Number(positionForm.quantity || 0),
+    current_price: Number(positionForm.current_price || 0),
+    cost_price: Number(positionForm.cost_price || 0),
+    price_date: positionForm.price_date,
+    resolved: positionForm.resolved,
+    resolve_message: positionForm.resolve_message,
+  }
+  if (positionDialog.mode === 'edit' && positionDialog.index >= 0) {
+    draftRows.value[positionDialog.index] = row
+  } else {
+    draftRows.value.push(row)
+  }
+  positionDialog.visible = false
+  ElMessage.success('持仓已更新，请记得保存持仓快照')
 }
 
 async function saveSnapshot() {
@@ -268,7 +446,7 @@ async function saveSnapshot() {
         cost_price: row.cost_price,
       }))
     if (!rows.length) {
-      ElMessage.warning('请至少填写一条有效持仓')
+      ElMessage.warning('请至少新增一条有效持仓')
       return
     }
     positions.value = await savePositionSnapshot({ position_date: positionDate.value, positions: rows })
@@ -293,6 +471,20 @@ async function runAnalysis() {
   }
 }
 
+function applyResolveDetail(row: DraftPosition, detail: Awaited<ReturnType<typeof resolvePositionSymbols>>[number] | undefined) {
+  if (!detail) return row
+  return {
+    ...row,
+    symbol: detail.symbol,
+    position_name: detail.position_name || row.position_name,
+    asset_type: normalizeAssetType(detail.asset_type),
+    current_price: Number(detail.current_price || 0),
+    price_date: detail.price_date || '',
+    resolved: detail.resolved,
+    resolve_message: detail.message || '',
+  }
+}
+
 function rowMarketValue(row: DraftPosition) {
   return roundMoney(Number(row.quantity || 0) * Number(row.current_price || 0))
 }
@@ -306,7 +498,12 @@ function rowPnl(row: DraftPosition) {
 }
 
 function roundMoney(value: number) {
-  return Math.round(value * 100) / 100
+  return roundNumber(value, 2)
+}
+
+function roundNumber(value: number, precision: number) {
+  const factor = 10 ** precision
+  return Math.round(Number(value || 0) * factor) / factor
 }
 
 function formatMoney(value: number) {
@@ -315,6 +512,10 @@ function formatMoney(value: number) {
 
 function formatPrice(value: number) {
   return Number(value || 0).toFixed(3)
+}
+
+function formatQuantity(value: number) {
+  return Number(value || 0).toLocaleString('zh-CN', { maximumFractionDigits: 4 })
 }
 
 function formatPercent(value: number) {
