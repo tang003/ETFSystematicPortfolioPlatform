@@ -12,10 +12,13 @@ import InvestmentPlans from '../views/InvestmentPlans.vue'
 import RiskRebalance from '../views/RiskRebalance.vue'
 import Backtest from '../views/Backtest.vue'
 import Reports from '../views/Reports.vue'
+import Login from '../views/Login.vue'
+import { fetchAuthStatus } from '../api/client'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/login', component: Login, meta: { title: '登录', public: true } },
     { path: '/', redirect: '/dashboard' },
     { path: '/dashboard', component: Dashboard, meta: { title: '总览' } },
     { path: '/portfolio-workbench', component: PortfolioWorkbench, meta: { title: '组合工作台' } },
@@ -31,6 +34,17 @@ const router = createRouter({
     { path: '/backtest', component: Backtest, meta: { title: '回测' } },
     { path: '/reports', component: Reports, meta: { title: '报告' } },
   ],
+})
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) return true
+  try {
+    const status = await fetchAuthStatus()
+    if (status.authenticated) return true
+  } catch {
+    // The login page will show the API connection error.
+  }
+  return { path: '/login', query: { redirect: to.fullPath } }
 })
 
 export default router

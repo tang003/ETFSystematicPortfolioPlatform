@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from app.api.auth_api import require_authenticated_user
+from app.api.auth_api import router as auth_router
 from app.api.asset_api import router as asset_router
 from app.api.backtest_api import router as backtest_router
 from app.api.calendar_api import router as calendar_router
@@ -20,20 +22,22 @@ from app.core.logging import setup_logging
 def create_app() -> FastAPI:
     setup_logging()
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, version="0.19.0")
+    app = FastAPI(title=settings.app_name, version="0.20.0")
     app.include_router(health_router)
-    app.include_router(asset_router, prefix=settings.api_prefix)
-    app.include_router(calendar_router, prefix=settings.api_prefix)
-    app.include_router(market_router, prefix=settings.api_prefix)
-    app.include_router(data_quality_router, prefix=settings.api_prefix)
-    app.include_router(factor_router, prefix=settings.api_prefix)
-    app.include_router(strategy_router, prefix=settings.api_prefix)
-    app.include_router(portfolio_router, prefix=settings.api_prefix)
-    app.include_router(risk_router, prefix=settings.api_prefix)
-    app.include_router(rebalance_router, prefix=settings.api_prefix)
-    app.include_router(backtest_router, prefix=settings.api_prefix)
-    app.include_router(report_router, prefix=settings.api_prefix)
-    app.include_router(workflow_router, prefix=settings.api_prefix)
+    app.include_router(auth_router, prefix=settings.api_prefix)
+    protected = [Depends(require_authenticated_user)]
+    app.include_router(asset_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(calendar_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(market_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(data_quality_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(factor_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(strategy_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(portfolio_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(risk_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(rebalance_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(backtest_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(report_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(workflow_router, prefix=settings.api_prefix, dependencies=protected)
     return app
 
 

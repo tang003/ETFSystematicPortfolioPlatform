@@ -1,0 +1,59 @@
+from fastapi.testclient import TestClient
+
+from app.core.config import get_settings
+from app.core.security import create_session_token, hash_password, read_session_token, verify_password
+from app.main import create_app
+
+
+def test_password_hash_round_trip() -> None:
+    encoded = hash_password("a-strong-test-password", salt="fixed-test-salt", iterations=10_000)
+
+    assert verify_password("a-strong-test-password", encoded)
+    assert not verify_password("incorrect-password", encoded)
+
+
+def test_session_token_round_trip() -> None:
+    token = create_session_token("admin", "x" * 48, 1)
+
+    payload = read_session_token(token, "x" * 48)
+
+    assert payload is not None
+    assert payload["sub"] == "admin"
+
+
+def test_session_token_rejects_wrong_secret_and_tampering() -> None:
+    token = create_session_token("admin", "x" * 48, 1)
+
+    assert read_session_token(token, "y" * 48) is None
+    assert read_session_token(f"{token}changed", "x" * 48) is None
+
+
+def test_protected_api_requires_login(monkeypatch) -> None:
+    password = "a-strong-test-password"
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_ADMIN_USERNAME", "operator")
+    monkeypatch.setenv(
+        "AUTH_ADMIN_PASSWORD_HASH",
+        hash_password(password, salt="api-test-salt", iterations=10_000),
+    )
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "s" * 48)
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
+    get_settings.cache_clear()
+
+    try:
+        with TestClient(create_app()) as client:
+            assert client.get("/api/assets").status_code == 401
+            assert client.post("/api/auth/login", json={"username": "operator", "password": "wrong"}).status_code == 401
+
+            login_response = client.post(
+                "/api/auth/login",
+                json={"username": "operator", "password": password},
+            )
+            assert login_response.status_code == 200
+            assert login_response.json()["authenticated"] is True
+            assert client.get("/api/assets").status_code == 200
+
+            assert client.post("/api/auth/logout").status_code == 200
+            assert client.get("/api/assets").status_code == 401
+    finally:
+        get_settings.cache_clear()

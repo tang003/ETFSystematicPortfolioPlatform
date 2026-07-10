@@ -1,6 +1,29 @@
 # 04 API 接口文档
 
-当前版本：`v0.19.0-data-readiness-gate`
+当前版本：`v0.20.0-single-user-auth`
+
+## 认证约定
+
+服务器设置 `AUTH_ENABLED=true` 后，除 `/health` 和 `/api/auth/*` 外的全部 API 都需要登录。登录成功后服务端写入 HttpOnly Cookie，前端浏览器会自动携带，不需要把 Token 保存到 JavaScript 或 localStorage。
+
+### GET /api/auth/status
+
+返回鉴权是否启用、服务器是否配置完整以及当前会话是否已登录。
+
+### POST /api/auth/login
+
+```json
+{
+  "username": "admin",
+  "password": "your-password"
+}
+```
+
+连续失败达到限制后返回 HTTP 429。用户名或密码错误返回 HTTP 401。
+
+### POST /api/auth/logout
+
+删除当前登录 Cookie。退出后再次访问业务 API 将返回 HTTP 401。
 
 ## GET /health
 

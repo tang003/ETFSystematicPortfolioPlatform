@@ -22,6 +22,13 @@ class Settings(BaseSettings):
     tushare_token: str | None = None
     tushare_request_interval_seconds: float = Field(default=1.5)
 
+    auth_enabled: bool = False
+    auth_admin_username: str = "admin"
+    auth_admin_password_hash: str | None = None
+    auth_session_secret: str | None = None
+    auth_session_ttl_hours: int = Field(default=12, ge=1, le=168)
+    auth_cookie_secure: bool = False
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),
         env_file_encoding="utf-8",

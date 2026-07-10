@@ -1,5 +1,6 @@
 <template>
-  <el-container class="shell">
+  <router-view v-if="$route.meta.public" />
+  <el-container v-else class="shell">
     <el-aside width="244px" class="sidebar">
       <div class="brand">
         <div class="brand-mark">ETF</div>
@@ -30,7 +31,10 @@
           <h1>{{ $route.meta.title }}</h1>
           <p>ETF Systematic Portfolio Platform</p>
         </div>
-        <el-tag :type="healthOk ? 'success' : 'danger'" round>{{ healthOk ? 'API 正常' : 'API 异常' }}</el-tag>
+        <div class="topbar-actions">
+          <el-tag :type="healthOk ? 'success' : 'danger'" round>{{ healthOk ? 'API 正常' : 'API 异常' }}</el-tag>
+          <el-button v-if="authEnabled" :icon="SwitchButton" circle title="退出登录" @click="handleLogout" />
+        </div>
       </el-header>
       <el-main class="content">
         <router-view />
@@ -41,17 +45,26 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { CircleCheck, DataAnalysis, DataBoard, Document, Grid, Histogram, Money, Monitor, Operation, PieChart, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
-import { fetchHealth } from './api/client'
+import { useRouter } from 'vue-router'
+import { CircleCheck, DataAnalysis, DataBoard, Document, Grid, Histogram, Money, Monitor, Operation, PieChart, SwitchButton, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
+import { fetchAuthStatus, fetchHealth, logout } from './api/client'
 
 const healthOk = ref(false)
+const authEnabled = ref(false)
+const router = useRouter()
 
 onMounted(async () => {
   try {
-    await fetchHealth()
+    const [, authStatus] = await Promise.all([fetchHealth(), fetchAuthStatus()])
     healthOk.value = true
+    authEnabled.value = authStatus.enabled
   } catch {
     healthOk.value = false
   }
 })
+
+async function handleLogout() {
+  await logout()
+  await router.replace('/login')
+}
 </script>

@@ -3,7 +3,27 @@ import axios from 'axios'
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 20000,
+  withCredentials: true,
 })
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const requestUrl = String(error?.config?.url || '')
+    if (error?.response?.status === 401 && !requestUrl.includes('/api/auth/login') && window.location.pathname !== '/login') {
+      const redirect = encodeURIComponent(`${window.location.pathname}${window.location.search}`)
+      window.location.assign(`/login?redirect=${redirect}`)
+    }
+    return Promise.reject(error)
+  },
+)
+
+export interface AuthStatus {
+  enabled: boolean
+  configured: boolean
+  authenticated: boolean
+  username: string | null
+}
 
 export interface Asset {
   symbol: string
@@ -259,6 +279,10 @@ export interface WorkflowTask {
 }
 
 export const fetchHealth = async () => (await api.get('/health')).data
+export const fetchAuthStatus = async () => (await api.get<AuthStatus>('/api/auth/status')).data
+export const login = async (payload: { username: string; password: string }) =>
+  (await api.post<AuthStatus>('/api/auth/login', payload)).data
+export const logout = async () => (await api.post<AuthStatus>('/api/auth/logout')).data
 export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
 export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =>
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
