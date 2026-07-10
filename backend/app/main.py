@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.auth_api import require_authenticated_user
 from app.api.auth_api import router as auth_router
@@ -15,14 +16,24 @@ from app.api.report_api import router as report_router
 from app.api.risk_api import router as risk_router
 from app.api.strategy_api import router as strategy_router
 from app.api.workflow_api import router as workflow_router
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_runtime_configuration
 from app.core.logging import setup_logging
 
 
 def create_app() -> FastAPI:
     setup_logging()
     settings = get_settings()
-    app = FastAPI(title=settings.app_name, version="0.20.0")
+    validate_runtime_configuration(settings)
+    production = settings.app_env.lower() == "production"
+    app = FastAPI(
+        title=settings.app_name,
+        version="0.21.0",
+        docs_url=None if production else "/docs",
+        redoc_url=None if production else "/redoc",
+        openapi_url=None if production else "/openapi.json",
+    )
+    if production:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
     app.include_router(health_router)
     app.include_router(auth_router, prefix=settings.api_prefix)
     protected = [Depends(require_authenticated_user)]

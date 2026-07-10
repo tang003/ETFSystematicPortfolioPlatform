@@ -71,7 +71,7 @@ def login(request: Request, response: Response, payload: LoginRequest) -> AuthSt
     if not configured:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Authentication is not configured")
 
-    client_key = request.client.host if request.client else "unknown"
+    client_key = resolve_client_key(request)
     enforce_login_rate_limit(client_key)
     username_valid = payload.username == settings.auth_admin_username
     password_valid = verify_password(payload.password, settings.auth_admin_password_hash or "")
@@ -133,3 +133,12 @@ def record_failed_attempt(client_key: str) -> None:
 def clear_failed_attempts(client_key: str) -> None:
     with _attempt_lock:
         _attempts.pop(client_key, None)
+
+
+def resolve_client_key(request: Request) -> str:
+    settings = get_settings()
+    if settings.trust_proxy_headers:
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        if forwarded_for:
+            return forwarded_for.split(",", 1)[0].strip()
+    return request.client.host if request.client else "unknown"

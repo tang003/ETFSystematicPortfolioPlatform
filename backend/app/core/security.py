@@ -61,7 +61,13 @@ def read_session_token(token: str, secret: str) -> dict[str, Any] | None:
 
 
 def validate_auth_configuration(password_hash: str | None, session_secret: str | None) -> bool:
-    return bool(password_hash and session_secret and len(session_secret) >= 32)
+    if not password_hash or not session_secret or len(session_secret) < 32:
+        return False
+    try:
+        algorithm, iterations_text, salt, digest = password_hash.split("$", 3)
+        return algorithm == PASSWORD_ALGORITHM and int(iterations_text) > 0 and bool(salt and digest)
+    except (TypeError, ValueError):
+        return False
 
 
 def _b64encode(value: bytes) -> str:
