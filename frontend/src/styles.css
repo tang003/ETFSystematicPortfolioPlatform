@@ -175,6 +175,24 @@ body {
   margin: 8px 0 14px;
 }
 
+.asset-summary {
+  margin-bottom: 12px;
+}
+
+.quick-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.assets-filter-form {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+}
+
+.assets-filter-form .el-slider {
+  width: 180px;
+}
+
 .profit-up {
   color: #dc2626;
 }
@@ -409,5 +427,13 @@ body {
 
   .action-form {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+  }
+
+  .assets-filter-form .el-slider {
+    width: 100%;
   }
 }

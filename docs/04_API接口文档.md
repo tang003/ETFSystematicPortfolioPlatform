@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.28.0-holdings-dialog-editor`
+当前版本：`v0.29.0-etf-pool-screener`
 
 ## 认证约定
 
