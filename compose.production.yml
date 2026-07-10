@@ -50,6 +50,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      WORKFLOW_EXECUTION_MODE: worker
+      WORKFLOW_WORKER_POLL_SECONDS: ${WORKFLOW_WORKER_POLL_SECONDS:-2}
+      WORKFLOW_WORKER_HEARTBEAT_TTL_SECONDS: ${WORKFLOW_WORKER_HEARTBEAT_TTL_SECONDS:-30}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
       TUSHARE_REQUEST_INTERVAL_SECONDS: ${TUSHARE_REQUEST_INTERVAL_SECONDS:-1.5}
@@ -65,9 +68,54 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://127.0.0.1:8000/health', headers={'Host':'localhost'}, timeout=5).raise_for_status()"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://127.0.0.1:8000/health/ready', headers={'Host':'localhost'}, timeout=5).raise_for_status()"]
       interval: 20s
       timeout: 8s
+      retries: 5
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    command: ["sh", "-c", "alembic upgrade head && exec python -m app.worker"]
+    environment:
+      APP_NAME: ${APP_NAME:-ETF Systematic Portfolio Platform}
+      APP_ENV: production
+      API_PREFIX: /api
+      APP_ALLOWED_HOSTS: localhost,127.0.0.1,${DOMAIN:?DOMAIN is required}
+      TRUST_PROXY_HEADERS: "true"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WORKFLOW_EXECUTION_MODE: worker
+      WORKFLOW_WORKER_POLL_SECONDS: ${WORKFLOW_WORKER_POLL_SECONDS:-2}
+      WORKFLOW_WORKER_HEARTBEAT_TTL_SECONDS: ${WORKFLOW_WORKER_HEARTBEAT_TTL_SECONDS:-30}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN:-}
+      TUSHARE_REQUEST_INTERVAL_SECONDS: ${TUSHARE_REQUEST_INTERVAL_SECONDS:-1.5}
+      AUTH_ENABLED: "true"
+      AUTH_ADMIN_USERNAME: ${AUTH_ADMIN_USERNAME:?AUTH_ADMIN_USERNAME is required}
+      AUTH_ADMIN_PASSWORD_HASH: ${AUTH_ADMIN_PASSWORD_HASH:?AUTH_ADMIN_PASSWORD_HASH is required}
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?AUTH_SESSION_SECRET is required}
+      AUTH_SESSION_TTL_HOURS: ${AUTH_SESSION_TTL_HOURS:-12}
+      AUTH_COOKIE_SECURE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis, os; r=redis.Redis(host=os.getenv('REDIS_HOST','redis'), port=int(os.getenv('REDIS_PORT','6379')), decode_responses=True); assert r.get('workflow_worker:heartbeat')"]
+      interval: 20s
+      timeout: 5s
       retries: 5
       start_period: 20s
     security_opt:
@@ -80,6 +128,8 @@ services:
     restart: unless-stopped
     depends_on:
       api:
+        condition: service_healthy
+      worker:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1"]

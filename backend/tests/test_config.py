@@ -22,6 +22,11 @@ def test_valid_production_configuration_passes() -> None:
     validate_runtime_configuration(production_settings())
 
 
+def test_workflow_execution_mode_is_validated() -> None:
+    with pytest.raises(ValueError):
+        Settings(workflow_execution_mode="background")
+
+
 @pytest.mark.parametrize(
     ("overrides", "expected_message"),
     [

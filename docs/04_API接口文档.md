@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.22.0-database-operations`
+当前版本：`v0.23.0-durable-workflow-worker`
 
 ## 认证约定
 
@@ -44,6 +44,14 @@
 错误示例：
 
 如果数据库不可用，接口会返回 `500 Internal Server Error`，需要检查 PostgreSQL 容器状态和 `.env` 数据库配置。
+
+## GET /health/live
+
+用途：进程存活检查，不访问数据库，适合判断容器进程是否仍在响应。
+
+## GET /health/ready
+
+用途：生产就绪检查。会验证数据库连接；当 `WORKFLOW_EXECUTION_MODE=worker` 时，还会验证 Redis 中是否存在 worker 心跳。生产 Compose 的 API healthcheck 使用该接口。
 
 ## GET /api/assets
 

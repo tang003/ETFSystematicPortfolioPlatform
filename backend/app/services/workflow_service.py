@@ -132,6 +132,49 @@ def reset_failed_steps_for_retry(db: Session, task_id: int) -> WorkflowTask:
     return task
 
 
+def claim_next_workflow_task(db: Session) -> WorkflowTask | None:
+    ensure_workflow_tables()
+    task = db.scalar(
+        select(WorkflowTask)
+        .where(WorkflowTask.status == "pending")
+        .order_by(WorkflowTask.created_at.asc(), WorkflowTask.id.asc())
+        .with_for_update(skip_locked=True)
+    )
+    if task is None:
+        db.rollback()
+        return None
+    task.status = "running"
+    task.started_at = datetime.utcnow()
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def recover_interrupted_workflow_tasks(db: Session) -> int:
+    ensure_workflow_tables()
+    tasks = list(db.scalars(select(WorkflowTask).where(WorkflowTask.status == "running")).all())
+    recovered = 0
+    for task in tasks:
+        task.status = "pending"
+        task.current_step = None
+        task.error_message = "Worker restarted before task finished; task was returned to pending."
+        steps = list(
+            db.scalars(
+                select(WorkflowTaskStep)
+                .where(WorkflowTaskStep.task_id == task.id)
+                .where(WorkflowTaskStep.status == "running")
+            ).all()
+        )
+        for step in steps:
+            step.status = "pending"
+            step.message = "Worker restarted; this step will be retried."
+            step.started_at = None
+            step.finished_at = None
+        recovered += 1
+    db.commit()
+    return recovered
+
+
 def run_workflow_task(task_id: int) -> None:
     ensure_workflow_tables()
     db = SessionLocal()
@@ -448,6 +491,8 @@ def inspect_market_readiness(
 def mark_task_running(db: Session, task: WorkflowTask) -> None:
     task.status = "running"
     task.started_at = datetime.utcnow()
+    task.finished_at = None
+    task.error_message = None
     db.commit()
 
 

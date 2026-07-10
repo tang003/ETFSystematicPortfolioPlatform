@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,6 +20,9 @@ class Settings(BaseSettings):
 
     redis_host: str = "localhost"
     redis_port: int = 6379
+    workflow_execution_mode: Literal["inline", "worker"] = "inline"
+    workflow_worker_poll_seconds: float = Field(default=2.0, ge=0.5, le=60)
+    workflow_worker_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
 
     log_level: str = Field(default="INFO")
     tushare_token: str | None = None
@@ -44,6 +48,10 @@ class Settings(BaseSettings):
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
 
     @property
     def allowed_hosts(self) -> list[str]:

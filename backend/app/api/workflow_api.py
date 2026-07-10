@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.schemas.workflow_schema import WorkflowRunRequest, WorkflowTaskCreateResponse, WorkflowTaskRead
 from app.services.workflow_service import (
     cancel_workflow_task,
@@ -22,7 +23,8 @@ def create_full_workflow(
     db: Session = Depends(get_db),
 ) -> WorkflowTaskCreateResponse:
     task = create_workflow_task(db, request)
-    background_tasks.add_task(run_workflow_task, task.id)
+    if get_settings().workflow_execution_mode == "inline":
+        background_tasks.add_task(run_workflow_task, task.id)
     return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)
 
 
@@ -66,5 +68,6 @@ def retry_failed_workflow_steps(
         task = reset_failed_steps_for_retry(db, task_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    background_tasks.add_task(run_workflow_task, task.id)
+    if get_settings().workflow_execution_mode == "inline":
+        background_tasks.add_task(run_workflow_task, task.id)
     return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)
