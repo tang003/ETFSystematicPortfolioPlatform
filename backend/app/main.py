@@ -27,7 +27,7 @@ def create_app() -> FastAPI:
     production = settings.app_env.lower() == "production"
     app = FastAPI(
         title=settings.app_name,
-        version="0.29.1",
+        version="0.29.2",
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         openapi_url=None if production else "/openapi.json",
