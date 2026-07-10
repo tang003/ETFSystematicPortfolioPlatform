@@ -174,6 +174,8 @@ export interface InvestmentPlan {
   months: number
   monthly_amount: string
   total_budget: string
+  target_annual_return: string | null
+  investment_mode: string
   status: string
   note: string | null
   created_at: string
@@ -192,6 +194,33 @@ export interface InvestmentPlanSuggestion {
   action_suggestion: string
   reason: string | null
   created_at: string
+}
+
+export interface PortfolioExposure {
+  dimension: string
+  name: string
+  current_weight: string
+  target_weight: string
+  diff_weight: string
+}
+
+export interface PortfolioReadiness {
+  enabled_etf_count: number
+  position_count: number
+  target_count: number
+  latest_market_date: string | null
+  latest_factor_date: string | null
+  missing_market_count: number
+  high_risk_target_weight: string
+  cross_border_target_weight: string
+  max_single_target_weight: string
+  status: string
+  messages: string[]
+}
+
+export interface PortfolioXray {
+  exposures: PortfolioExposure[]
+  readiness: PortfolioReadiness
 }
 
 export interface RiskResult {
@@ -309,6 +338,7 @@ export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
 export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data
+export const fetchPortfolioXray = async () => (await api.get<PortfolioXray>('/api/portfolio/xray')).data
 export const resolvePositionSymbols = async (symbols: string[]) =>
   (await api.post<PositionResolveResult[]>('/api/portfolio/positions/resolve', { symbols })).data
 export const savePositionSnapshot = async (payload: {
@@ -328,7 +358,17 @@ export const savePositionSnapshot = async (payload: {
 export const analyzeHoldings = async (payload: { run_id?: number; analysis_date?: string }) =>
   (await api.post<HoldingAnalysis[]>('/api/portfolio/holdings/analyze', payload)).data
 export const fetchHoldingAnalysis = async () => (await api.get<HoldingAnalysis[]>('/api/portfolio/holdings/analysis')).data
-export const createInvestmentPlan = async (payload: { plan_name: string; run_id?: number; start_date: string; months: number; monthly_amount: number; note?: string }) =>
+export const createInvestmentPlan = async (payload: {
+  plan_name: string
+  run_id?: number
+  start_date: string
+  months: number
+  monthly_amount?: number
+  total_budget?: number
+  target_annual_return?: number
+  investment_mode?: string
+  note?: string
+}) =>
   (await api.post<InvestmentPlan>('/api/portfolio/investment-plans', payload)).data
 export const fetchInvestmentPlans = async () => (await api.get<InvestmentPlan[]>('/api/portfolio/investment-plans')).data
 export const analyzeInvestmentPlan = async (planId: number, payload: { period_no: number; suggestion_date?: string }) =>

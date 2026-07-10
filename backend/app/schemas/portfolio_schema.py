@@ -90,7 +90,10 @@ class InvestmentPlanCreate(BaseModel):
     run_id: int | None = None
     start_date: date
     months: int
-    monthly_amount: Decimal
+    monthly_amount: Decimal | None = None
+    total_budget: Decimal | None = None
+    target_annual_return: Decimal | None = None
+    investment_mode: str = "scheduled_dca"
     note: str | None = None
 
 
@@ -107,11 +110,40 @@ class InvestmentPlanRead(BaseModel):
     months: int
     monthly_amount: Decimal
     total_budget: Decimal
+    target_annual_return: Decimal | None
+    investment_mode: str
     status: str
     note: str | None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PortfolioExposureRead(BaseModel):
+    dimension: str
+    name: str
+    current_weight: Decimal
+    target_weight: Decimal
+    diff_weight: Decimal
+
+
+class PortfolioReadinessRead(BaseModel):
+    enabled_etf_count: int
+    position_count: int
+    target_count: int
+    latest_market_date: date | None
+    latest_factor_date: date | None
+    missing_market_count: int
+    high_risk_target_weight: Decimal
+    cross_border_target_weight: Decimal
+    max_single_target_weight: Decimal
+    status: str
+    messages: list[str]
+
+
+class PortfolioXrayRead(BaseModel):
+    exposures: list[PortfolioExposureRead]
+    readiness: PortfolioReadinessRead
 
 
 class InvestmentPlanSuggestionRead(BaseModel):

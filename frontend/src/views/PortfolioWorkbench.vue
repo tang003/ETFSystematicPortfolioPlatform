@@ -12,6 +12,9 @@
     <section class="panel span-3">
       <div class="metric">高配资产<strong>{{ overweightCount }}</strong></div>
     </section>
+    <section class="panel span-3">
+      <div class="metric">策略状态<strong>{{ readinessText }}</strong></div>
+    </section>
 
     <section class="panel span-8">
       <div class="panel-header">
@@ -34,6 +37,41 @@
     </section>
 
     <section class="panel span-4">
+      <h2>策略前检查</h2>
+      <div class="insight-list">
+        <div class="insight-item">
+          <span>行情 / 因子</span>
+          <strong>{{ xray?.readiness.latest_market_date || '-' }}</strong>
+          <p>因子最新日期：{{ xray?.readiness.latest_factor_date || '-' }}；缺行情 ETF：{{ xray?.readiness.missing_market_count || 0 }}。</p>
+        </div>
+        <div class="insight-item">
+          <span>目标组合风险</span>
+          <strong>{{ formatPercent(Number(xray?.readiness.high_risk_target_weight || 0)) }}</strong>
+          <p>跨境 ETF 权重 {{ formatPercent(Number(xray?.readiness.cross_border_target_weight || 0)) }}，单只最高目标权重 {{ formatPercent(Number(xray?.readiness.max_single_target_weight || 0)) }}。</p>
+        </div>
+        <div class="insight-item">
+          <span>检查结论</span>
+          <strong>{{ readinessText }}</strong>
+          <p>{{ xray?.readiness.messages.join('；') || '暂无检查结果。' }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel span-12">
+      <div class="panel-header">
+        <h2>组合风险透视 X-Ray</h2>
+        <span class="section-note">按资产类别、区域和风险等级查看当前持仓与目标组合的暴露差异。</span>
+      </div>
+      <el-table :data="exposureRows" height="300">
+        <el-table-column prop="dimensionText" label="维度" width="120" />
+        <el-table-column prop="nameText" label="分类" min-width="140" />
+        <el-table-column prop="currentWeightText" label="当前权重" width="120" />
+        <el-table-column prop="targetWeightText" label="目标权重" width="120" />
+        <el-table-column prop="diffText" label="差异" width="120" />
+      </el-table>
+    </section>
+
+    <section class="panel span-4">
       <h2>组合提示</h2>
       <div class="insight-list">
         <div class="insight-item">
@@ -45,11 +83,6 @@
           <span>本期定投优先</span>
           <strong>{{ topInvestment?.symbol || '-' }}</strong>
           <p>{{ topInvestment ? `${topInvestment.symbol} 建议投入 ${formatMoney(Number(topInvestment.suggested_amount))}` : '暂无定投建议。' }}</p>
-        </div>
-        <div class="insight-item">
-          <span>调仓动作</span>
-          <strong>{{ activeOrderCount }}</strong>
-          <p>{{ activeOrderCount ? '已有买入或卖出建议，执行前仍需要人工确认。' : '暂无明显调仓动作。' }}</p>
         </div>
       </div>
     </section>
@@ -92,6 +125,7 @@ import {
   fetchHoldingAnalysis,
   fetchInvestmentPlanSuggestions,
   fetchInvestmentPlans,
+  fetchPortfolioXray,
   fetchPositions,
   fetchRebalanceOrders,
   fetchTargetPortfolio,
@@ -99,6 +133,7 @@ import {
   type InvestmentPlan,
   type InvestmentPlanSuggestion,
   type PortfolioPosition,
+  type PortfolioXray,
   type RebalanceOrder,
   type TargetPortfolio,
 } from '../api/client'
@@ -124,12 +159,28 @@ const holdingAnalysis = ref<HoldingAnalysis[]>([])
 const plans = ref<InvestmentPlan[]>([])
 const investmentSuggestions = ref<InvestmentPlanSuggestion[]>([])
 const orders = ref<RebalanceOrder[]>([])
+const xray = ref<PortfolioXray>()
 
 onMounted(refresh)
 
 const totalMarketValue = computed(() => positions.value.reduce((sum, item) => sum + Number(item.market_value || 0), 0))
 const targetRows = computed(() => targets.value.filter((item) => Number(item.final_target_weight || item.raw_target_weight || 0) > 0))
 const activeOrderCount = computed(() => orders.value.filter((item) => item.action !== 'HOLD').length)
+const readinessText = computed(() => {
+  if (!xray.value) return '-'
+  const map: Record<string, string> = { ready: '可运行', warning: '需关注', missing_data: '缺数据' }
+  return map[xray.value.readiness.status] || xray.value.readiness.status
+})
+const exposureRows = computed(() =>
+  (xray.value?.exposures || []).map((item) => ({
+    ...item,
+    dimensionText: dimensionText(item.dimension),
+    nameText: exposureNameText(item.dimension, item.name),
+    currentWeightText: formatPercent(Number(item.current_weight || 0)),
+    targetWeightText: formatPercent(Number(item.target_weight || 0)),
+    diffText: formatSignedPercent(Number(item.diff_weight || 0)),
+  })),
+)
 
 const workbenchRows = computed<WorkbenchRow[]>(() => {
   const positionMap = new Map(positions.value.map((item) => [item.symbol, item]))
@@ -168,18 +219,20 @@ const topInvestment = computed(() => investmentSuggestions.value[0])
 async function refresh() {
   loading.value = true
   try {
-    const [positionData, targetData, analysisData, planData, orderData] = await Promise.all([
+    const [positionData, targetData, analysisData, planData, orderData, xrayData] = await Promise.all([
       fetchPositions(),
       fetchTargetPortfolio(),
       fetchHoldingAnalysis(),
       fetchInvestmentPlans(),
       fetchRebalanceOrders(),
+      fetchPortfolioXray(),
     ])
     positions.value = positionData
     targets.value = targetData
     holdingAnalysis.value = analysisData
     plans.value = planData
     orders.value = orderData
+    xray.value = xrayData
     investmentSuggestions.value = planData.length ? await fetchInvestmentPlanSuggestions(planData[0].id) : []
   } finally {
     loading.value = false
@@ -227,6 +280,23 @@ function formatSignedPercent(value: number) {
 
 function formatMoney(value: number) {
   return value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function dimensionText(value: string) {
+  const map: Record<string, string> = { asset_class: '资产类别', asset_region: '区域', risk_level: '风险等级' }
+  return map[value] || value
+}
+
+function exposureNameText(dimension: string, value: string) {
+  if (dimension === 'asset_class') {
+    const map: Record<string, string> = { equity: '权益', bond: '债券', gold: '黄金', cash: '货币', qdii: 'QDII', unknown: '未知' }
+    return map[value] || value
+  }
+  if (dimension === 'asset_region') {
+    const map: Record<string, string> = { CN: '中国内地', HK: '港股', US: '美国', GLOBAL: '全球', CN_HK_US: '中概/港美', unknown: '未知' }
+    return map[value] || value
+  }
+  return value
 }
 
 function rowClassName({ row }: { row: WorkbenchRow }) {

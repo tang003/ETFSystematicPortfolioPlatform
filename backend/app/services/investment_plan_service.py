@@ -23,16 +23,19 @@ def create_investment_plan(db: Session, request: InvestmentPlanCreate) -> Invest
     ensure_investment_plan_tables()
     if request.months < MIN_MONTHS or request.months > MAX_MONTHS:
         raise ValueError("Months must be between 1 and 360")
-    if request.monthly_amount <= 0:
-        raise ValueError("Monthly amount must be greater than 0")
+    monthly_amount, total_budget = resolve_budget(request)
+    if request.target_annual_return is not None and request.target_annual_return < 0:
+        raise ValueError("Target annual return must be greater than or equal to 0")
 
     plan = InvestmentPlan(
         plan_name=request.plan_name.strip() or "定投计划",
         run_id=request.run_id,
         start_date=request.start_date,
         months=request.months,
-        monthly_amount=request.monthly_amount,
-        total_budget=(request.monthly_amount * request.months).quantize(Decimal("0.0001")),
+        monthly_amount=monthly_amount,
+        total_budget=total_budget,
+        target_annual_return=request.target_annual_return,
+        investment_mode=(request.investment_mode or "scheduled_dca").strip() or "scheduled_dca",
         status="active",
         note=request.note,
     )
@@ -40,6 +43,24 @@ def create_investment_plan(db: Session, request: InvestmentPlanCreate) -> Invest
     db.commit()
     db.refresh(plan)
     return plan
+
+
+def resolve_budget(request: InvestmentPlanCreate) -> tuple[Decimal, Decimal]:
+    if request.monthly_amount is None and request.total_budget is None:
+        raise ValueError("Monthly amount or total budget must be provided")
+    if request.total_budget is not None and request.total_budget <= 0:
+        raise ValueError("Total budget must be greater than 0")
+    if request.monthly_amount is not None and request.monthly_amount <= 0:
+        raise ValueError("Monthly amount must be greater than 0")
+
+    if request.total_budget is not None:
+        total_budget = request.total_budget.quantize(Decimal("0.0001"))
+        monthly_amount = (total_budget / Decimal(request.months)).quantize(Decimal("0.0001"))
+        return monthly_amount, total_budget
+
+    monthly_amount = request.monthly_amount.quantize(Decimal("0.0001"))
+    total_budget = (monthly_amount * request.months).quantize(Decimal("0.0001"))
+    return monthly_amount, total_budget
 
 
 def list_investment_plans(db: Session, limit: int = 50) -> list[InvestmentPlan]:

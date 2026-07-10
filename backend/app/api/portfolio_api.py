@@ -11,6 +11,7 @@ from app.schemas.portfolio_schema import (
     InvestmentPlanSuggestionRead,
     PortfolioPositionRead,
     PortfolioSnapshotRequest,
+    PortfolioXrayRead,
     PositionResolveRead,
     PositionResolveRequest,
     TargetPortfolioRead,
@@ -22,6 +23,7 @@ from app.services.investment_plan_service import (
     list_investment_plans,
     list_investment_suggestions,
 )
+from app.services.portfolio_xray_service import build_portfolio_xray
 from app.services.strategy_service import latest_target_portfolio
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
@@ -46,6 +48,11 @@ def save_position_snapshot(
 @router.get("/positions", response_model=list[PortfolioPositionRead])
 def get_positions(db: Session = Depends(get_db)) -> list[PortfolioPositionRead]:
     return list_positions(db)
+
+
+@router.get("/xray", response_model=PortfolioXrayRead)
+def get_portfolio_xray(db: Session = Depends(get_db)) -> PortfolioXrayRead:
+    return build_portfolio_xray(db)
 
 
 @router.post("/positions/resolve", response_model=list[PositionResolveRead])

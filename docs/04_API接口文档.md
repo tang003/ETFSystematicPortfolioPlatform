@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.29.2-etf-pool-route-fix`
+当前版本：`v0.30.0-portfolio-xray-dca-goals`
 
 ## 认证约定
 
@@ -588,6 +588,18 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 用途：查询最近一次持仓分析结果。
 
+## GET /api/portfolio/xray
+
+用途：查询组合风险透视和策略前检查结果。系统会按资产类别、区域和风险等级对比当前持仓权重与目标组合权重，并返回行情、因子、目标组合、持仓等准备情况。
+
+响应要点：
+
+- `exposures[].dimension`：`asset_class`、`asset_region` 或 `risk_level`。
+- `exposures[].current_weight`：当前持仓暴露权重。
+- `exposures[].target_weight`：目标组合暴露权重。
+- `readiness.status`：`ready`、`warning` 或 `missing_data`。
+- `readiness.messages`：策略运行前需要关注的提示。
+
 ## POST /api/portfolio/investment-plans
 
 用途：创建定投计划。系统只保存计划和生成建议，不会扣款，不会下单。
@@ -600,12 +612,23 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "run_id": 5,
   "start_date": "2026-07-09",
   "months": 12,
-  "monthly_amount": 3000,
-  "note": "每月固定投入，优先补足低配 ETF"
+  "total_budget": 10000,
+  "target_annual_return": 0.10,
+  "investment_mode": "scheduled_dca",
+  "note": "一年内分批投入，优先补足低配 ETF"
 }
 ```
 
-响应：返回计划详情，包含 `id`、`total_budget` 和状态。
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `total_budget` | 准备投入的总资金，例如 10000 元；若提供该字段，系统会按 `months` 自动换算每期金额 |
+| `monthly_amount` | 每期金额；如果不提供 `total_budget`，也可以直接提供每期金额 |
+| `target_annual_return` | 目标年化收益率，例如 `0.10` 表示 10%；仅作为策略目标参数，不代表收益承诺 |
+| `investment_mode` | 执行模式：`scheduled_dca` 固定节奏、`drawdown_boost` 回撤增强、`signal_timing` 信号驱动、`auto_execution_preview` 未来自动执行预览 |
+
+响应：返回计划详情，包含 `id`、`monthly_amount`、`total_budget`、`target_annual_return`、`investment_mode` 和状态。
 
 ## GET /api/portfolio/investment-plans
 

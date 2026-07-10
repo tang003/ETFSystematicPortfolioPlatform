@@ -1,7 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
-from app.services.investment_plan_service import build_investment_suggestions
+from app.schemas.portfolio_schema import InvestmentPlanCreate
+from app.services.investment_plan_service import build_investment_suggestions, resolve_budget
 
 
 class Target:
@@ -41,3 +42,18 @@ def test_build_investment_suggestions_falls_back_to_target_weights_when_no_gap()
 
     assert [row.symbol for row in rows] == ["510300", "511880"]
     assert sum((row.suggested_amount for row in rows), Decimal("0")) == Decimal("1000.0000")
+
+
+def test_resolve_budget_calculates_monthly_amount_from_total_budget() -> None:
+    request = InvestmentPlanCreate(
+        plan_name="一年目标定投",
+        start_date=date(2026, 7, 11),
+        months=12,
+        total_budget=Decimal("10000"),
+        target_annual_return=Decimal("0.10"),
+    )
+
+    monthly_amount, total_budget = resolve_budget(request)
+
+    assert monthly_amount == Decimal("833.3333")
+    assert total_budget == Decimal("10000.0000")

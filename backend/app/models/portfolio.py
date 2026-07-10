@@ -67,6 +67,8 @@ class InvestmentPlan(Base):
     months: Mapped[int] = mapped_column(Integer, nullable=False)
     monthly_amount: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
     total_budget: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    target_annual_return: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    investment_mode: Mapped[str] = mapped_column(String(30), nullable=False, default="scheduled_dca")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
