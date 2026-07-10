@@ -4,10 +4,11 @@
       <div class="panel-header">
         <div>
           <h2>录入当前持仓</h2>
-          <p class="section-note">按券商持仓页填写：代码、名称、持仓数量、现价、成本价。系统会自动计算市值、成本、盈亏和权重。</p>
+          <p class="section-note">只需填写代码、持仓数量和成本价；名称、类型、现价由系统根据资产池和最新行情自动补全。</p>
         </div>
         <div class="header-actions">
           <el-button @click="addRow">新增一行</el-button>
+          <el-button :loading="actionLoading" @click="resolveRows">自动补全</el-button>
           <el-button type="primary" :loading="actionLoading" @click="saveSnapshot">保存持仓快照</el-button>
           <el-button type="success" :loading="actionLoading" @click="runAnalysis">运行持仓分析</el-button>
         </div>
@@ -30,31 +31,37 @@
         <div class="metric">收益率<strong :class="profitClass(draftSummary.pnl)">{{ formatPercent(draftSummary.pnlRate) }}</strong></div>
       </div>
 
-      <el-table :data="draftRows" height="360">
-        <el-table-column label="代码" width="120">
-          <template #default="{ row }"><el-input v-model="row.symbol" placeholder="513050" /></template>
-        </el-table-column>
-        <el-table-column label="名称" min-width="150">
-          <template #default="{ row }"><el-input v-model="row.position_name" placeholder="中概互联" /></template>
-        </el-table-column>
-        <el-table-column label="类型" width="110">
+      <el-alert
+        class="table-hint"
+        type="info"
+        :closable="false"
+        show-icon
+        title="如果名称或现价为空，先点击自动补全；仍为空说明该代码还没有进入资产池或尚未同步行情。"
+      />
+
+      <el-table :data="draftRows" height="380">
+        <el-table-column label="代码" width="130">
           <template #default="{ row }">
-            <el-select v-model="row.asset_type">
-              <el-option label="ETF/基金" value="etf" />
-              <el-option label="股票" value="stock" />
-              <el-option label="现金" value="cash" />
-              <el-option label="其他" value="other" />
-            </el-select>
+            <el-input v-model="row.symbol" placeholder="513050" @change="resolveRows" />
           </template>
         </el-table-column>
-        <el-table-column label="持仓数量" width="140">
+        <el-table-column label="持仓数量" width="150">
           <template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :step="100" /></template>
-        </el-table-column>
-        <el-table-column label="现价" width="130">
-          <template #default="{ row }"><el-input-number v-model="row.current_price" :min="0" :precision="3" :step="0.001" /></template>
         </el-table-column>
         <el-table-column label="成本价" width="130">
           <template #default="{ row }"><el-input-number v-model="row.cost_price" :min="0" :precision="3" :step="0.001" /></template>
+        </el-table-column>
+        <el-table-column label="名称" min-width="140">
+          <template #default="{ row }">{{ row.position_name || '待补全' }}</template>
+        </el-table-column>
+        <el-table-column label="类型" width="110">
+          <template #default="{ row }"><el-tag size="small">{{ assetTypeText(row.asset_type) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="现价" width="120">
+          <template #default="{ row }">{{ row.current_price ? formatPrice(row.current_price) : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="价格日期" width="120">
+          <template #default="{ row }">{{ row.price_date || '-' }}</template>
         </el-table-column>
         <el-table-column label="市值" width="130">
           <template #default="{ row }">{{ formatMoney(rowMarketValue(row)) }}</template>
@@ -65,6 +72,12 @@
         <el-table-column label="盈亏" width="120">
           <template #default="{ row }">
             <span :class="profitClass(rowPnl(row))">{{ formatMoney(rowPnl(row)) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" min-width="170">
+          <template #default="{ row }">
+            <el-tag v-if="row.resolved" size="small" type="success">已补全</el-tag>
+            <span v-else class="muted">{{ row.resolve_message || '等待补全' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="90" fixed="right">
@@ -118,7 +131,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { analyzeHoldings, fetchHoldingAnalysis, fetchPositions, savePositionSnapshot, type HoldingAnalysis, type PortfolioPosition } from '../api/client'
+import {
+  analyzeHoldings,
+  fetchHoldingAnalysis,
+  fetchPositions,
+  resolvePositionSymbols,
+  savePositionSnapshot,
+  type HoldingAnalysis,
+  type PortfolioPosition,
+} from '../api/client'
 
 interface DraftPosition {
   symbol: string
@@ -127,6 +148,9 @@ interface DraftPosition {
   quantity: number
   current_price: number
   cost_price: number
+  price_date: string
+  resolved: boolean
+  resolve_message: string
 }
 
 const loading = ref(false)
@@ -135,9 +159,7 @@ const positionDate = ref(new Date().toISOString().slice(0, 10))
 const runId = ref(1)
 const positions = ref<PortfolioPosition[]>([])
 const analysis = ref<HoldingAnalysis[]>([])
-const draftRows = ref<DraftPosition[]>([
-  { symbol: '', position_name: '', asset_type: 'etf', quantity: 0, current_price: 0, cost_price: 0 },
-])
+const draftRows = ref<DraftPosition[]>([emptyRow()])
 
 const draftSummary = computed(() => {
   const marketValue = draftRows.value.reduce((sum, row) => sum + rowMarketValue(row), 0)
@@ -165,6 +187,9 @@ async function refresh() {
         quantity: Number(item.quantity || 0),
         current_price: Number(item.current_price || 0),
         cost_price: Number(item.cost_price || 0),
+        price_date: item.position_date,
+        resolved: Boolean(item.position_name && item.current_price),
+        resolve_message: '',
       }))
     }
   } finally {
@@ -172,25 +197,74 @@ async function refresh() {
   }
 }
 
+function emptyRow(): DraftPosition {
+  return {
+    symbol: '',
+    position_name: '',
+    asset_type: 'etf',
+    quantity: 0,
+    current_price: 0,
+    cost_price: 0,
+    price_date: '',
+    resolved: false,
+    resolve_message: '',
+  }
+}
+
 function addRow() {
-  draftRows.value.push({ symbol: '', position_name: '', asset_type: 'etf', quantity: 0, current_price: 0, cost_price: 0 })
+  draftRows.value.push(emptyRow())
 }
 
 function removeRow(index: number) {
   draftRows.value.splice(index, 1)
 }
 
+async function resolveRows() {
+  const symbols = draftRows.value.map((row) => row.symbol.trim()).filter(Boolean)
+  if (!symbols.length) {
+    ElMessage.warning('请先填写代码')
+    return
+  }
+  actionLoading.value = true
+  try {
+    const details = await resolvePositionSymbols(symbols)
+    const detailMap = new Map(details.map((item) => [item.symbol, item]))
+    draftRows.value = draftRows.value.map((row) => {
+      const symbol = row.symbol.trim()
+      const detail = detailMap.get(symbol)
+      if (!detail) return row
+      return {
+        ...row,
+        symbol,
+        position_name: detail.position_name || row.position_name,
+        asset_type: normalizeAssetType(detail.asset_type),
+        current_price: Number(detail.current_price || 0),
+        price_date: detail.price_date || '',
+        resolved: detail.resolved,
+        resolve_message: detail.message || '',
+      }
+    })
+    const unresolvedCount = details.filter((item) => !item.resolved).length
+    if (unresolvedCount) {
+      ElMessage.warning(`${unresolvedCount} 个代码未完全补全，请检查资产池或行情同步状态`)
+    } else {
+      ElMessage.success('名称、类型和现价已补全')
+    }
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '补全失败'))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
 async function saveSnapshot() {
   actionLoading.value = true
   try {
     const rows = draftRows.value
-      .filter((row) => row.symbol.trim() && rowMarketValue(row) > 0)
+      .filter((row) => row.symbol.trim() && Number(row.quantity || 0) > 0)
       .map((row) => ({
         symbol: row.symbol.trim(),
-        position_name: row.position_name.trim(),
-        asset_type: row.asset_type,
         quantity: row.quantity,
-        current_price: row.current_price,
         cost_price: row.cost_price,
       }))
     if (!rows.length) {
@@ -199,8 +273,9 @@ async function saveSnapshot() {
     }
     positions.value = await savePositionSnapshot({ position_date: positionDate.value, positions: rows })
     ElMessage.success('持仓快照已保存')
+    await refresh()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存失败')
+    ElMessage.error(errorMessage(error, '保存失败'))
   } finally {
     actionLoading.value = false
   }
@@ -212,7 +287,7 @@ async function runAnalysis() {
     analysis.value = await analyzeHoldings({ run_id: runId.value, analysis_date: positionDate.value })
     ElMessage.success('持仓分析完成')
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '分析失败')
+    ElMessage.error(errorMessage(error, '分析失败'))
   } finally {
     actionLoading.value = false
   }
@@ -236,6 +311,10 @@ function roundMoney(value: number) {
 
 function formatMoney(value: number) {
   return `¥${Number(value || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function formatPrice(value: number) {
+  return Number(value || 0).toFixed(3)
 }
 
 function formatPercent(value: number) {
@@ -277,5 +356,11 @@ function tagType(action: string) {
   if (action === 'ADD') return 'success'
   if (action === 'REDUCE' || action === 'REDUCE_OR_EXIT') return 'warning'
   return 'info'
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+  if (detail) return detail
+  return error instanceof Error ? error.message : fallback
 }
 </script>

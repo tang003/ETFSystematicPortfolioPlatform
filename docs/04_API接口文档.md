@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.26.0-broker-style-holdings`
+当前版本：`v0.27.0-auto-resolved-holdings`
 
 ## 认证约定
 
@@ -474,7 +474,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 ## POST /api/portfolio/positions
 
-用途：保存用户当前 ETF 持仓快照。系统会按本次快照的总市值自动计算每只 ETF 的当前权重。
+用途：保存用户当前 ETF 持仓快照。用户最少只需提交代码、持仓数量和成本价；系统会根据资产主表补全名称/类型，根据最新清洗行情补全现价，并按本次快照总市值自动计算每只 ETF 的当前权重。
 
 请求示例：
 
@@ -484,18 +484,12 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "positions": [
     {
       "symbol": "513050",
-      "position_name": "中概互联",
-      "asset_type": "etf",
       "quantity": 1700,
-      "current_price": 1.092,
       "cost_price": 1.151
     },
     {
       "symbol": "000519",
-      "position_name": "中兵红箭",
-      "asset_type": "stock",
       "quantity": 100,
-      "current_price": 23.29,
       "cost_price": 23.34
     }
   ]
@@ -509,19 +503,49 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | position_date | date | 是 | 持仓快照日期 |
 | positions | array | 是 | 持仓列表，可包含 ETF、场内基金、股票或其他资产 |
 | positions[].symbol | string | 是 | 证券代码 |
-| positions[].position_name | string | 否 | 持仓名称 |
-| positions[].asset_type | string | 否 | 资产类型：`etf`、`stock`、`cash`、`other` |
-| positions[].quantity | number | 否 | 持有份额 |
-| positions[].current_price | number | 否 | 当前价格；与数量一起可自动计算当前市值 |
-| positions[].cost_price | number | 否 | 成本价格；与数量一起可自动计算持仓成本 |
+| positions[].position_name | string | 否 | 持仓名称；通常不需要传，系统会按代码从资产主表补全 |
+| positions[].asset_type | string | 否 | 资产类型：`etf`、`stock`、`cash`、`other`；通常不需要传，系统会按代码推断 |
+| positions[].quantity | number | 是 | 持有份额 |
+| positions[].current_price | number | 否 | 当前价格；通常不需要传，系统会使用最新清洗行情收盘价 |
+| positions[].cost_price | number | 是 | 成本价格；与数量一起自动计算持仓成本 |
 | positions[].market_value | number | 否 | 当前市值；兼容旧录入方式 |
 | positions[].cost_basis | number | 否 | 持仓成本；兼容旧录入方式 |
 
 响应：返回保存后的持仓列表，包含系统计算出的 `market_value`、`cost_basis`、`unrealized_pnl`、`unrealized_pnl_rate` 和 `weight`。
 
+如果某个代码不存在资产主表，或没有已清洗行情价格，接口会返回 400，并提示需要先同步资产或行情。
+
 ## GET /api/portfolio/positions
 
 用途：查询最近一次持仓快照。
+
+## POST /api/portfolio/positions/resolve
+
+用途：根据代码批量预览持仓补全结果，供前端在保存前展示名称、类型、最新价格和价格日期。
+
+请求示例：
+
+```json
+{
+  "symbols": ["513050", "159928"]
+}
+```
+
+响应示例：
+
+```json
+[
+  {
+    "symbol": "513050",
+    "position_name": "中概互联",
+    "asset_type": "etf",
+    "current_price": 1.092,
+    "price_date": "2026-07-09",
+    "resolved": true,
+    "message": null
+  }
+]
+```
 
 ## POST /api/portfolio/holdings/analyze
 

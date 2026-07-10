@@ -33,6 +33,20 @@ class PortfolioSnapshotRequest(BaseModel):
     positions: list[PortfolioPositionUpsert]
 
 
+class PositionResolveRequest(BaseModel):
+    symbols: list[str]
+
+
+class PositionResolveRead(BaseModel):
+    symbol: str
+    position_name: str | None = None
+    asset_type: str | None = None
+    current_price: Decimal | None = None
+    price_date: date | None = None
+    resolved: bool
+    message: str | None = None
+
+
 class PortfolioPositionRead(BaseModel):
     position_date: date
     symbol: str

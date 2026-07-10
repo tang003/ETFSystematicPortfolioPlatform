@@ -6,8 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import Base, engine
 from app.models.factor import FactorDaily
+from app.models.asset import AssetMaster
+from app.models.market_data import MarketDataClean
 from app.models.portfolio import HoldingAnalysisResult, PortfolioPosition, TargetPortfolio
-from app.schemas.portfolio_schema import PortfolioSnapshotRequest
+from app.schemas.portfolio_schema import PortfolioSnapshotRequest, PositionResolveRead
 from app.services.strategy_service import latest_target_portfolio
 
 MIN_ACTION_DIFF = Decimal("0.03")
@@ -19,7 +21,7 @@ def ensure_holding_tables() -> None:
 
 def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> list[PortfolioPosition]:
     db.execute(delete(PortfolioPosition).where(PortfolioPosition.position_date == request.position_date))
-    normalized = [normalize_position_input(item) for item in request.positions if item.symbol.strip()]
+    normalized = [normalize_position_input(item, resolve_position_detail(db, item.symbol)) for item in request.positions if item.symbol.strip()]
     total_value = sum((item["market_value"] for item in normalized), Decimal("0"))
     if total_value <= 0:
         raise ValueError("Total market value must be greater than 0")
@@ -46,9 +48,9 @@ def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> 
     return list_positions(db, position_date=request.position_date)
 
 
-def normalize_position_input(item) -> dict:
+def normalize_position_input(item, detail: PositionResolveRead | None = None) -> dict:
     quantity = item.quantity or Decimal("0")
-    current_price = item.current_price
+    current_price = item.current_price if item.current_price is not None else (detail.current_price if detail else None)
     cost_price = item.cost_price
     market_value = item.market_value
     cost_basis = item.cost_basis
@@ -62,7 +64,7 @@ def normalize_position_input(item) -> dict:
     if cost_price is None and quantity > 0 and cost_basis is not None:
         cost_price = (cost_basis / quantity).quantize(Decimal("0.000001"))
     if market_value is None or market_value <= 0:
-        raise ValueError(f"Position {item.symbol} must provide market_value or quantity/current_price")
+        raise ValueError(f"{item.symbol} 缺少最新价格，无法计算市值。请先同步该代码行情，或临时补充 current_price。")
 
     unrealized_pnl = None
     unrealized_pnl_rate = None
@@ -72,8 +74,8 @@ def normalize_position_input(item) -> dict:
 
     return {
         "symbol": item.symbol.strip(),
-        "position_name": item.position_name.strip() if item.position_name else None,
-        "asset_type": (item.asset_type or "etf").strip().lower(),
+        "position_name": item.position_name.strip() if item.position_name else (detail.position_name if detail else None),
+        "asset_type": (item.asset_type or (detail.asset_type if detail else None) or "etf").strip().lower(),
         "quantity": quantity,
         "current_price": current_price,
         "cost_price": cost_price,
@@ -82,6 +84,61 @@ def normalize_position_input(item) -> dict:
         "unrealized_pnl": unrealized_pnl,
         "unrealized_pnl_rate": unrealized_pnl_rate,
     }
+
+
+def resolve_position_details(db: Session, symbols: list[str]) -> list[PositionResolveRead]:
+    seen: set[str] = set()
+    resolved = []
+    for symbol in symbols:
+        cleaned = symbol.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        resolved.append(resolve_position_detail(db, cleaned))
+    return resolved
+
+
+def resolve_position_detail(db: Session, symbol: str) -> PositionResolveRead:
+    cleaned = symbol.strip()
+    asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == cleaned))
+    latest_bar = db.scalar(
+        select(MarketDataClean)
+        .where(MarketDataClean.symbol == cleaned)
+        .where(MarketDataClean.close.is_not(None))
+        .order_by(MarketDataClean.trade_date.desc())
+        .limit(1)
+    )
+
+    name = asset.name if asset else None
+    asset_type = infer_asset_type(asset.asset_class if asset else None)
+    current_price = latest_bar.close if latest_bar else None
+    price_date = latest_bar.trade_date if latest_bar else None
+    messages = []
+    if asset is None:
+        messages.append("资产主表未找到该代码")
+    if latest_bar is None:
+        messages.append("未找到已清洗行情价格")
+
+    return PositionResolveRead(
+        symbol=cleaned,
+        position_name=name,
+        asset_type=asset_type,
+        current_price=current_price,
+        price_date=price_date,
+        resolved=asset is not None and current_price is not None,
+        message="；".join(messages) if messages else None,
+    )
+
+
+def infer_asset_type(asset_class: str | None) -> str:
+    normalized = (asset_class or "").lower()
+    if normalized in {"stock", "equity"}:
+        return "stock"
+    if normalized == "cash":
+        return "cash"
+    if normalized in {"bond", "commodity", "money_market", "qdii", "index"}:
+        return "etf"
+    return "etf"
 
 
 def latest_position_date(db: Session) -> date | None:

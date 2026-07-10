@@ -11,9 +11,11 @@ from app.schemas.portfolio_schema import (
     InvestmentPlanSuggestionRead,
     PortfolioPositionRead,
     PortfolioSnapshotRequest,
+    PositionResolveRead,
+    PositionResolveRequest,
     TargetPortfolioRead,
 )
-from app.services.holding_service import analyze_holdings, list_holding_analysis, list_positions, upsert_position_snapshot
+from app.services.holding_service import analyze_holdings, list_holding_analysis, list_positions, resolve_position_details, upsert_position_snapshot
 from app.services.investment_plan_service import (
     analyze_investment_plan,
     create_investment_plan,
@@ -35,12 +37,23 @@ def save_position_snapshot(
     request: PortfolioSnapshotRequest,
     db: Session = Depends(get_db),
 ) -> list[PortfolioPositionRead]:
-    return upsert_position_snapshot(db, request)
+    try:
+        return upsert_position_snapshot(db, request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/positions", response_model=list[PortfolioPositionRead])
 def get_positions(db: Session = Depends(get_db)) -> list[PortfolioPositionRead]:
     return list_positions(db)
+
+
+@router.post("/positions/resolve", response_model=list[PositionResolveRead])
+def resolve_positions(
+    request: PositionResolveRequest,
+    db: Session = Depends(get_db),
+) -> list[PositionResolveRead]:
+    return resolve_position_details(db, request.symbols)
 
 
 @router.post("/holdings/analyze", response_model=list[HoldingAnalysisRead])

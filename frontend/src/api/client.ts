@@ -143,6 +143,16 @@ export interface PortfolioPosition {
   created_at: string
 }
 
+export interface PositionResolveResult {
+  symbol: string
+  position_name: string | null
+  asset_type: string | null
+  current_price: string | null
+  price_date: string | null
+  resolved: boolean
+  message: string | null
+}
+
 export interface HoldingAnalysis {
   run_id: number | null
   analysis_date: string
@@ -299,6 +309,8 @@ export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
 export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data
+export const resolvePositionSymbols = async (symbols: string[]) =>
+  (await api.post<PositionResolveResult[]>('/api/portfolio/positions/resolve', { symbols })).data
 export const savePositionSnapshot = async (payload: {
   position_date: string
   positions: Array<{
