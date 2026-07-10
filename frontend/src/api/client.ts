@@ -336,6 +336,8 @@ export const startWorkflowTask = async (payload: {
   market_source?: string
   incremental_sync?: boolean
   request_interval_seconds?: number
+  strict_data_validation?: boolean
+  minimum_history_bars?: number
   strategy_code: string
   portfolio_value?: number
   generate_report?: boolean

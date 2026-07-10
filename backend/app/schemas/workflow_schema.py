@@ -13,6 +13,8 @@ class WorkflowRunRequest(BaseModel):
     market_source: str = Field(default="akshare")
     incremental_sync: bool = Field(default=True)
     request_interval_seconds: float = Field(default=0, ge=0, le=10)
+    strict_data_validation: bool = Field(default=True)
+    minimum_history_bars: int = Field(default=200, ge=20, le=1000)
     strategy_code: str = Field(default="core_etf_rotation")
     portfolio_value: Decimal = Field(default=Decimal("100000"), gt=0)
     generate_report: bool = True

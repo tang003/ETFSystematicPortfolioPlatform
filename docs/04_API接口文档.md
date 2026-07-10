@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.18.4-asset-pool-controls`
+当前版本：`v0.19.0-data-readiness-gate`
 
 ## GET /health
 
@@ -745,6 +745,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "market_source": "tushare",
   "incremental_sync": true,
   "request_interval_seconds": 1.5,
+  "strict_data_validation": true,
+  "minimum_history_bars": 200,
   "strategy_code": "core_etf_rotation",
   "portfolio_value": 100000,
   "generate_report": true
@@ -763,6 +765,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
 | market_source | string | 否 | 行情源，支持 `tushare`、`akshare`、`eastmoney` |
 | incremental_sync | boolean | 否 | 是否按增量模式同步交易日历和行情，默认 `true` |
 | request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，Tushare 建议 `1.5` 或更高 |
+| strict_data_validation | boolean | 否 | 严格数据门禁，默认 `true`；任一标的失败或不新鲜时停止后续建议生成 |
+| minimum_history_bars | integer | 否 | 每只 ETF 最少历史日线数量，默认 `200`，范围 20~1000 |
 | strategy_code | string | 否 | 策略代码，默认 `core_etf_rotation` |
 | portfolio_value | number | 否 | 组合市值，用于生成调仓建议金额 |
 | generate_report | boolean | 否 | 是否在流程末尾生成月度报告 |
@@ -771,3 +775,5 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 - `calendar_source` 和 `market_source` 允许前端控制真实数据源与备用数据源。
 - 使用共享 Tushare 账号时，建议同时控制 `max_symbols` 和 `request_interval_seconds`。
+- 全流程会先固定本次 ETF 范围，行情、质量检查和因子计算始终使用同一批代码。
+- 严格门禁会检查批量失败数量、最近交易日和历史样本数；失败详情保存在对应任务步骤的 `result_payload` 中，可补齐数据后重试。

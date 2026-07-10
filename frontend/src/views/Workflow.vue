@@ -35,6 +35,12 @@
         <el-form-item label="增量同步">
           <el-switch v-model="incrementalSync" />
         </el-form-item>
+        <el-form-item label="严格门禁">
+          <el-switch v-model="strictDataValidation" />
+        </el-form-item>
+        <el-form-item label="最少样本">
+          <el-input-number v-model="minimumHistoryBars" :min="20" :max="1000" :step="20" />
+        </el-form-item>
         <el-form-item label="策略代码">
           <el-input v-model="strategyCode" />
         </el-form-item>
@@ -118,7 +124,7 @@ interface DisplayStep {
 
 const stepDescriptions: Record<string, string> = {
   calendar: '写入 A 股交易日历，用于缺失数据检查。',
-  market: '拉取原始行情并清洗到 clean 表。',
+  market: '拉取并清洗行情，同时检查最近交易日和历史样本数量。',
   quality: '检查日期范围内的缺失交易日。',
   factors: '生成趋势、动量、波动、回撤、流动性等评分。',
   strategy: '生成 Alpha 信号和目标组合。',
@@ -136,6 +142,8 @@ const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
 const incrementalSync = ref(true)
+const strictDataValidation = ref(true)
+const minimumHistoryBars = ref(200)
 const strategyCode = ref('core_etf_rotation')
 const portfolioValue = ref(100000)
 const shouldGenerateReport = ref(true)
@@ -189,7 +197,7 @@ const workflowHintTitle = computed(() => {
 const workflowHintText = computed(() => {
   if (marketSource.value === 'tushare') {
     return incrementalSync.value
-      ? '适合正式跑小批量真实数据。已开启增量同步，建议控制 ETF 数量，并保留 1.5 秒以上的请求间隔。'
+      ? '适合正式真实数据。已开启增量同步和数据门禁；任一 ETF 数据不完整时不会继续生成投资建议。'
       : '适合正式跑小批量真实数据。当前是全量模式，建议缩短日期范围，并保留 1.5 秒以上的请求间隔。'
   }
   if (marketSource.value === 'akshare') {
@@ -223,6 +231,8 @@ async function startWorkflow() {
       market_source: marketSource.value,
       incremental_sync: incrementalSync.value,
       request_interval_seconds: requestIntervalSeconds.value,
+      strict_data_validation: strictDataValidation.value,
+      minimum_history_bars: minimumHistoryBars.value,
       strategy_code: strategyCode.value,
       portfolio_value: portfolioValue.value,
       generate_report: shouldGenerateReport.value,

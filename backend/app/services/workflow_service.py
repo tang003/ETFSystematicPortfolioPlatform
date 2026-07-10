@@ -5,16 +5,17 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import Base, SessionLocal, engine
+from app.models.market_data import MarketDataClean, TradingCalendar
 from app.models.workflow import WorkflowTask, WorkflowTaskStep
 from app.schemas.workflow_schema import WorkflowRunRequest
 from app.services.calendar_service import sync_trading_calendar
 from app.services.data_quality_service import check_clean_bars
 from app.services.factor_service import calculate_factors
-from app.services.market_service import sync_market_data
+from app.services.market_service import limit_symbols, resolve_symbols, sync_market_data
 from app.services.report_service import generate_monthly_report
 from app.services.risk_service import generate_rebalance_orders, run_risk_check
 from app.services.strategy_service import run_strategy
@@ -141,6 +142,7 @@ def run_workflow_task(task_id: int) -> None:
         request = WorkflowRunRequest.model_validate(task.request_payload)
         mark_task_running(db, task)
         results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
+        workflow_symbols = resolve_workflow_symbols(db, request.symbols, request.max_symbols)
 
         run_id = existing_run_id(task)
         for step_key, _ in WORKFLOW_STEPS:
@@ -167,30 +169,36 @@ def run_workflow_task(task_id: int) -> None:
                     db,
                     task,
                     step_key,
-                    lambda: sync_market_data(
+                    lambda: run_market_step(
                         db,
-                        symbols=request.symbols,
+                        symbols=workflow_symbols,
                         start_date=request.start_date,
                         end_date=request.end_date,
                         source=request.market_source,
                         incremental=request.incremental_sync,
-                        max_symbols=request.max_symbols,
-                        clean_after_sync=True,
                         request_interval_seconds=request.request_interval_seconds,
+                        strict=request.strict_data_validation,
+                        minimum_history_bars=request.minimum_history_bars,
                     ),
                     results,
                 )
             elif step_key == "quality":
-                if request.symbols:
-                    execute_step(db, task, step_key, lambda: run_quality_checks(db, request.symbols or [], request.start_date, request.end_date), results)
+                if workflow_symbols:
+                    execute_step(db, task, step_key, lambda: run_quality_checks(db, workflow_symbols, request.start_date, request.end_date), results)
                 else:
-                    skip_step(db, task, step_key, "未指定 ETF 代码，跳过指定范围的数据质量检查。")
+                    raise ValueError("研究范围中没有可用的 ETF，请先在 ETF 池中启用研究对象。")
             elif step_key == "factors":
                 execute_step(
                     db,
                     task,
                     step_key,
-                    lambda: calculate_factors(db, symbols=request.symbols, start_date=request.start_date, end_date=request.end_date),
+                    lambda: run_factor_step(
+                        db,
+                        symbols=workflow_symbols,
+                        start_date=request.start_date,
+                        end_date=request.end_date,
+                        strict=request.strict_data_validation,
+                    ),
                     results,
                 )
             elif step_key == "strategy":
@@ -252,7 +260,14 @@ def execute_step(
     step.message = "开始执行"
     db.commit()
 
-    result = action()
+    try:
+        result = action()
+    except WorkflowStepValidationError as exc:
+        step.result_payload = json_ready(exc.result)
+        results[step_key] = json_ready(exc.result)
+        task.result_payload = json_ready({"run_id": existing_run_id(task), "steps": results})
+        db.commit()
+        raise
     db.refresh(task)
     if task.status == "cancelled":
         raise WorkflowCancelled()
@@ -281,6 +296,153 @@ def run_quality_checks(db: Session, symbols: list[str], start_date: date, end_da
         db.commit()
         results.append({"symbol": symbol, "quality_logs": log_count, "status": "success"})
     return {"status": "success", "results": results, "total_logs": sum(item["quality_logs"] for item in results)}
+
+
+class WorkflowStepValidationError(ValueError):
+    def __init__(self, message: str, result: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.result = result
+
+
+def resolve_workflow_symbols(db: Session, symbols: list[str] | None, max_symbols: int | None) -> list[str]:
+    resolved, _ = limit_symbols(resolve_symbols(db, symbols), max_symbols)
+    if not resolved:
+        raise ValueError("研究范围中没有可用的 ETF，请先在 ETF 池中启用研究对象。")
+    return resolved
+
+
+def run_market_step(
+    db: Session,
+    *,
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+    source: str,
+    incremental: bool,
+    request_interval_seconds: float,
+    strict: bool,
+    minimum_history_bars: int,
+) -> dict[str, Any]:
+    result = sync_market_data(
+        db,
+        symbols=symbols,
+        start_date=start_date,
+        end_date=end_date,
+        source=source,
+        incremental=incremental,
+        max_symbols=None,
+        clean_after_sync=True,
+        request_interval_seconds=request_interval_seconds,
+    )
+    validate_batch_result("行情同步", result, strict=strict)
+    readiness = inspect_market_readiness(
+        db,
+        symbols=symbols,
+        start_date=start_date,
+        end_date=end_date,
+        minimum_history_bars=minimum_history_bars,
+    )
+    result["readiness"] = readiness
+    if readiness["ready_count"] == 0:
+        raise WorkflowStepValidationError("没有 ETF 通过数据新鲜度和历史样本门禁，流程已停止。", result)
+    if strict and readiness["not_ready_count"] > 0:
+        failed_symbols = "、".join(item["symbol"] for item in readiness["not_ready"])
+        raise WorkflowStepValidationError(f"ETF 数据未通过严格门禁：{failed_symbols}。", result)
+    return result
+
+
+def run_factor_step(
+    db: Session,
+    *,
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+    strict: bool,
+) -> dict[str, Any]:
+    result = calculate_factors(db, symbols=symbols, start_date=start_date, end_date=end_date)
+    validate_batch_result("因子计算", result, strict=strict)
+    return result
+
+
+def validate_batch_result(step_name: str, result: dict[str, Any], *, strict: bool) -> None:
+    total = int(result.get("total_symbols", 0))
+    success_count = int(result.get("success_count", 0))
+    failed_count = int(result.get("failed_count", 0))
+    if total == 0:
+        raise WorkflowStepValidationError(f"{step_name}没有可处理的 ETF，流程已停止。", result)
+    if success_count == 0:
+        raise WorkflowStepValidationError(f"{step_name}全部失败，流程已停止。", result)
+    if strict and failed_count > 0:
+        raise WorkflowStepValidationError(
+            f"{step_name}有 {failed_count}/{total} 只 ETF 失败，严格数据门禁已停止后续建议生成。",
+            result,
+        )
+
+
+def inspect_market_readiness(
+    db: Session,
+    *,
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+    minimum_history_bars: int,
+) -> dict[str, Any]:
+    required_trade_date = db.scalar(
+        select(func.max(TradingCalendar.trade_date))
+        .where(TradingCalendar.market == "CN")
+        .where(TradingCalendar.is_open.is_(True))
+        .where(TradingCalendar.trade_date >= start_date)
+        .where(TradingCalendar.trade_date <= end_date)
+    )
+    if required_trade_date is None:
+        return {
+            "required_trade_date": None,
+            "minimum_history_bars": minimum_history_bars,
+            "ready_count": 0,
+            "not_ready_count": len(symbols),
+            "ready": [],
+            "not_ready": [{"symbol": symbol, "reasons": ["missing_trading_calendar"]} for symbol in symbols],
+        }
+
+    rows = db.execute(
+        select(
+            MarketDataClean.symbol,
+            func.max(MarketDataClean.trade_date).label("latest_trade_date"),
+            func.count(MarketDataClean.id).label("bar_count"),
+        )
+        .where(MarketDataClean.symbol.in_(symbols))
+        .where(MarketDataClean.trade_date >= start_date)
+        .where(MarketDataClean.trade_date <= end_date)
+        .group_by(MarketDataClean.symbol)
+    ).all()
+    stats = {row.symbol: row for row in rows}
+    ready: list[dict[str, Any]] = []
+    not_ready: list[dict[str, Any]] = []
+    for symbol in symbols:
+        row = stats.get(symbol)
+        latest_trade_date = row.latest_trade_date if row else None
+        bar_count = int(row.bar_count) if row else 0
+        reasons = []
+        if latest_trade_date is None or latest_trade_date < required_trade_date:
+            reasons.append("stale_market_data")
+        if bar_count < minimum_history_bars:
+            reasons.append("insufficient_history")
+        item = {
+            "symbol": symbol,
+            "latest_trade_date": latest_trade_date,
+            "bar_count": bar_count,
+            "reasons": reasons,
+        }
+        (not_ready if reasons else ready).append(item)
+
+    return {
+        "required_trade_date": required_trade_date,
+        "minimum_history_bars": minimum_history_bars,
+        "ready_count": len(ready),
+        "not_ready_count": len(not_ready),
+        "ready": ready,
+        "not_ready": not_ready,
+    }
 
 
 def mark_task_running(db: Session, task: WorkflowTask) -> None:
