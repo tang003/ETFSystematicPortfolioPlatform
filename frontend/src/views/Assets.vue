@@ -18,6 +18,7 @@
         <div class="metric">启用研究<strong>{{ enabledAssets.length }}</strong></div>
         <div class="metric">跨境 ETF<strong>{{ crossBorderCount }}</strong></div>
         <div class="metric">高风险主题<strong>{{ highRiskCount }}</strong></div>
+        <div class="metric">可交易性弱<strong>{{ weakTradabilityCount }}</strong></div>
       </div>
 
       <div class="quick-filter-bar">
@@ -104,6 +105,9 @@
             <el-option label="仅境内" value="no" />
           </el-select>
         </el-form-item>
+        <el-form-item label="评分下限">
+          <el-slider v-model="tradabilityScoreMin" :min="0" :max="100" :step="10" show-stops />
+        </el-form-item>
       </el-form>
 
       <el-table :data="filteredAssets" height="620" empty-text="暂无 ETF，先导入示例池或批量导入">
@@ -124,6 +128,15 @@
           <template #default="{ row }"><el-tag :type="row.is_cross_border ? 'warning' : 'info'" size="small">{{ row.is_cross_border ? '是' : '否' }}</el-tag></template>
         </el-table-column>
         <el-table-column prop="exchange" label="交易所" width="90" />
+        <el-table-column label="可交易性" width="130">
+          <template #default="{ row }">
+            <el-tooltip :content="tradabilityNotes(row.symbol)" placement="top">
+              <el-tag :type="scoreTagType(tradabilityScore(row.symbol))" size="small">
+                {{ tradabilityScoreText(row.symbol) }}
+              </el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column label="启用研究" width="120">
           <template #default="{ row }">
             <el-switch :model-value="row.enabled" :loading="togglingSymbol === row.symbol" @change="(value: string | number | boolean) => toggleAsset(row.symbol, value)" />
@@ -138,9 +151,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchUpsertAssets, fetchAssets, syncAssetUniverse, updateAsset, type Asset, type AssetUpsertItem } from '../api/client'
+import { batchUpsertAssets, fetchAssets, scoreEtfTradability, syncAssetUniverse, updateAsset, type Asset, type AssetUpsertItem, type EtfCompareMetric } from '../api/client'
 
 const assets = ref<Asset[]>([])
+const tradabilityMetrics = ref<Record<string, EtfCompareMetric>>({})
 const loading = ref(true)
 const actionLoading = ref(false)
 const importText = ref('')
@@ -150,6 +164,7 @@ const assetClassFilter = ref('all')
 const assetRegionFilter = ref('all')
 const crossBorderFilter = ref<'all' | 'yes' | 'no'>('all')
 const riskLevelMax = ref(5)
+const tradabilityScoreMin = ref(0)
 const togglingSymbol = ref('')
 
 const classQuickFilters = [
@@ -197,8 +212,23 @@ onMounted(async () => {
 async function refresh() {
   try {
     assets.value = await fetchAssets()
+    await refreshTradabilityScores()
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshTradabilityScores() {
+  const symbols = assets.value.map((item) => item.symbol)
+  if (!symbols.length) {
+    tradabilityMetrics.value = {}
+    return
+  }
+  try {
+    const rows = await scoreEtfTradability({ symbols })
+    tradabilityMetrics.value = Object.fromEntries(rows.map((item) => [item.symbol, item]))
+  } catch {
+    tradabilityMetrics.value = {}
   }
 }
 
@@ -299,6 +329,12 @@ function parseImportText(value: string): AssetUpsertItem[] {
 const enabledAssets = computed(() => assets.value.filter((item) => item.enabled))
 const crossBorderCount = computed(() => assets.value.filter((item) => item.is_cross_border).length)
 const highRiskCount = computed(() => assets.value.filter((item) => Number(item.risk_level || 0) >= 5).length)
+const weakTradabilityCount = computed(() =>
+  assets.value.filter((item) => {
+    const score = tradabilityScore(item.symbol)
+    return score !== null && score < 60
+  }).length,
+)
 
 const assetClassOptions = computed(() =>
   Array.from(new Set(assets.value.map((item) => item.asset_class).filter(Boolean))).sort(),
@@ -323,7 +359,9 @@ const filteredAssets = computed(() =>
       crossBorderFilter.value === 'all' ||
       (crossBorderFilter.value === 'yes' && item.is_cross_border) ||
       (crossBorderFilter.value === 'no' && !item.is_cross_border)
-    return matchesKeyword && matchesEnabled && matchesClass && matchesRegion && matchesRisk && matchesCrossBorder
+    const score = tradabilityScore(item.symbol)
+    const matchesTradability = score === null ? tradabilityScoreMin.value === 0 : score >= tradabilityScoreMin.value
+    return matchesKeyword && matchesEnabled && matchesClass && matchesRegion && matchesRisk && matchesCrossBorder && matchesTradability
   }),
 )
 
@@ -364,6 +402,31 @@ function riskTagType(value: number) {
   if (risk <= 2) return 'success'
   if (risk === 3) return 'info'
   if (risk === 4) return 'warning'
+  return 'danger'
+}
+
+function tradabilityScore(symbol: string) {
+  const value = tradabilityMetrics.value[symbol]?.tradability_score
+  return typeof value === 'number' ? value : null
+}
+
+function tradabilityScoreText(symbol: string) {
+  const metric = tradabilityMetrics.value[symbol]
+  if (!metric) return '未评分'
+  return `${metric.tradability_score} ${metric.tradability_level}`
+}
+
+function tradabilityNotes(symbol: string) {
+  const metric = tradabilityMetrics.value[symbol]
+  if (!metric) return '暂无可交易性评分，请先同步行情。'
+  return metric.tradability_notes.join('；')
+}
+
+function scoreTagType(value: number | null) {
+  if (value === null) return 'info'
+  if (value >= 80) return 'success'
+  if (value >= 60) return 'info'
+  if (value >= 40) return 'warning'
   return 'danger'
 }
 

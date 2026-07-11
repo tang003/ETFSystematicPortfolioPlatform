@@ -38,6 +38,27 @@ def compare_etfs(
     }
 
 
+def score_etf_tradability(
+    db: Session,
+    *,
+    symbols: list[str],
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> list[dict]:
+    resolved_end = end_date or date.today()
+    resolved_start = start_date or (resolved_end - timedelta(days=365))
+    cleaned_symbols = dedupe_symbols(symbols)
+    asset_meta = load_asset_meta(db, cleaned_symbols)
+    return [
+        build_compare_metric(
+            symbol,
+            load_clean_bars(db, symbol=symbol, start_date=resolved_start, end_date=resolved_end),
+            asset_meta.get(symbol),
+        )
+        for symbol in cleaned_symbols
+    ]
+
+
 def dedupe_symbols(symbols: list[str]) -> list[str]:
     resolved: list[str] = []
     seen: set[str] = set()

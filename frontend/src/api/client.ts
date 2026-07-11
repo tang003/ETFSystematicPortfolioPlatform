@@ -397,6 +397,8 @@ export const updateAsset = async (symbol: string, payload: { enabled?: boolean; 
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
 export const compareEtfs = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<EtfCompareResponse>('/api/etf-compare', payload)).data
+export const scoreEtfTradability = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
+  (await api.post<EtfCompareMetric[]>('/api/etf-compare/tradability', payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchMarketSyncPlan = async (syncScope = 'core') =>

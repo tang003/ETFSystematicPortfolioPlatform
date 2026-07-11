@@ -14,6 +14,7 @@ from app.models.workflow import WorkflowTask, WorkflowTaskStep
 from app.schemas.workflow_schema import WorkflowRunRequest
 from app.services.calendar_service import sync_trading_calendar
 from app.services.data_quality_service import check_clean_bars
+from app.services.etf_compare_service import build_compare_metric
 from app.services.factor_service import calculate_factors
 from app.services.market_service import limit_symbols, resolve_symbols, sync_market_data
 from app.services.report_service import generate_monthly_report
@@ -476,6 +477,8 @@ def inspect_market_readiness(
             "bar_count": bar_count,
             "reasons": reasons,
         }
+        score_item = inspect_symbol_tradability(db, symbol=symbol, start_date=start_date, end_date=end_date)
+        item.update(score_item)
         (not_ready if reasons else ready).append(item)
 
     return {
@@ -483,8 +486,38 @@ def inspect_market_readiness(
         "minimum_history_bars": minimum_history_bars,
         "ready_count": len(ready),
         "not_ready_count": len(not_ready),
+        "weak_tradability_count": sum(
+            1
+            for item in [*ready, *not_ready]
+            if item.get("tradability_score") is not None and int(item["tradability_score"]) < 60
+        ),
         "ready": ready,
         "not_ready": not_ready,
+    }
+
+
+def inspect_symbol_tradability(db: Session, *, symbol: str, start_date: date, end_date: date) -> dict[str, Any]:
+    rows = list(
+        db.scalars(
+            select(MarketDataClean)
+            .where(
+                MarketDataClean.symbol == symbol,
+                MarketDataClean.trade_date >= start_date,
+                MarketDataClean.trade_date <= end_date,
+                MarketDataClean.close.is_not(None),
+            )
+            .order_by(MarketDataClean.trade_date)
+        ).all()
+    )
+    metric = build_compare_metric(symbol, rows, None)
+    warnings = []
+    if metric["tradability_score"] < 60:
+        warnings.append("weak_tradability")
+    return {
+        "tradability_score": metric["tradability_score"],
+        "tradability_level": metric["tradability_level"],
+        "tradability_notes": metric["tradability_notes"],
+        "warnings": warnings,
     }
 
 

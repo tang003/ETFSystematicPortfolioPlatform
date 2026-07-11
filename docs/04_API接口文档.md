@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.34.0-etf-compare-dca-report`
+当前版本：`v0.34.1-tradability-integration`
 
 ## 认证约定
 
@@ -206,6 +206,22 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 - `tradability_score` 为 0-100 分，当前根据历史样本数、日均成交额和零成交量日期粗评。
 - 样本不足或缺少行情时，对应 ETF 的指标会为空或评分偏低，需要先到“数据健康”同步行情。
+
+## POST /api/etf-compare/tradability
+
+用途：批量计算 ETF 可交易性评分，适合 ETF 池、策略前检查和工作流门禁复用。
+
+请求示例：
+
+```json
+{
+  "symbols": ["510300", "159915", "513050"],
+  "start_date": "2025-07-11",
+  "end_date": "2026-07-11"
+}
+```
+
+响应：返回与 `POST /api/etf-compare` 中 `metrics` 相同结构的数组。
 
 后续计划接口：
 

@@ -10,6 +10,12 @@ class EtfCompareRequest(BaseModel):
     end_date: date | None = None
 
 
+class EtfTradabilityRequest(BaseModel):
+    symbols: list[str] = Field(min_length=1, max_length=3000)
+    start_date: date | None = None
+    end_date: date | None = None
+
+
 class EtfCompareSeriesPoint(BaseModel):
     trade_date: date
     value: Decimal
