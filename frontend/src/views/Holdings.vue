@@ -8,8 +8,7 @@
         </div>
         <div class="header-actions">
           <el-button type="primary" @click="openAddDialog">新增持仓</el-button>
-          <el-button :loading="loading" @click="refresh">刷新列表</el-button>
-          <el-button :loading="actionLoading" @click="resolveRows">刷新现价</el-button>
+          <el-button :loading="actionLoading || loading" @click="refreshHoldings">刷新持仓</el-button>
           <el-button type="success" :loading="actionLoading" @click="runAnalysis">运行持仓分析</el-button>
         </div>
       </div>
@@ -356,6 +355,15 @@ async function resolveRows() {
   } finally {
     actionLoading.value = false
   }
+}
+
+async function refreshHoldings() {
+  if (!draftRows.value.length) {
+    await refresh()
+    return
+  }
+  await resolveRows()
+  await refresh()
 }
 
 async function resolveDialogSymbol() {
