@@ -4,12 +4,12 @@
       <div class="panel-header">
         <div>
           <h2>录入当前持仓</h2>
-          <p class="section-note">通过弹窗维护持仓，列表只展示已录入结果；输入新代码后系统会自动登记 ETF、补最近行情并刷新现价。</p>
+          <p class="section-note">通过弹窗维护持仓；新增、编辑和补仓确认后会自动保存到数据库，并刷新当前持仓快照。</p>
         </div>
         <div class="header-actions">
           <el-button type="primary" @click="openAddDialog">新增持仓</el-button>
+          <el-button :loading="loading" @click="refresh">刷新列表</el-button>
           <el-button :loading="actionLoading" @click="resolveRows">刷新现价</el-button>
-          <el-button type="primary" :loading="actionLoading" @click="saveSnapshot">保存持仓快照</el-button>
           <el-button type="success" :loading="actionLoading" @click="runAnalysis">运行持仓分析</el-button>
         </div>
       </div>
@@ -36,7 +36,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="新增或编辑时只填代码、持仓数量和成本价；不在 ETF 池里的代码会自动登记，缺行情时会自动尝试同步。"
+        title="新增、编辑或补仓确认后会自动保存；不在 ETF 池里的代码会自动登记，缺行情时会自动尝试同步。"
       />
 
       <el-table :data="visibleRows" height="380" empty-text="暂无持仓，点击“新增持仓”开始录入">
@@ -141,7 +141,7 @@
         <template #footer>
           <el-button @click="positionDialog.visible = false">取消</el-button>
           <el-button :loading="actionLoading" @click="resolveDialogSymbol">自动补全/同步</el-button>
-          <el-button type="primary" @click="confirmPositionDialog">确定</el-button>
+          <el-button type="primary" :loading="actionLoading" @click="confirmPositionDialog">确定并保存</el-button>
         </template>
       </el-dialog>
     </section>
@@ -385,7 +385,7 @@ async function resolveDialogSymbol() {
   }
 }
 
-function confirmPositionDialog() {
+async function confirmPositionDialog() {
   const symbol = positionForm.symbol.trim()
   if (!symbol) {
     ElMessage.warning('请填写代码')
@@ -404,7 +404,7 @@ function confirmPositionDialog() {
       cost_price: roundNumber(topupPreview.value.costPrice, 6),
     }
     positionDialog.visible = false
-    ElMessage.success('补仓信息已更新，请记得保存持仓快照')
+    await persistSnapshot('补仓信息已自动保存')
     return
   }
 
@@ -436,10 +436,10 @@ function confirmPositionDialog() {
     draftRows.value.push(row)
   }
   positionDialog.visible = false
-  ElMessage.success('持仓已更新，请记得保存持仓快照')
+  await persistSnapshot(positionDialog.mode === 'edit' ? '持仓编辑已自动保存' : '新增持仓已自动保存')
 }
 
-async function saveSnapshot() {
+async function persistSnapshot(successMessage: string) {
   actionLoading.value = true
   try {
     const rows = draftRows.value
@@ -455,7 +455,7 @@ async function saveSnapshot() {
       return
     }
     positions.value = await savePositionSnapshot({ position_date: positionDate.value, positions: rows })
-    ElMessage.success('持仓快照已保存')
+    ElMessage.success(successMessage)
     await refresh()
   } catch (error) {
     ElMessage.error(errorMessage(error, '保存失败'))

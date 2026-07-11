@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.32.0-holding-auto-sync`
+当前版本：`v0.32.2-holding-auto-save`
 
 ## 认证约定
 
