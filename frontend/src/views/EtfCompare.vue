@@ -47,6 +47,11 @@
       <h2>对比指标</h2>
       <el-table :data="result?.metrics || []" height="360" empty-text="请输入 ETF 代码后开始对比">
         <el-table-column prop="symbol" label="代码" width="100" fixed />
+        <el-table-column label="详情" width="80">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="$router.push(`/etf-detail/${row.symbol}`)">查看</el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="name" label="名称" min-width="150" />
         <el-table-column label="总收益" width="110">
           <template #default="{ row }">{{ percent(row.total_return) }}</template>

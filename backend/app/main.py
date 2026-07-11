@@ -8,6 +8,7 @@ from app.api.backtest_api import router as backtest_router
 from app.api.calendar_api import router as calendar_router
 from app.api.data_quality_api import router as data_quality_router
 from app.api.etf_compare_api import router as etf_compare_router
+from app.api.etf_detail_api import router as etf_detail_router
 from app.api.factor_api import router as factor_router
 from app.api.health_api import router as health_router
 from app.api.market_api import router as market_router
@@ -28,7 +29,7 @@ def create_app() -> FastAPI:
     production = settings.app_env.lower() == "production"
     app = FastAPI(
         title=settings.app_name,
-        version="0.35.0",
+        version="0.36.0",
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         openapi_url=None if production else "/openapi.json",
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(market_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(data_quality_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(etf_compare_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(etf_detail_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(factor_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(strategy_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(portfolio_router, prefix=settings.api_prefix, dependencies=protected)

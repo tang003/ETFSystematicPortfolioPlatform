@@ -15,6 +15,11 @@
       </el-form>
       <el-table :data="factors" height="640">
         <el-table-column prop="symbol" label="代码" width="120" />
+        <el-table-column label="详情" width="80">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="$router.push(`/etf-detail/${row.symbol}`)">查看</el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="trade_date" label="日期" width="130" />
         <el-table-column prop="alpha_score" label="Alpha" width="120" sortable />
         <el-table-column prop="trend_score" label="趋势" width="120" />

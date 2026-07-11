@@ -98,6 +98,37 @@ export interface EtfCompareResponse {
   correlations: EtfCorrelationCell[]
 }
 
+export interface EtfDetailCurvePoint {
+  trade_date: string
+  close: string
+  normalized_value: string
+  drawdown: string
+  amount: string | null
+}
+
+export interface EtfDetailResponse {
+  symbol: string
+  asset: Asset | null
+  metric: EtfCompareMetric
+  latest_factor: Factor | null
+  curve: EtfDetailCurvePoint[]
+  recent_bars: MarketBarRead[]
+}
+
+export interface MarketBarRead {
+  symbol: string
+  trade_date: string
+  open: string | null
+  high: string | null
+  low: string | null
+  close: string | null
+  volume: string | null
+  amount: string | null
+  source: string | null
+  data_status: string | null
+  created_at: string
+}
+
 export interface DataQualityStatus {
   total_logs: number
   error_logs: number
@@ -399,6 +430,8 @@ export const compareEtfs = async (payload: { symbols: string[]; start_date?: str
   (await api.post<EtfCompareResponse>('/api/etf-compare', payload)).data
 export const scoreEtfTradability = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<EtfCompareMetric[]>('/api/etf-compare/tradability', payload)).data
+export const fetchEtfDetail = async (symbol: string, params?: { start_date?: string; end_date?: string }) =>
+  (await api.get<EtfDetailResponse>(`/api/etf-detail/${symbol}`, { params })).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchMarketSyncPlan = async (syncScope = 'core') =>

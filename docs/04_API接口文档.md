@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.35.0-tradability-constrained-strategy`
+当前版本：`v0.36.0-etf-detail-page`
 
 ## 认证约定
 
@@ -222,6 +222,26 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ```
 
 响应：返回与 `POST /api/etf-compare` 中 `metrics` 相同结构的数组。
+
+## GET /api/etf-detail/{symbol}
+
+用途：查看单只 ETF 的详情画像，包含资产主数据、可交易性指标、最新因子、净值/回撤曲线和最近清洗行情。
+
+请求示例：
+
+```bash
+curl "http://localhost:8000/api/etf-detail/510300?start_date=2025-07-11&end_date=2026-07-11"
+```
+
+响应字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| asset | ETF 主数据，可能为空 |
+| metric | 收益、波动、回撤、成交额和可交易性评分 |
+| latest_factor | 最新一条因子记录，可能为空 |
+| curve | 标准化净值、回撤和成交额序列 |
+| recent_bars | 最近 30 条清洗行情 |
 
 后续计划接口：
 

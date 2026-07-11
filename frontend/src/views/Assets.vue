@@ -143,6 +143,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="说明" min-width="260" />
+        <el-table-column label="操作" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="$router.push(`/etf-detail/${row.symbol}`)">详情</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </section>
   </div>
