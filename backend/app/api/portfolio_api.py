@@ -68,7 +68,10 @@ def run_holding_analysis(
     request: HoldingAnalysisRequest,
     db: Session = Depends(get_db),
 ) -> list[HoldingAnalysisRead]:
-    return analyze_holdings(db, run_id=request.run_id, analysis_date=request.analysis_date)
+    try:
+        return analyze_holdings(db, run_id=request.run_id, analysis_date=request.analysis_date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/holdings/analysis", response_model=list[HoldingAnalysisRead])

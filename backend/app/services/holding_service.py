@@ -252,7 +252,7 @@ def analyze_holdings(
     ensure_holding_tables()
     targets = resolve_targets(db, run_id)
     if not targets:
-        raise ValueError("No target portfolio available for holding analysis")
+        raise ValueError("没有可用的目标组合。请先在“目标组合”页面运行策略，或在“全流程”页面生成目标组合后再运行持仓分析。")
     resolved_run_id = targets[0].run_id
     resolved_date = analysis_date or targets[0].portfolio_date
     current_weights = current_weight_map(db)

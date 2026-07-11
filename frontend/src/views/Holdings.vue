@@ -19,8 +19,8 @@
           <el-date-picker v-model="positionDate" type="date" value-format="YYYY-MM-DD" />
         </el-form-item>
         <el-form-item label="运行 ID">
-          <el-input-number v-model="runId" :min="1" />
-          <span class="form-note">用于和某次目标组合对比；通常填最近一次策略运行 ID。</span>
+          <el-input-number v-model="runId" :min="1" clearable />
+          <span class="form-note">留空时自动使用最近一次目标组合；只有需要指定某次策略运行时才填写。</span>
         </el-form-item>
       </el-form>
 
@@ -218,7 +218,7 @@ type DialogMode = 'add' | 'edit' | 'topup'
 const loading = ref(false)
 const actionLoading = ref(false)
 const positionDate = ref(new Date().toISOString().slice(0, 10))
-const runId = ref(1)
+const runId = ref<number | undefined>()
 const positions = ref<PortfolioPosition[]>([])
 const analysis = ref<HoldingAnalysis[]>([])
 const draftRows = ref<DraftPosition[]>([])
@@ -467,7 +467,7 @@ async function saveSnapshot() {
 async function runAnalysis() {
   actionLoading.value = true
   try {
-    analysis.value = await analyzeHoldings({ run_id: runId.value, analysis_date: positionDate.value })
+    analysis.value = await analyzeHoldings({ run_id: runId.value || undefined, analysis_date: positionDate.value })
     ElMessage.success('持仓分析完成')
   } catch (error) {
     ElMessage.error(errorMessage(error, '分析失败'))
