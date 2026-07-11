@@ -22,6 +22,15 @@
         <el-table-column prop="volatility_score" label="波动率" width="130" />
         <el-table-column prop="drawdown_score" label="回撤" width="130" />
         <el-table-column prop="liquidity_score" label="流动性" width="130" />
+        <el-table-column label="可交易性" width="130">
+          <template #default="{ row }">
+            <el-tooltip :content="tradabilityNotes(row.symbol)" placement="top">
+              <el-tag :type="scoreTagType(tradabilityScore(row.symbol))" size="small">
+                {{ tradabilityScoreText(row.symbol) }}
+              </el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
       </el-table>
     </section>
   </div>
@@ -30,9 +39,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { calculateFactors, fetchFactorRanking, type Factor } from '../api/client'
+import { calculateFactors, fetchFactorRanking, scoreEtfTradability, type EtfCompareMetric, type Factor } from '../api/client'
 
 const factors = ref<Factor[]>([])
+const tradabilityMetrics = ref<Record<string, EtfCompareMetric>>({})
 const loading = ref(true)
 const actionLoading = ref(false)
 const today = new Date().toISOString().slice(0, 10)
@@ -46,8 +56,23 @@ async function refresh() {
   loading.value = true
   try {
     factors.value = await fetchFactorRanking()
+    await refreshTradabilityScores()
   } finally {
     loading.value = false
+  }
+}
+
+async function refreshTradabilityScores() {
+  const symbols = Array.from(new Set(factors.value.map((item) => item.symbol)))
+  if (!symbols.length) {
+    tradabilityMetrics.value = {}
+    return
+  }
+  try {
+    const rows = await scoreEtfTradability({ symbols })
+    tradabilityMetrics.value = Object.fromEntries(rows.map((item) => [item.symbol, item]))
+  } catch {
+    tradabilityMetrics.value = {}
   }
 }
 
@@ -66,5 +91,30 @@ async function runFactorCalculation() {
 
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
+}
+
+function tradabilityScore(symbol: string) {
+  const value = tradabilityMetrics.value[symbol]?.tradability_score
+  return typeof value === 'number' ? value : null
+}
+
+function tradabilityScoreText(symbol: string) {
+  const metric = tradabilityMetrics.value[symbol]
+  if (!metric) return '未评分'
+  return `${metric.tradability_score} ${metric.tradability_level}`
+}
+
+function tradabilityNotes(symbol: string) {
+  const metric = tradabilityMetrics.value[symbol]
+  if (!metric) return '暂无可交易性评分，请先同步行情。'
+  return metric.tradability_notes.join('；')
+}
+
+function scoreTagType(value: number | null) {
+  if (value === null) return 'info'
+  if (value >= 80) return 'success'
+  if (value >= 60) return 'info'
+  if (value >= 40) return 'warning'
+  return 'danger'
 }
 </script>

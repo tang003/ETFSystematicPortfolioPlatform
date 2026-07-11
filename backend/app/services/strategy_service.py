@@ -9,6 +9,7 @@ from app.models.asset import AssetMaster
 from app.models.factor import FactorDaily
 from app.models.portfolio import TargetPortfolio
 from app.models.strategy import AlphaSignal, StrategyConfig, StrategyRun
+from app.services.etf_compare_service import score_etf_tradability
 
 DEFAULT_STRATEGY_CODE = "core_etf_rotation"
 
@@ -46,7 +47,11 @@ def run_strategy(
 
     asset_map = load_asset_map(db)
     signals = build_alpha_signals(strategy_run.id, resolved_run_date, ranking)
-    targets = build_target_portfolio(strategy_run.id, resolved_run_date, ranking, asset_map)
+    tradability_map = {
+        item["symbol"]: item
+        for item in score_etf_tradability(db, symbols=[item.symbol for item in ranking], end_date=resolved_run_date)
+    }
+    targets = build_target_portfolio(strategy_run.id, resolved_run_date, ranking, asset_map, tradability_map)
     db.add_all(signals)
     db.add_all(targets)
     db.commit()
@@ -114,7 +119,9 @@ def build_target_portfolio(
     portfolio_date: date,
     ranking: list[FactorDaily],
     asset_map: dict[str, AssetMaster],
+    tradability_map: dict[str, dict[str, Any]] | None = None,
 ) -> list[TargetPortfolio]:
+    tradability_map = tradability_map or {}
     weights = construct_target_weights([item.symbol for item in ranking], asset_map)
     targets: list[TargetPortfolio] = []
     for symbol, weight in weights.items():
@@ -127,7 +134,7 @@ def build_target_portfolio(
                 raw_target_weight=weight,
                 final_target_weight=weight,
                 asset_class=asset.asset_class if asset else None,
-                reason=target_reason(symbol, weight, ranking, asset_map),
+                reason=target_reason(symbol, weight, ranking, asset_map, tradability_map),
             )
         )
     return targets
@@ -175,16 +182,26 @@ def target_reason(
     weight: Decimal,
     ranking: list[FactorDaily],
     asset_map: dict[str, AssetMaster],
+    tradability_map: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     rank_lookup = {item.symbol: index for index, item in enumerate(ranking, start=1)}
     asset = asset_map.get(symbol)
+    tradability_note = build_tradability_note(symbol, tradability_map or {})
     if asset and asset.asset_class == "equity":
-        return f"Equity ETF selected by alpha ranking; rank={rank_lookup.get(symbol)}; target_weight={weight}"
+        return f"Equity ETF selected by alpha ranking; rank={rank_lookup.get(symbol)}; target_weight={weight}; {tradability_note}"
     if asset and asset.asset_class in {"bond", "gold"}:
-        return f"Defense asset allocation; target_weight={weight}"
+        return f"Defense asset allocation; target_weight={weight}; {tradability_note}"
     if asset and asset.asset_class == "cash":
-        return f"Cash buffer and unused risk budget; target_weight={weight}"
-    return f"Target allocation; target_weight={weight}"
+        return f"Cash buffer and unused risk budget; target_weight={weight}; {tradability_note}"
+    return f"Target allocation; target_weight={weight}; {tradability_note}"
+
+
+def build_tradability_note(symbol: str, tradability_map: dict[str, dict[str, Any]]) -> str:
+    metric = tradability_map.get(symbol)
+    if not metric:
+        return "tradability_score=unknown"
+    notes = " / ".join(metric.get("tradability_notes") or [])
+    return f"tradability_score={metric['tradability_score']}({metric['tradability_level']}); {notes}"
 
 
 def score_confidence(alpha_score: Decimal | None) -> Decimal:
@@ -219,4 +236,3 @@ def latest_target_portfolio(db: Session) -> list[TargetPortfolio]:
             .order_by(TargetPortfolio.final_target_weight.desc().nullslast())
         ).all()
     )
-
