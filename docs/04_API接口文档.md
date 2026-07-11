@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.34.1-tradability-integration`
+当前版本：`v0.35.0-tradability-constrained-strategy`
 
 ## 认证约定
 

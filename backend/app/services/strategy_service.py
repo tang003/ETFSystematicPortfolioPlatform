@@ -12,6 +12,9 @@ from app.models.strategy import AlphaSignal, StrategyConfig, StrategyRun
 from app.services.etf_compare_service import score_etf_tradability
 
 DEFAULT_STRATEGY_CODE = "core_etf_rotation"
+TRADABILITY_EXCLUDE_THRESHOLD = 40
+TRADABILITY_REDUCE_THRESHOLD = 60
+TRADABILITY_REDUCED_MULTIPLIER = Decimal("0.50")
 
 
 def list_strategy_configs(db: Session) -> list[StrategyConfig]:
@@ -122,7 +125,11 @@ def build_target_portfolio(
     tradability_map: dict[str, dict[str, Any]] | None = None,
 ) -> list[TargetPortfolio]:
     tradability_map = tradability_map or {}
-    weights = construct_target_weights([item.symbol for item in ranking], asset_map)
+    weights, adjustments = construct_target_weights_with_tradability(
+        [item.symbol for item in ranking],
+        asset_map,
+        tradability_map,
+    )
     targets: list[TargetPortfolio] = []
     for symbol, weight in weights.items():
         asset = asset_map.get(symbol)
@@ -134,14 +141,23 @@ def build_target_portfolio(
                 raw_target_weight=weight,
                 final_target_weight=weight,
                 asset_class=asset.asset_class if asset else None,
-                reason=target_reason(symbol, weight, ranking, asset_map, tradability_map),
+                reason=target_reason(symbol, weight, ranking, asset_map, tradability_map, adjustments),
             )
         )
     return targets
 
 
 def construct_target_weights(ranked_symbols: list[str], asset_map: dict[str, AssetMaster]) -> dict[str, Decimal]:
-    equity_symbols = [symbol for symbol in ranked_symbols if asset_map.get(symbol) and asset_map[symbol].asset_class == "equity"]
+    weights, _ = construct_target_weights_with_tradability(ranked_symbols, asset_map, tradability_map={})
+    return weights
+
+
+def construct_target_weights_with_tradability(
+    ranked_symbols: list[str],
+    asset_map: dict[str, AssetMaster],
+    tradability_map: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Decimal], dict[str, str]]:
+    equity_symbols, adjustments = tradable_equity_symbols(ranked_symbols, asset_map, tradability_map)
     defense_symbols = [
         symbol for symbol, asset in asset_map.items() if asset.asset_class in {"bond", "gold"} and asset.enabled
     ]
@@ -170,11 +186,54 @@ def construct_target_weights(ranked_symbols: list[str], asset_map: dict[str, Ass
         cash_symbol = sorted(cash_symbols)[0]
         weights[cash_symbol] = weights.get(cash_symbol, Decimal("0")) + cash_weight
 
+    weights = apply_tradability_adjustments(weights, adjustments, asset_map)
     total_weight = sum(weights.values(), Decimal("0"))
     if total_weight != Decimal("1.00") and weights:
         first_symbol = next(iter(weights))
         weights[first_symbol] += Decimal("1.00") - total_weight
-    return {symbol: weight.quantize(Decimal("0.000001")) for symbol, weight in weights.items() if weight > 0}
+    return {symbol: weight.quantize(Decimal("0.000001")) for symbol, weight in weights.items() if weight > 0}, adjustments
+
+
+def tradable_equity_symbols(
+    ranked_symbols: list[str],
+    asset_map: dict[str, AssetMaster],
+    tradability_map: dict[str, dict[str, Any]],
+) -> tuple[list[str], dict[str, str]]:
+    selected: list[str] = []
+    adjustments: dict[str, str] = {}
+    for symbol in ranked_symbols:
+        asset = asset_map.get(symbol)
+        if not asset or asset.asset_class != "equity":
+            continue
+        score = tradability_score(symbol, tradability_map)
+        if score is not None and score < TRADABILITY_EXCLUDE_THRESHOLD:
+            adjustments[symbol] = f"excluded_by_tradability_score<{TRADABILITY_EXCLUDE_THRESHOLD}"
+            continue
+        selected.append(symbol)
+        if score is not None and score < TRADABILITY_REDUCE_THRESHOLD:
+            adjustments[symbol] = f"reduced_by_tradability_score<{TRADABILITY_REDUCE_THRESHOLD}"
+    return selected, adjustments
+
+
+def apply_tradability_adjustments(
+    weights: dict[str, Decimal],
+    adjustments: dict[str, str],
+    asset_map: dict[str, AssetMaster],
+) -> dict[str, Decimal]:
+    cash_symbols = [symbol for symbol, asset in asset_map.items() if asset.asset_class == "cash" and asset.enabled]
+    if not cash_symbols:
+        return weights
+    cash_symbol = sorted(cash_symbols)[0]
+    released = Decimal("0")
+    for symbol, reason in adjustments.items():
+        if symbol not in weights or not reason.startswith("reduced_by"):
+            continue
+        reduced_weight = (weights[symbol] * TRADABILITY_REDUCED_MULTIPLIER).quantize(Decimal("0.000001"))
+        released += weights[symbol] - reduced_weight
+        weights[symbol] = reduced_weight
+    if released > 0:
+        weights[cash_symbol] = weights.get(cash_symbol, Decimal("0")) + released
+    return weights
 
 
 def target_reason(
@@ -183,17 +242,19 @@ def target_reason(
     ranking: list[FactorDaily],
     asset_map: dict[str, AssetMaster],
     tradability_map: dict[str, dict[str, Any]] | None = None,
+    adjustments: dict[str, str] | None = None,
 ) -> str:
     rank_lookup = {item.symbol: index for index, item in enumerate(ranking, start=1)}
     asset = asset_map.get(symbol)
     tradability_note = build_tradability_note(symbol, tradability_map or {})
+    adjustment_note = build_tradability_adjustment_note(symbol, adjustments or {})
     if asset and asset.asset_class == "equity":
-        return f"Equity ETF selected by alpha ranking; rank={rank_lookup.get(symbol)}; target_weight={weight}; {tradability_note}"
+        return f"Equity ETF selected by alpha ranking; rank={rank_lookup.get(symbol)}; target_weight={weight}; {tradability_note}; {adjustment_note}"
     if asset and asset.asset_class in {"bond", "gold"}:
-        return f"Defense asset allocation; target_weight={weight}; {tradability_note}"
+        return f"Defense asset allocation; target_weight={weight}; {tradability_note}; {adjustment_note}"
     if asset and asset.asset_class == "cash":
-        return f"Cash buffer and unused risk budget; target_weight={weight}; {tradability_note}"
-    return f"Target allocation; target_weight={weight}; {tradability_note}"
+        return f"Cash buffer and unused risk budget; target_weight={weight}; {tradability_note}; {adjustment_note}"
+    return f"Target allocation; target_weight={weight}; {tradability_note}; {adjustment_note}"
 
 
 def build_tradability_note(symbol: str, tradability_map: dict[str, dict[str, Any]]) -> str:
@@ -202,6 +263,21 @@ def build_tradability_note(symbol: str, tradability_map: dict[str, dict[str, Any
         return "tradability_score=unknown"
     notes = " / ".join(metric.get("tradability_notes") or [])
     return f"tradability_score={metric['tradability_score']}({metric['tradability_level']}); {notes}"
+
+
+def build_tradability_adjustment_note(symbol: str, adjustments: dict[str, str]) -> str:
+    reason = adjustments.get(symbol)
+    if not reason:
+        return "tradability_adjustment=none"
+    return f"tradability_adjustment={reason}"
+
+
+def tradability_score(symbol: str, tradability_map: dict[str, dict[str, Any]]) -> int | None:
+    metric = tradability_map.get(symbol)
+    if metric is None:
+        return None
+    value = metric.get("tradability_score")
+    return int(value) if value is not None else None
 
 
 def score_confidence(alpha_score: Decimal | None) -> Decimal:
