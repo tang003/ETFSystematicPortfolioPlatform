@@ -356,8 +356,12 @@ export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/fac
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
 export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data
 export const fetchPortfolioXray = async () => (await api.get<PortfolioXray>('/api/portfolio/xray')).data
-export const resolvePositionSymbols = async (symbols: string[]) =>
-  (await api.post<PositionResolveResult[]>('/api/portfolio/positions/resolve', { symbols })).data
+export const resolvePositionSymbols = async (symbols: string[], options?: { auto_sync?: boolean; source?: string }) =>
+  (await api.post<PositionResolveResult[]>('/api/portfolio/positions/resolve', {
+    symbols,
+    auto_sync: options?.auto_sync ?? false,
+    source: options?.source || 'akshare',
+  })).data
 export const savePositionSnapshot = async (payload: {
   position_date: string
   positions: Array<{

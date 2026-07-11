@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.31.0-smart-market-sync`
+当前版本：`v0.32.0-holding-auto-sync`
 
 ## 认证约定
 
@@ -519,7 +519,7 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 响应：返回保存后的持仓列表，包含系统计算出的 `market_value`、`cost_basis`、`unrealized_pnl`、`unrealized_pnl_rate` 和 `weight`。
 
-如果某个代码不存在资产主表，或没有已清洗行情价格，接口会返回 400，并提示需要先同步资产或行情。
+如果某个代码没有已清洗行情价格，接口会返回 400，并提示需要先同步该代码行情，或在持仓保存请求中临时补充 `current_price`。当前持仓弹窗会优先自动补行情。
 
 ## GET /api/portfolio/positions
 
@@ -533,38 +533,19 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 ```json
 {
-  "symbols": ["513050", "159928"]
+  "symbols": ["513050", "159928"],
+  "auto_sync": true,
+  "source": "akshare"
 }
 ```
 
-## GET /api/market/sync-plan
+参数说明：
 
-用途：预览某个同步范围会包含哪些 ETF，以及哪些 ETF 还没有 clean 行情价格。
-
-请求示例：
-
-```bash
-curl "http://localhost:8000/api/market/sync-plan?sync_scope=core"
-```
-
-响应示例：
-
-```json
-{
-  "sync_scope": "core",
-  "total_symbols": 4,
-  "missing_price_count": 1,
-  "symbols": [
-    {
-      "symbol": "513050",
-      "name": "中概互联网ETF",
-      "categories": ["position", "enabled"],
-      "latest_trade_date": null,
-      "has_clean_price": false
-    }
-  ]
-}
-```
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| symbols | string[] | 是 | 需要补全的 ETF 代码，支持 `513050` 或 `513050.SH` |
+| auto_sync | boolean | 否 | 为 `true` 时，如果资产主表不存在会自动登记为候选 ETF；如果缺行情，会自动同步最近行情 |
+| source | string | 否 | 自动同步行情的数据源，支持 `akshare`、`eastmoney`、`tushare` |
 
 响应示例：
 

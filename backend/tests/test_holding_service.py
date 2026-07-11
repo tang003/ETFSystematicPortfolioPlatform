@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from app.schemas.portfolio_schema import PortfolioPositionUpsert
 from app.schemas.portfolio_schema import PositionResolveRead
-from app.services.holding_service import infer_asset_type, normalize_position_input, suggest_action
+from app.services.holding_service import infer_asset_type, normalize_position_input, normalize_symbol, suggest_action
 
 
 def test_suggest_action_add_reduce_hold_and_exit() -> None:
@@ -55,3 +55,9 @@ def test_infer_asset_type_defaults_platform_assets_to_etf() -> None:
     assert infer_asset_type("cash") == "cash"
     assert infer_asset_type("cross_border") == "etf"
     assert infer_asset_type(None) == "etf"
+
+
+def test_normalize_symbol_accepts_exchange_suffix() -> None:
+    assert normalize_symbol("159928") == "159928"
+    assert normalize_symbol("513050.SH") == "513050"
+    assert normalize_symbol(" 159928.sz ") == "159928"

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select
@@ -86,20 +86,28 @@ def normalize_position_input(item, detail: PositionResolveRead | None = None) ->
     }
 
 
-def resolve_position_details(db: Session, symbols: list[str]) -> list[PositionResolveRead]:
+def resolve_position_details(
+    db: Session,
+    symbols: list[str],
+    *,
+    auto_sync: bool = False,
+    source: str = "akshare",
+) -> list[PositionResolveRead]:
     seen: set[str] = set()
     resolved = []
     for symbol in symbols:
-        cleaned = symbol.strip()
+        cleaned = normalize_symbol(symbol)
         if not cleaned or cleaned in seen:
             continue
         seen.add(cleaned)
+        if auto_sync:
+            ensure_position_market_data(db, cleaned, source=source)
         resolved.append(resolve_position_detail(db, cleaned))
     return resolved
 
 
 def resolve_position_detail(db: Session, symbol: str) -> PositionResolveRead:
-    cleaned = symbol.strip()
+    cleaned = normalize_symbol(symbol)
     asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == cleaned))
     latest_bar = db.scalar(
         select(MarketDataClean)
@@ -128,6 +136,81 @@ def resolve_position_detail(db: Session, symbol: str) -> PositionResolveRead:
         resolved=asset is not None and current_price is not None,
         message="；".join(messages) if messages else None,
     )
+
+
+def ensure_position_market_data(db: Session, symbol: str, *, source: str = "akshare") -> None:
+    ensure_position_asset(db, symbol)
+    if latest_clean_bar(db, symbol) is not None:
+        return
+
+    from app.services.market_service import sync_market_data
+
+    end_date = date.today()
+    start_date = end_date - timedelta(days=45)
+    sync_market_data(
+        db,
+        symbols=[symbol],
+        sync_scope="custom",
+        start_date=start_date,
+        end_date=end_date,
+        source=source,
+        incremental=True,
+        clean_after_sync=True,
+        max_symbols=1,
+        request_interval_seconds=0,
+    )
+
+
+def ensure_position_asset(db: Session, symbol: str) -> AssetMaster:
+    asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == symbol))
+    if asset is not None:
+        return asset
+
+    asset = AssetMaster(
+        symbol=symbol,
+        name=infer_placeholder_name(symbol),
+        exchange=infer_exchange(symbol),
+        asset_class="equity",
+        asset_region="CN",
+        currency="CNY",
+        is_cross_border=symbol.startswith("513"),
+        is_leveraged=False,
+        is_inverse=False,
+        enabled=True,
+        risk_level=4 if symbol.startswith("513") else 3,
+        description="由当前持仓自动登记，后续可在 ETF 池补全基金公司、跟踪指数、费率等主数据。",
+    )
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+    return asset
+
+
+def latest_clean_bar(db: Session, symbol: str) -> MarketDataClean | None:
+    return db.scalar(
+        select(MarketDataClean)
+        .where(MarketDataClean.symbol == symbol)
+        .where(MarketDataClean.close.is_not(None))
+        .order_by(MarketDataClean.trade_date.desc())
+        .limit(1)
+    )
+
+
+def normalize_symbol(symbol: str) -> str:
+    cleaned = symbol.strip().upper()
+    if "." in cleaned:
+        return cleaned.split(".", 1)[0]
+    return cleaned
+
+
+def infer_exchange(symbol: str) -> str:
+    if symbol.startswith(("5", "6", "9")):
+        return "SH"
+    return "SZ"
+
+
+def infer_placeholder_name(symbol: str) -> str:
+    return f"{symbol} ETF"
 
 
 def infer_asset_type(asset_class: str | None) -> str:

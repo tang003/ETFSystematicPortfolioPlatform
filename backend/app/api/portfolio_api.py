@@ -60,7 +60,7 @@ def resolve_positions(
     request: PositionResolveRequest,
     db: Session = Depends(get_db),
 ) -> list[PositionResolveRead]:
-    return resolve_position_details(db, request.symbols)
+    return resolve_position_details(db, request.symbols, auto_sync=request.auto_sync, source=request.source)
 
 
 @router.post("/holdings/analyze", response_model=list[HoldingAnalysisRead])

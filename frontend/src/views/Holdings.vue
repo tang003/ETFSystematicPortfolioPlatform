@@ -4,7 +4,7 @@
       <div class="panel-header">
         <div>
           <h2>录入当前持仓</h2>
-          <p class="section-note">通过弹窗维护持仓，列表只展示已录入结果；名称、类型、现价由系统根据资产池和最新行情自动补全。</p>
+          <p class="section-note">通过弹窗维护持仓，列表只展示已录入结果；输入新代码后系统会自动登记 ETF、补最近行情并刷新现价。</p>
         </div>
         <div class="header-actions">
           <el-button type="primary" @click="openAddDialog">新增持仓</el-button>
@@ -36,7 +36,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="新增或编辑时只填代码、持仓数量和成本价；如果名称或现价为空，请先同步资产池或行情。"
+        title="新增或编辑时只填代码、持仓数量和成本价；不在 ETF 池里的代码会自动登记，缺行情时会自动尝试同步。"
       />
 
       <el-table :data="visibleRows" height="380" empty-text="暂无持仓，点击“新增持仓”开始录入">
@@ -121,6 +121,10 @@
             <el-form-item label="成本价" required>
               <el-input-number v-model="positionForm.cost_price" :min="0" :precision="3" :step="0.001" />
             </el-form-item>
+            <el-form-item v-if="!positionForm.current_price" label="临时现价">
+              <el-input-number v-model="positionForm.current_price" :min="0" :precision="3" :step="0.001" />
+              <span class="form-note">自动同步失败时可临时填写，后续同步行情后会自动覆盖。</span>
+            </el-form-item>
           </template>
 
           <el-form-item label="系统补全">
@@ -136,7 +140,7 @@
         </el-form>
         <template #footer>
           <el-button @click="positionDialog.visible = false">取消</el-button>
-          <el-button :loading="actionLoading" @click="resolveDialogSymbol">补全信息</el-button>
+          <el-button :loading="actionLoading" @click="resolveDialogSymbol">自动补全/同步</el-button>
           <el-button type="primary" @click="confirmPositionDialog">确定</el-button>
         </template>
       </el-dialog>
@@ -338,12 +342,12 @@ async function resolveRows() {
   }
   actionLoading.value = true
   try {
-    const details = await resolvePositionSymbols(symbols)
+    const details = await resolvePositionSymbols(symbols, { auto_sync: true, source: 'akshare' })
     const detailMap = new Map(details.map((item) => [item.symbol, item]))
     draftRows.value = draftRows.value.map((row) => applyResolveDetail(row, detailMap.get(row.symbol.trim())))
     const unresolvedCount = details.filter((item) => !item.resolved).length
     if (unresolvedCount) {
-      ElMessage.warning(`${unresolvedCount} 个代码未完全补全，请检查资产池或行情同步状态`)
+      ElMessage.warning(`${unresolvedCount} 个代码未完全补全，可临时填写现价后保存，后续再同步行情`)
     } else {
       ElMessage.success('名称、类型和现价已刷新')
     }
@@ -362,7 +366,7 @@ async function resolveDialogSymbol() {
   }
   actionLoading.value = true
   try {
-    const [detail] = await resolvePositionSymbols([symbol])
+    const [detail] = await resolvePositionSymbols([symbol], { auto_sync: true, source: 'akshare' })
     if (!detail) return
     positionForm.symbol = detail.symbol
     positionForm.position_name = detail.position_name || positionForm.position_name
@@ -372,7 +376,7 @@ async function resolveDialogSymbol() {
     positionForm.resolved = detail.resolved
     positionForm.resolve_message = detail.message || ''
     if (!detail.resolved) {
-      ElMessage.warning(detail.message || '该代码未完全补全')
+      ElMessage.warning(detail.message || '该代码未完全补全，可临时填写现价后保存')
     }
   } catch (error) {
     ElMessage.error(errorMessage(error, '补全失败'))
@@ -443,6 +447,7 @@ async function saveSnapshot() {
       .map((row) => ({
         symbol: row.symbol.trim(),
         quantity: row.quantity,
+        current_price: row.current_price || undefined,
         cost_price: row.cost_price,
       }))
     if (!rows.length) {
