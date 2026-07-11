@@ -19,6 +19,8 @@ def test_build_investment_suggestions_prioritizes_underweight_assets() -> None:
         suggestion_date=date(2026, 7, 9),
         period_no=1,
         monthly_amount=Decimal("3000"),
+        investment_mode="scheduled_dca",
+        target_annual_return=Decimal("0.10"),
         targets=[Target("510300", "0.40"), Target("511010", "0.25"), Target("511880", "0.35")],
         current_weights={"510300": Decimal("0.60"), "511880": Decimal("0.40")},
     )
@@ -36,6 +38,8 @@ def test_build_investment_suggestions_falls_back_to_target_weights_when_no_gap()
         suggestion_date=date(2026, 7, 9),
         period_no=1,
         monthly_amount=Decimal("1000"),
+        investment_mode="scheduled_dca",
+        target_annual_return=None,
         targets=[Target("510300", "0.40"), Target("511880", "0.60")],
         current_weights={"510300": Decimal("0.50"), "511880": Decimal("0.70")},
     )

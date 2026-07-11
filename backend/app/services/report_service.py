@@ -2,11 +2,12 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.backtest import BacktestMetrics, BacktestRun
-from app.models.portfolio import TargetPortfolio
+from app.models.asset import AssetMaster
+from app.models.portfolio import InvestmentPlanSuggestion, PortfolioPosition, TargetPortfolio
 from app.models.rebalance import RebalanceOrder
 from app.models.report import ReportLog
 from app.models.risk import RiskCheckResult
@@ -30,6 +31,9 @@ def generate_monthly_report(
     rebalance_orders = load_rebalance_orders(db, strategy_run.id)
     latest_backtest = load_latest_backtest(db)
     backtest_metrics = load_backtest_metrics(db, latest_backtest.id) if latest_backtest else []
+    asset_status = load_asset_status(db)
+    latest_positions = load_latest_positions(db)
+    investment_suggestions = load_latest_investment_suggestions(db)
 
     markdown = build_monthly_report_markdown(
         strategy_run=strategy_run,
@@ -40,6 +44,9 @@ def generate_monthly_report(
         rebalance_orders=rebalance_orders,
         backtest=latest_backtest,
         backtest_metrics=backtest_metrics,
+        asset_status=asset_status,
+        latest_positions=latest_positions,
+        investment_suggestions=investment_suggestions,
     )
 
     report = ReportLog(
@@ -114,6 +121,39 @@ def load_backtest_metrics(db: Session, backtest_id: int) -> list[BacktestMetrics
     )
 
 
+def load_asset_status(db: Session) -> dict[str, int]:
+    total = db.scalar(select(func.count()).select_from(AssetMaster)) or 0
+    enabled = db.scalar(select(func.count()).select_from(AssetMaster).where(AssetMaster.enabled.is_(True))) or 0
+    cross_border = db.scalar(select(func.count()).select_from(AssetMaster).where(AssetMaster.is_cross_border.is_(True))) or 0
+    return {"total": int(total), "enabled": int(enabled), "cross_border": int(cross_border)}
+
+
+def load_latest_positions(db: Session) -> list[PortfolioPosition]:
+    latest_date = db.scalar(select(func.max(PortfolioPosition.position_date)))
+    if latest_date is None:
+        return []
+    return list(
+        db.scalars(
+            select(PortfolioPosition)
+            .where(PortfolioPosition.position_date == latest_date)
+            .order_by(PortfolioPosition.weight.desc().nullslast(), PortfolioPosition.symbol)
+        ).all()
+    )
+
+
+def load_latest_investment_suggestions(db: Session) -> list[InvestmentPlanSuggestion]:
+    latest_date = db.scalar(select(func.max(InvestmentPlanSuggestion.suggestion_date)))
+    if latest_date is None:
+        return []
+    return list(
+        db.scalars(
+            select(InvestmentPlanSuggestion)
+            .where(InvestmentPlanSuggestion.suggestion_date == latest_date)
+            .order_by(InvestmentPlanSuggestion.suggested_amount.desc())
+        ).all()
+    )
+
+
 def build_monthly_report_markdown(
     *,
     strategy_run: StrategyRun,
@@ -124,7 +164,13 @@ def build_monthly_report_markdown(
     rebalance_orders: list[RebalanceOrder],
     backtest: BacktestRun | None,
     backtest_metrics: list[BacktestMetrics],
+    asset_status: dict[str, int] | None = None,
+    latest_positions: list[PortfolioPosition] | None = None,
+    investment_suggestions: list[InvestmentPlanSuggestion] | None = None,
 ) -> str:
+    asset_status = asset_status or {"total": 0, "enabled": 0, "cross_border": 0}
+    latest_positions = latest_positions or []
+    investment_suggestions = investment_suggestions or []
     lines = [
         f"# ETF 月度调仓报告 (Monthly Rebalance Report) - {report_date}",
         "",
@@ -135,6 +181,9 @@ def build_monthly_report_markdown(
         f"- strategy_version: {strategy_run.strategy_version}",
         f"- run_date: {strategy_run.run_date}",
         f"- status: {strategy_run.status}",
+        f"- ETF 基础池 total: {asset_status['total']}",
+        f"- 启用研究 enabled: {asset_status['enabled']}",
+        f"- 跨境 ETF cross_border: {asset_status['cross_border']}",
         "",
         "## Alpha 排名 (Alpha Ranking)",
         "",
@@ -144,6 +193,10 @@ def build_monthly_report_markdown(
     lines.extend(markdown_table(["代码 Symbol", "资产类别 Asset Class", "原始权重 Raw Weight", "最终权重 Final Weight", "说明 Reason"], target_rows(targets)))
     lines.extend(["", "## 风控检查 (Risk Check)", ""])
     lines.extend(markdown_table(["规则 Rule", "状态 Status", "调整前 Before", "调整后 After", "说明 Message"], risk_rows(risk_results)))
+    lines.extend(["", "## 当前持仓快照 (Current Holdings)", ""])
+    lines.extend(markdown_table(["代码 Symbol", "名称 Name", "市值 Market Value", "权重 Weight", "浮盈亏 PnL"], position_rows(latest_positions)))
+    lines.extend(["", "## 定投建议 (DCA Suggestions)", ""])
+    lines.extend(markdown_table(["代码 Symbol", "期数 Period", "建议金额 Amount", "权重缺口 Gap", "原因 Reason"], investment_rows(investment_suggestions)))
     lines.extend(["", "## 调仓建议单 (Rebalance Orders)", ""])
     lines.extend(markdown_table(["代码 Symbol", "方向 Action", "当前权重 Current", "目标权重 Target", "差异 Diff", "估算金额 Amount"], rebalance_rows(rebalance_orders)))
     lines.extend(["", "## 回测摘要 (Backtest Snapshot)", ""])
@@ -219,6 +272,32 @@ def rebalance_rows(orders: list[RebalanceOrder]) -> list[list[str]]:
             fmt_decimal(item.estimated_amount),
         ]
         for item in orders
+    ]
+
+
+def position_rows(positions: list[PortfolioPosition]) -> list[list[str]]:
+    return [
+        [
+            item.symbol,
+            item.position_name or "",
+            fmt_decimal(item.market_value),
+            fmt_percent(item.weight),
+            fmt_decimal(item.unrealized_pnl),
+        ]
+        for item in positions
+    ]
+
+
+def investment_rows(suggestions: list[InvestmentPlanSuggestion]) -> list[list[str]]:
+    return [
+        [
+            item.symbol,
+            str(item.period_no),
+            fmt_decimal(item.suggested_amount),
+            fmt_percent(item.gap_weight),
+            item.reason or "",
+        ]
+        for item in suggestions
     ]
 
 

@@ -3,6 +3,7 @@ import Dashboard from '../views/Dashboard.vue'
 import PortfolioWorkbench from '../views/PortfolioWorkbench.vue'
 import Workflow from '../views/Workflow.vue'
 import Assets from '../views/Assets.vue'
+import EtfCompare from '../views/EtfCompare.vue'
 import DataHealth from '../views/DataHealth.vue'
 import Factors from '../views/Factors.vue'
 import FactorResearch from '../views/FactorResearch.vue'
@@ -24,6 +25,7 @@ const router = createRouter({
     { path: '/portfolio-workbench', component: PortfolioWorkbench, meta: { title: '组合工作台' } },
     { path: '/workflow', component: Workflow, meta: { title: '全流程向导' } },
     { path: '/assets', component: Assets, meta: { title: 'ETF 池' } },
+    { path: '/etf-compare', component: EtfCompare, meta: { title: 'ETF 对比' } },
     { path: '/data-health', component: DataHealth, meta: { title: '数据健康' } },
     { path: '/factors', component: Factors, meta: { title: '因子排名' } },
     { path: '/factor-research', component: FactorResearch, meta: { title: '因子研究' } },

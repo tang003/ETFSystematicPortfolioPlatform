@@ -95,6 +95,8 @@ def analyze_investment_plan(
         suggestion_date=resolved_date,
         period_no=period_no,
         monthly_amount=Decimal(plan.monthly_amount),
+        investment_mode=plan.investment_mode,
+        target_annual_return=plan.target_annual_return,
         targets=targets,
         current_weights=current_weights,
     )
@@ -146,6 +148,8 @@ def build_investment_suggestions(
     suggestion_date: date,
     period_no: int,
     monthly_amount: Decimal,
+    investment_mode: str,
+    target_annual_return: Decimal | None,
     targets: list[TargetPortfolio],
     current_weights: dict[str, Decimal],
 ) -> list[InvestmentPlanSuggestion]:
@@ -154,16 +158,17 @@ def build_investment_suggestions(
         for item in targets
         if Decimal(item.final_target_weight or item.raw_target_weight or 0) > 0
     }
-    positive_gaps = {
+    raw_gaps = {
         symbol: (target - current_weights.get(symbol, Decimal("0")))
         for symbol, target in target_weights.items()
         if (target - current_weights.get(symbol, Decimal("0"))) > 0
     }
+    positive_gaps = adjust_gaps_by_mode(raw_gaps, target_weights, investment_mode, target_annual_return)
     allocation_base = sum(positive_gaps.values(), Decimal("0"))
 
     if allocation_base <= 0:
         allocation_base = sum(target_weights.values(), Decimal("0"))
-        positive_gaps = dict(target_weights)
+        positive_gaps = adjust_gaps_by_mode(dict(target_weights), target_weights, investment_mode, target_annual_return)
 
     rows: list[InvestmentPlanSuggestion] = []
     remaining = monthly_amount.quantize(Decimal("0.0001"))
@@ -189,13 +194,44 @@ def build_investment_suggestions(
                 gap_weight=(target - current).quantize(Decimal("0.000001")),
                 suggested_amount=amount,
                 action_suggestion="INVEST",
-                reason=build_investment_reason(symbol, current, target, amount),
+                reason=build_investment_reason(symbol, current, target, amount, investment_mode, target_annual_return),
             )
         )
     return rows
 
 
-def build_investment_reason(symbol: str, current: Decimal, target: Decimal, amount: Decimal) -> str:
+def adjust_gaps_by_mode(
+    gaps: dict[str, Decimal],
+    target_weights: dict[str, Decimal],
+    investment_mode: str,
+    target_annual_return: Decimal | None,
+) -> dict[str, Decimal]:
+    mode = (investment_mode or "scheduled_dca").strip()
+    if mode == "drawdown_boost":
+        return {symbol: gap * (Decimal("1") + target_weights.get(symbol, Decimal("0"))) for symbol, gap in gaps.items()}
+    if mode == "signal_timing":
+        return {symbol: gap * target_weights.get(symbol, Decimal("0.000001")) for symbol, gap in gaps.items()}
+    if mode == "auto_execution_preview":
+        risk_multiplier = Decimal("0.85") if target_annual_return and target_annual_return >= Decimal("0.15") else Decimal("1")
+        return {symbol: gap * risk_multiplier for symbol, gap in gaps.items()}
+    return gaps
+
+
+def build_investment_reason(
+    symbol: str,
+    current: Decimal,
+    target: Decimal,
+    amount: Decimal,
+    investment_mode: str,
+    target_annual_return: Decimal | None,
+) -> str:
+    mode_text = {
+        "scheduled_dca": "固定节奏定投",
+        "drawdown_boost": "回撤增强定投",
+        "signal_timing": "信号驱动择时",
+        "auto_execution_preview": "未来自动执行预览",
+    }.get(investment_mode or "scheduled_dca", investment_mode or "固定节奏定投")
+    target_note = f"目标年化参数为 {target_annual_return * Decimal('100'):.2f}%，该参数仅用于资金节奏约束，不代表收益承诺。" if target_annual_return is not None else "未设置目标年化参数。"
     if target > current:
-        return f"{symbol} 当前权重低于目标权重，优先分配本期定投资金 {amount} 元。"
-    return f"{symbol} 当前权重未低于目标权重，按目标权重分配本期定投资金 {amount} 元。"
+        return f"{mode_text}：{symbol} 当前权重低于目标权重，优先分配本期定投资金 {amount} 元。{target_note}"
+    return f"{mode_text}：{symbol} 当前权重未低于目标权重，按目标权重分配本期定投资金 {amount} 元。{target_note}"

@@ -59,6 +59,45 @@ export interface AssetUniverseSyncResponse {
   inserted_or_updated: number
 }
 
+export interface EtfCompareMetric {
+  symbol: string
+  name: string | null
+  asset_class: string | null
+  asset_region: string | null
+  risk_level: number | null
+  first_trade_date: string | null
+  latest_trade_date: string | null
+  latest_close: string | null
+  bars: number
+  total_return: string | null
+  annualized_return: string | null
+  annualized_volatility: string | null
+  max_drawdown: string | null
+  average_amount: string | null
+  tradability_score: number
+  tradability_level: string
+  tradability_notes: string[]
+}
+
+export interface EtfCompareSeriesPoint {
+  trade_date: string
+  value: string
+}
+
+export interface EtfCorrelationCell {
+  symbol_x: string
+  symbol_y: string
+  correlation: string | null
+}
+
+export interface EtfCompareResponse {
+  start_date: string | null
+  end_date: string | null
+  metrics: EtfCompareMetric[]
+  normalized_series: Record<string, EtfCompareSeriesPoint[]>
+  correlations: EtfCorrelationCell[]
+}
+
 export interface DataQualityStatus {
   total_logs: number
   error_logs: number
@@ -356,6 +395,8 @@ export const syncAssetUniverse = async (payload: { source?: string; limit?: numb
   (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload)).data
 export const updateAsset = async (symbol: string, payload: { enabled?: boolean; risk_level?: number; description?: string | null }) =>
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
+export const compareEtfs = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
+  (await api.post<EtfCompareResponse>('/api/etf-compare', payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchMarketSyncPlan = async (syncScope = 'core') =>

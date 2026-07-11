@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.33.0-etf-universe-sync`
+当前版本：`v0.34.0-etf-compare-dca-report`
 
 ## 认证约定
 
@@ -179,6 +179,33 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ```
 
 响应：返回更新后的 ETF 主数据对象。
+
+## POST /api/etf-compare
+
+用途：对比多只 ETF 的收益、年化波动、最大回撤、日均成交额、相关性和可交易性评分。该接口读取 `market_data_clean`，不会主动同步行情。
+
+请求示例：
+
+```json
+{
+  "symbols": ["510300", "159915", "513050"],
+  "start_date": "2025-07-11",
+  "end_date": "2026-07-11"
+}
+```
+
+响应字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| metrics | 每只 ETF 的收益、风险、成交额、样本数和可交易性评分 |
+| normalized_series | 以首日为 100 的标准化净值曲线 |
+| correlations | ETF 两两日收益相关性矩阵 |
+
+说明：
+
+- `tradability_score` 为 0-100 分，当前根据历史样本数、日均成交额和零成交量日期粗评。
+- 样本不足或缺少行情时，对应 ETF 的指标会为空或评分偏低，需要先到“数据健康”同步行情。
 
 后续计划接口：
 
