@@ -46,6 +46,17 @@ class AssetBatchUpsertResponse(BaseModel):
     inserted_or_updated: int
 
 
+class AssetUniverseSyncRequest(BaseModel):
+    source: str = Field(default="akshare")
+    limit: int | None = Field(default=None, ge=1, le=3000)
+
+
+class AssetUniverseSyncResponse(BaseModel):
+    source: str
+    total: int
+    inserted_or_updated: int
+
+
 class AssetUpdateRequest(BaseModel):
     enabled: bool | None = None
     risk_level: int | None = Field(default=None, ge=1, le=5)

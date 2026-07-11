@@ -2,8 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.schemas.asset_schema import AssetBatchUpsertRequest, AssetBatchUpsertResponse, AssetRead, AssetUpdateRequest
-from app.services.asset_service import batch_upsert_assets, list_assets, update_asset
+from app.schemas.asset_schema import (
+    AssetBatchUpsertRequest,
+    AssetBatchUpsertResponse,
+    AssetRead,
+    AssetUniverseSyncRequest,
+    AssetUniverseSyncResponse,
+    AssetUpdateRequest,
+)
+from app.services.asset_service import batch_upsert_assets, list_assets, sync_etf_universe, update_asset
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -23,6 +30,20 @@ def upsert_assets(
 ) -> AssetBatchUpsertResponse:
     count = batch_upsert_assets(db=db, items=request.items)
     return AssetBatchUpsertResponse(total=len(request.items), inserted_or_updated=count)
+
+
+@router.post("/sync-universe", response_model=AssetUniverseSyncResponse)
+def sync_asset_universe(
+    request: AssetUniverseSyncRequest,
+    db: Session = Depends(get_db),
+) -> AssetUniverseSyncResponse:
+    try:
+        result = sync_etf_universe(db=db, source=request.source, limit=request.limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - external market data providers are intentionally wrapped.
+        raise HTTPException(status_code=502, detail=f"ETF 全市场数据源暂不可用：{exc}") from exc
+    return AssetUniverseSyncResponse(**result)
 
 
 @router.patch("/{symbol}", response_model=AssetRead)

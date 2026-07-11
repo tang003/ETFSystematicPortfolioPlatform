@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.32.4-holding-quote-fallback`
+当前版本：`v0.33.0-etf-universe-sync`
 
 ## 认证约定
 
@@ -94,8 +94,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 说明：
 
-- 当前内置种子数据是用于快速启动和验证流程的样本池，不等于全市场 ETF 清单。
-- 如需扩展 ETF 池，可使用下方批量导入接口。
+- 当前内置种子数据是用于快速启动和验证流程的样本池。
+- 如需扩展 ETF 池，可使用下方全市场同步接口或批量导入接口。
 
 ## POST /api/assets/batch-upsert
 
@@ -129,6 +129,42 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "inserted_or_updated": 1
 }
 ```
+
+## POST /api/assets/sync-universe
+
+用途：从外部数据源同步全市场 ETF 基础池，写入 `asset_master`。该接口只补充“代码、名称、交易所、粗分类、区域、风险等级”等主数据，不同步历史行情。
+
+请求示例：
+
+```json
+{
+  "source": "akshare",
+  "limit": 300
+}
+```
+
+参数说明：
+
+| 参数 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| source | string | 否 | 当前支持 `akshare`。AKShare 不需要 token，底层使用公开行情源 |
+| limit | integer | 否 | 限制本次导入数量，调试时可使用；正式同步可不传 |
+
+响应示例：
+
+```json
+{
+  "source": "akshare",
+  "total": 300,
+  "inserted_or_updated": 300
+}
+```
+
+说明：
+
+- 新同步进来的 ETF 默认 `enabled=false`，不会自动进入行情同步、因子计算、策略和回测。
+- 如果 ETF 已存在，接口会更新名称、交易所、分类、区域等基础信息，但保留原有 `enabled`、风险等级和说明，避免覆盖人工维护内容。
+- 外部数据源短暂不可用时返回 HTTP 502，稍后重试即可，不影响已有 ETF 池。
 
 ## PATCH /api/assets/{symbol}
 

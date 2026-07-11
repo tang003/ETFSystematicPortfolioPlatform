@@ -7,6 +7,7 @@
           <p class="section-note">维护策略研究对象，只保留 ETF、场内基金、货币/债券/商品 ETF 等可配置资产。</p>
         </div>
         <div class="header-actions">
+          <el-button :loading="actionLoading" @click="syncUniverse">同步全市场 ETF</el-button>
           <el-button type="primary" :loading="actionLoading" @click="importPresetAssets">导入精选 ETF 示例池</el-button>
           <el-button @click="copyEnabledSymbols">复制已启用代码</el-button>
         </div>
@@ -137,7 +138,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchUpsertAssets, fetchAssets, updateAsset, type Asset, type AssetUpsertItem } from '../api/client'
+import { batchUpsertAssets, fetchAssets, syncAssetUniverse, updateAsset, type Asset, type AssetUpsertItem } from '../api/client'
 
 const assets = ref<Asset[]>([])
 const loading = ref(true)
@@ -209,6 +210,19 @@ async function importPresetAssets() {
     await refresh()
   } catch (error) {
     ElMessage.error(errorMessage(error, '导入失败'))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function syncUniverse() {
+  actionLoading.value = true
+  try {
+    const result = await syncAssetUniverse({ source: 'akshare' })
+    ElMessage.success(`已同步 ${result.inserted_or_updated} 只 ETF 到基础池，默认不启用研究`)
+    await refresh()
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '同步失败'))
   } finally {
     actionLoading.value = false
   }

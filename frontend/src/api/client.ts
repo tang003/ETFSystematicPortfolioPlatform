@@ -53,6 +53,12 @@ export interface AssetUpsertItem {
   description?: string | null
 }
 
+export interface AssetUniverseSyncResponse {
+  source: string
+  total: number
+  inserted_or_updated: number
+}
+
 export interface DataQualityStatus {
   total_logs: number
   error_logs: number
@@ -346,6 +352,8 @@ export const logout = async () => (await api.post<AuthStatus>('/api/auth/logout'
 export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
 export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =>
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
+export const syncAssetUniverse = async (payload: { source?: string; limit?: number }) =>
+  (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload)).data
 export const updateAsset = async (symbol: string, payload: { enabled?: boolean; risk_level?: number; description?: string | null }) =>
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
