@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.30.0-portfolio-xray-dca-goals`
+当前版本：`v0.31.0-smart-market-sync`
 
 ## 认证约定
 
@@ -158,11 +158,14 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 用途：同步 ETF 日线行情，写入 `market_data_raw`，并可同步写入 `market_data_clean` 和数据质量日志。
 
+如果 `symbols` 为空，系统会按 `sync_scope` 自动选择同步范围。推荐日常使用 `core`，它会合并“当前持仓、最新目标组合、定投建议涉及 ETF、启用 ETF 池”，避免每次同步市场全部 ETF。
+
 请求示例：
 
 ```json
 {
   "symbols": ["510300"],
+  "sync_scope": "core",
   "start_date": "2025-07-08",
   "end_date": "2026-07-08",
   "source": "akshare",
@@ -176,7 +179,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
 
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| symbols | string[] | 否 | ETF 代码列表；为空时同步全部启用 ETF |
+| symbols | string[] | 否 | ETF 代码列表；有值时优先使用手动代码 |
+| sync_scope | string | 否 | `core`、`positions`、`target`、`plans`、`enabled`、`all`；`symbols` 为空时生效 |
 | start_date | date | 否 | 开始日期，默认近一年 |
 | end_date | date | 否 | 结束日期，默认今天 |
 | source | string | 否 | 数据源，支持 `akshare`、`eastmoney`、`tushare`，默认 `akshare` |
@@ -192,6 +196,8 @@ curl "http://localhost:8000/api/assets?enabled=true"
   "start_date": "2025-07-08",
   "end_date": "2026-07-08",
   "source": "akshare",
+  "sync_scope": "core",
+  "incremental": true,
   "request_interval_seconds": 0.5,
   "total_symbols": 1,
   "requested_symbols": 1,
@@ -528,6 +534,35 @@ curl "http://localhost:8000/api/assets?enabled=true"
 ```json
 {
   "symbols": ["513050", "159928"]
+}
+```
+
+## GET /api/market/sync-plan
+
+用途：预览某个同步范围会包含哪些 ETF，以及哪些 ETF 还没有 clean 行情价格。
+
+请求示例：
+
+```bash
+curl "http://localhost:8000/api/market/sync-plan?sync_scope=core"
+```
+
+响应示例：
+
+```json
+{
+  "sync_scope": "core",
+  "total_symbols": 4,
+  "missing_price_count": 1,
+  "symbols": [
+    {
+      "symbol": "513050",
+      "name": "中概互联网ETF",
+      "categories": ["position", "enabled"],
+      "latest_trade_date": null,
+      "has_clean_price": false
+    }
+  ]
 }
 ```
 

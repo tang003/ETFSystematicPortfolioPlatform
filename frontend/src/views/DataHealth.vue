@@ -9,8 +9,18 @@
         <el-form-item label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
         </el-form-item>
+        <el-form-item label="同步范围">
+          <el-select v-model="syncScope" @change="refreshSyncPlan">
+            <el-option label="核心池：持仓 + 目标组合 + 定投 + 启用 ETF" value="core" />
+            <el-option label="当前持仓" value="positions" />
+            <el-option label="目标组合" value="target" />
+            <el-option label="定投建议涉及 ETF" value="plans" />
+            <el-option label="启用 ETF 池" value="enabled" />
+            <el-option label="全部资产主表" value="all" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="ETF 代码">
-          <el-input v-model="symbolsText" placeholder="留空代表全部启用 ETF，多个代码用逗号分隔" />
+          <el-input v-model="symbolsText" placeholder="留空使用上方同步范围；手动输入则只同步这些代码" />
         </el-form-item>
         <el-form-item label="日历源">
           <el-select v-model="calendarSource">
@@ -56,6 +66,32 @@
     <section class="panel span-3"><div class="metric">警告数<strong>{{ status?.warning_logs ?? 0 }}</strong></div></section>
     <section class="panel span-3"><div class="metric">日志总数<strong>{{ status?.total_logs ?? 0 }}</strong></div></section>
     <section class="panel span-12">
+      <div class="panel-header">
+        <h2>本次行情同步计划</h2>
+        <el-button :loading="loading" @click="refreshSyncPlan">刷新计划</el-button>
+      </div>
+      <div class="summary-grid">
+        <div class="metric">同步范围<strong>{{ syncScopeLabel }}</strong></div>
+        <div class="metric">计划 ETF<strong>{{ syncPlan?.total_symbols ?? 0 }}</strong></div>
+        <div class="metric">缺行情<strong>{{ syncPlan?.missing_price_count ?? 0 }}</strong></div>
+      </div>
+      <el-table :data="syncPlan?.symbols ?? []" height="260">
+        <el-table-column prop="symbol" label="代码" width="110" />
+        <el-table-column prop="name" label="名称" min-width="160" />
+        <el-table-column label="来源" min-width="180">
+          <template #default="{ row }">{{ formatCategories(row.categories) }}</template>
+        </el-table-column>
+        <el-table-column prop="latest_trade_date" label="最新行情日" width="130" />
+        <el-table-column label="状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="row.has_clean_price ? 'success' : 'warning'">
+              {{ row.has_clean_price ? '已有行情' : '待补行情' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+    <section class="panel span-12">
       <h2>数据质量日志</h2>
       <el-table :data="logs" height="560">
         <el-table-column prop="created_at" label="创建时间" width="190" />
@@ -72,16 +108,28 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { checkDataQuality, fetchDataQualityLogs, fetchDataQualityStatus, syncCalendar, syncMarket, type DataQualityLog, type DataQualityStatus } from '../api/client'
+import {
+  checkDataQuality,
+  fetchDataQualityLogs,
+  fetchDataQualityStatus,
+  fetchMarketSyncPlan,
+  syncCalendar,
+  syncMarket,
+  type DataQualityLog,
+  type DataQualityStatus,
+  type MarketSyncPlan,
+} from '../api/client'
 
 const status = ref<DataQualityStatus>()
 const logs = ref<DataQualityLog[]>([])
+const syncPlan = ref<MarketSyncPlan>()
 const loading = ref(true)
 const actionLoading = ref(false)
 const today = new Date().toISOString().slice(0, 10)
 const lastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 const dateRange = ref<[string, string]>([lastMonth, today])
 const symbolsText = ref('')
+const syncScope = ref('core')
 const maxSymbols = ref(10)
 const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
@@ -93,10 +141,18 @@ onMounted(refresh)
 async function refresh() {
   loading.value = true
   try {
-    ;[status.value, logs.value] = await Promise.all([fetchDataQualityStatus(), fetchDataQualityLogs()])
+    ;[status.value, logs.value, syncPlan.value] = await Promise.all([
+      fetchDataQualityStatus(),
+      fetchDataQualityLogs(),
+      fetchMarketSyncPlan(syncScope.value),
+    ])
   } finally {
     loading.value = false
   }
+}
+
+async function refreshSyncPlan() {
+  syncPlan.value = await fetchMarketSyncPlan(syncScope.value)
 }
 
 async function runCalendarSync() {
@@ -112,11 +168,13 @@ async function runCalendarSync() {
 }
 
 async function runMarketSync() {
+  const symbols = splitSymbols()
   await withAction('行情同步完成', () =>
     syncMarket({
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
-      symbols: splitSymbols(),
+      symbols,
+      sync_scope: symbols.length ? 'custom' : syncScope.value,
       source: marketSource.value,
       incremental: incrementalSync.value,
       max_symbols: maxSymbols.value,
@@ -127,9 +185,9 @@ async function runMarketSync() {
 }
 
 async function runQualityCheck() {
-  const symbols = splitSymbols()
+  const symbols = selectedQualitySymbols()
   if (!symbols.length) {
-    ElMessage.warning('缺失数据检查需要填写至少一个 ETF 代码')
+    ElMessage.warning('当前同步计划没有可检查的 ETF 代码')
     return
   }
   await withAction('缺失数据检查完成', () => checkDataQuality({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols }))
@@ -145,18 +203,20 @@ async function runFullDataFlow() {
       source: calendarSource.value,
       incremental: incrementalSync.value,
     })
+    const symbols = splitSymbols()
     await syncMarket({
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
-      symbols: splitSymbols(),
+      symbols,
+      sync_scope: symbols.length ? 'custom' : syncScope.value,
       source: marketSource.value,
       incremental: incrementalSync.value,
       max_symbols: maxSymbols.value,
       clean_after_sync: true,
       request_interval_seconds: requestIntervalSeconds.value,
     })
-    const symbols = splitSymbols()
-    if (symbols.length) await checkDataQuality({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols })
+    const qualitySymbols = selectedQualitySymbols()
+    if (qualitySymbols.length) await checkDataQuality({ start_date: dateRange.value[0], end_date: dateRange.value[1], symbols: qualitySymbols })
     ElMessage.success('数据更新流程已完成')
     await refresh()
   } catch (error) {
@@ -182,6 +242,34 @@ async function withAction(successMessage: string, action: () => Promise<unknown>
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
 }
+
+function selectedQualitySymbols() {
+  const manual = splitSymbols()
+  if (manual.length) return manual
+  return syncPlan.value?.symbols.map((item) => item.symbol) ?? []
+}
+
+function formatCategories(categories: string[]) {
+  const labels: Record<string, string> = {
+    position: '持仓',
+    target: '目标组合',
+    plan: '定投',
+    enabled: '启用池',
+  }
+  return categories.map((item) => labels[item] || item).join(' / ') || '-'
+}
+
+const syncScopeLabel = computed(() => {
+  const labels: Record<string, string> = {
+    core: '核心池',
+    positions: '当前持仓',
+    target: '目标组合',
+    plans: '定投',
+    enabled: '启用池',
+    all: '全部资产',
+  }
+  return labels[syncScope.value] || syncScope.value
+})
 
 const sourceHintTitle = computed(() => {
   if (marketSource.value === 'tushare') return '共享 Tushare 建议'

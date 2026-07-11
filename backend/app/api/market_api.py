@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.schemas.market_schema import MarketBarRead, MarketSyncRequest, MarketSyncResponse
-from app.services.market_service import list_clean_bars, list_raw_bars, sync_market_data
+from app.schemas.market_schema import MarketBarRead, MarketSyncPlanResponse, MarketSyncRequest, MarketSyncResponse
+from app.services.market_service import build_market_sync_plan, list_clean_bars, list_raw_bars, sync_market_data
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -15,6 +15,7 @@ def sync_market(request: MarketSyncRequest, db: Session = Depends(get_db)) -> Ma
     return sync_market_data(
         db,
         symbols=request.symbols,
+        sync_scope=request.sync_scope,
         start_date=request.start_date,
         end_date=request.end_date,
         source=request.source,
@@ -23,6 +24,14 @@ def sync_market(request: MarketSyncRequest, db: Session = Depends(get_db)) -> Ma
         max_symbols=request.max_symbols,
         request_interval_seconds=request.request_interval_seconds,
     )
+
+
+@router.get("/sync-plan", response_model=MarketSyncPlanResponse)
+def get_market_sync_plan(
+    sync_scope: str = Query(default="core"),
+    db: Session = Depends(get_db),
+) -> MarketSyncPlanResponse:
+    return build_market_sync_plan(db, sync_scope=sync_scope)
 
 
 @router.get("/raw", response_model=list[MarketBarRead])

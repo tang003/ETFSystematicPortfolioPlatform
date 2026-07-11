@@ -50,7 +50,8 @@ def test_normalize_position_input_uses_resolved_detail() -> None:
 
 
 def test_infer_asset_type_defaults_platform_assets_to_etf() -> None:
-    assert infer_asset_type("stock") == "stock"
+    assert infer_asset_type("stock") == "etf"
+    assert infer_asset_type("equity") == "etf"
     assert infer_asset_type("cash") == "cash"
     assert infer_asset_type("cross_border") == "etf"
     assert infer_asset_type(None) == "etf"

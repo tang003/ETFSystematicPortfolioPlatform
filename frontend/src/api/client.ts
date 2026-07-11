@@ -143,6 +143,21 @@ export interface PortfolioPosition {
   created_at: string
 }
 
+export interface MarketSyncPlanItem {
+  symbol: string
+  name: string | null
+  categories: string[]
+  latest_trade_date: string | null
+  has_clean_price: boolean
+}
+
+export interface MarketSyncPlan {
+  sync_scope: string
+  total_symbols: number
+  missing_price_count: number
+  symbols: MarketSyncPlanItem[]
+}
+
 export interface PositionResolveResult {
   symbol: string
   position_name: string | null
@@ -335,6 +350,8 @@ export const updateAsset = async (symbol: string, payload: { enabled?: boolean; 
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
+export const fetchMarketSyncPlan = async (syncScope = 'core') =>
+  (await api.get<MarketSyncPlan>(`/api/market/sync-plan?sync_scope=${encodeURIComponent(syncScope)}`)).data
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
 export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data
@@ -387,6 +404,7 @@ export const syncCalendar = async (payload: { start_date: string; end_date: stri
   (await api.post<RunSummary>('/api/calendar/sync', payload)).data
 export const syncMarket = async (payload: {
   symbols?: string[]
+  sync_scope?: string
   start_date?: string
   end_date?: string
   source?: string

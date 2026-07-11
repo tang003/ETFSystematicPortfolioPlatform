@@ -23,6 +23,29 @@ def test_limit_symbols_rejects_invalid_limit() -> None:
         market_service.limit_symbols(["510300"], 0)
 
 
+def test_merge_symbol_groups_dedupes_by_priority() -> None:
+    assert market_service.merge_symbol_groups(
+        ["513050", "510300"],
+        ["510300", "159915"],
+        ["513050", "511010"],
+    ) == ["513050", "510300", "159915", "511010"]
+
+
+def test_resolve_scoped_symbols_core_merges_priority_groups(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(market_service, "latest_position_symbols", lambda db: ["513050", "510300"])
+    monkeypatch.setattr(market_service, "latest_target_symbols", lambda db: ["510300", "159915"])
+    monkeypatch.setattr(market_service, "plan_suggestion_symbols", lambda db: ["511010"])
+    monkeypatch.setattr(market_service, "enabled_asset_symbols", lambda db: ["510300", "588000"])
+
+    assert market_service.resolve_scoped_symbols(db=None, sync_scope="core") == [
+        "513050",
+        "510300",
+        "159915",
+        "511010",
+        "588000",
+    ]
+
+
 def test_normalize_market_bars_from_english_columns() -> None:
     frame = pd.DataFrame(
         [

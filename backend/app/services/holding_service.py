@@ -64,7 +64,7 @@ def normalize_position_input(item, detail: PositionResolveRead | None = None) ->
     if cost_price is None and quantity > 0 and cost_basis is not None:
         cost_price = (cost_basis / quantity).quantize(Decimal("0.000001"))
     if market_value is None or market_value <= 0:
-        raise ValueError(f"{item.symbol} 缺少最新价格，无法计算市值。请先同步该代码行情，或临时补充 current_price。")
+        raise ValueError(f"{item.symbol} 缺少最新价格，无法计算市值。请先同步该代码行情，或临时补充现价。")
 
     unrealized_pnl = None
     unrealized_pnl_rate = None
@@ -132,11 +132,9 @@ def resolve_position_detail(db: Session, symbol: str) -> PositionResolveRead:
 
 def infer_asset_type(asset_class: str | None) -> str:
     normalized = (asset_class or "").lower()
-    if normalized in {"stock", "equity"}:
-        return "stock"
     if normalized == "cash":
         return "cash"
-    if normalized in {"bond", "commodity", "money_market", "qdii", "index"}:
+    if normalized in {"stock", "equity", "bond", "commodity", "money_market", "qdii", "index", "cross_border"}:
         return "etf"
     return "etf"
 

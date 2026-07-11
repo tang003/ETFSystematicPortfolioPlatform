@@ -6,13 +6,14 @@ from typing import Any
 import akshare as ak
 import pandas as pd
 import requests
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean, MarketDataRaw
+from app.models.portfolio import InvestmentPlanSuggestion, PortfolioPosition, TargetPortfolio
 from app.services.data_quality_service import add_quality_log, check_clean_bars
 from app.services.tushare_service import fetch_fund_daily, to_tushare_code
 
@@ -27,14 +28,102 @@ def default_sync_dates(start_date: date | None, end_date: date | None) -> tuple[
     return resolved_start, resolved_end
 
 
-def resolve_symbols(db: Session, symbols: list[str] | None) -> list[str]:
+SYNC_SCOPES = {"enabled", "core", "positions", "target", "plans", "all"}
+
+
+def resolve_symbols(db: Session, symbols: list[str] | None, sync_scope: str = "enabled") -> list[str]:
     if symbols:
-        return [symbol.strip() for symbol in symbols if symbol.strip()]
+        return dedupe_symbols(symbols)
+    return resolve_scoped_symbols(db, sync_scope)
+
+
+def dedupe_symbols(symbols: list[str]) -> list[str]:
+    seen: set[str] = set()
+    resolved: list[str] = []
+    for symbol in symbols:
+        cleaned = symbol.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        resolved.append(cleaned)
+    return resolved
+
+
+def resolve_scoped_symbols(db: Session, sync_scope: str = "enabled") -> list[str]:
+    normalized_scope = (sync_scope or "enabled").strip().lower()
+    if normalized_scope not in SYNC_SCOPES:
+        raise ValueError("sync_scope must be one of: enabled, core, positions, target, plans, all")
+    if normalized_scope == "positions":
+        return latest_position_symbols(db)
+    if normalized_scope == "target":
+        return latest_target_symbols(db)
+    if normalized_scope == "plans":
+        return plan_suggestion_symbols(db)
+    if normalized_scope == "all":
+        return all_asset_symbols(db)
+    if normalized_scope == "core":
+        return merge_symbol_groups(
+            latest_position_symbols(db),
+            latest_target_symbols(db),
+            plan_suggestion_symbols(db),
+            enabled_asset_symbols(db),
+        )
+    return enabled_asset_symbols(db)
+
+
+def enabled_asset_symbols(db: Session) -> list[str]:
     return list(
         db.scalars(
             select(AssetMaster.symbol).where(AssetMaster.enabled.is_(True)).order_by(AssetMaster.symbol)
         ).all()
     )
+
+
+def all_asset_symbols(db: Session) -> list[str]:
+    return list(db.scalars(select(AssetMaster.symbol).order_by(AssetMaster.symbol)).all())
+
+
+def latest_position_symbols(db: Session) -> list[str]:
+    latest_date = db.scalar(select(func.max(PortfolioPosition.position_date)))
+    if latest_date is None:
+        return []
+    return list(
+        db.scalars(
+            select(PortfolioPosition.symbol)
+            .where(PortfolioPosition.position_date == latest_date)
+            .order_by(PortfolioPosition.weight.desc().nullslast(), PortfolioPosition.symbol)
+        ).all()
+    )
+
+
+def latest_target_symbols(db: Session) -> list[str]:
+    latest_date = db.scalar(select(func.max(TargetPortfolio.portfolio_date)))
+    if latest_date is None:
+        return []
+    return list(
+        db.scalars(
+            select(TargetPortfolio.symbol)
+            .where(TargetPortfolio.portfolio_date == latest_date)
+            .order_by(TargetPortfolio.final_target_weight.desc().nullslast(), TargetPortfolio.symbol)
+        ).all()
+    )
+
+
+def plan_suggestion_symbols(db: Session) -> list[str]:
+    return list(
+        db.scalars(
+            select(InvestmentPlanSuggestion.symbol)
+            .distinct()
+            .order_by(InvestmentPlanSuggestion.symbol)
+        ).all()
+    )
+
+
+def merge_symbol_groups(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    for group in groups:
+        merged.extend(group)
+    return dedupe_symbols(merged)
 
 
 def resolve_symbol_meta(db: Session, symbols: list[str]) -> dict[str, AssetMaster]:
@@ -147,13 +236,14 @@ def sync_market_data(
     start_date: date | None,
     end_date: date | None,
     source: str = "akshare",
+    sync_scope: str = "enabled",
     incremental: bool = False,
     clean_after_sync: bool = True,
     max_symbols: int | None = None,
     request_interval_seconds: float = 0,
 ) -> dict[str, Any]:
     resolved_start, resolved_end = default_sync_dates(start_date, end_date)
-    all_symbols = resolve_symbols(db, symbols)
+    all_symbols = resolve_symbols(db, symbols, sync_scope=sync_scope)
     resolved_symbols, skipped_symbols = limit_symbols(all_symbols, max_symbols)
     symbol_meta = resolve_symbol_meta(db, resolved_symbols)
     results: list[dict[str, Any]] = []
@@ -237,6 +327,7 @@ def sync_market_data(
         "start_date": resolved_start,
         "end_date": resolved_end,
         "source": source,
+        "sync_scope": "custom" if symbols else sync_scope,
         "incremental": incremental,
         "request_interval_seconds": effective_interval,
         "total_symbols": len(resolved_symbols),
@@ -250,6 +341,58 @@ def sync_market_data(
         "total_quality_logs": sum(item["quality_logs"] for item in results),
         "results": results,
     }
+
+
+def build_market_sync_plan(db: Session, sync_scope: str = "core") -> dict[str, Any]:
+    symbols = resolve_scoped_symbols(db, sync_scope)
+    symbol_meta = resolve_symbol_meta(db, symbols)
+    latest_dates = latest_clean_trade_dates(db, symbols)
+    categories = symbol_categories(db, symbols)
+    rows = [
+        {
+            "symbol": symbol,
+            "name": symbol_meta[symbol].name if symbol in symbol_meta else None,
+            "categories": categories.get(symbol, []),
+            "latest_trade_date": latest_dates.get(symbol),
+            "has_clean_price": latest_dates.get(symbol) is not None,
+        }
+        for symbol in symbols
+    ]
+    return {
+        "sync_scope": sync_scope,
+        "total_symbols": len(rows),
+        "missing_price_count": sum(1 for row in rows if not row["has_clean_price"]),
+        "symbols": rows,
+    }
+
+
+def latest_clean_trade_dates(db: Session, symbols: list[str]) -> dict[str, date]:
+    if not symbols:
+        return {}
+    rows = db.execute(
+        select(MarketDataClean.symbol, func.max(MarketDataClean.trade_date))
+        .where(MarketDataClean.symbol.in_(symbols))
+        .group_by(MarketDataClean.symbol)
+    ).all()
+    return {symbol: trade_date for symbol, trade_date in rows if trade_date is not None}
+
+
+def symbol_categories(db: Session, symbols: list[str]) -> dict[str, list[str]]:
+    category_sets = {symbol: set() for symbol in symbols}
+    for symbol in latest_position_symbols(db):
+        if symbol in category_sets:
+            category_sets[symbol].add("position")
+    for symbol in latest_target_symbols(db):
+        if symbol in category_sets:
+            category_sets[symbol].add("target")
+    for symbol in plan_suggestion_symbols(db):
+        if symbol in category_sets:
+            category_sets[symbol].add("plan")
+    enabled = set(enabled_asset_symbols(db))
+    for symbol in symbols:
+        if symbol in enabled:
+            category_sets[symbol].add("enabled")
+    return {symbol: sorted(values) for symbol, values in category_sets.items()}
 
 
 def latest_market_trade_date(db: Session, symbol: str) -> date | None:

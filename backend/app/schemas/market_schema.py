@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class MarketSyncRequest(BaseModel):
     symbols: list[str] | None = Field(default=None, description="ETF symbols; empty means all enabled ETFs")
+    sync_scope: str = Field(default="enabled", description="enabled, core, positions, target, plans, or all")
     start_date: date | None = Field(default=None, description="Start date; default is one year before end_date")
     end_date: date | None = Field(default=None, description="End date; default is today")
     source: str = Field(default="akshare", description="akshare falls back to eastmoney when possible")
@@ -28,6 +29,7 @@ class MarketSyncResponse(BaseModel):
     start_date: date
     end_date: date
     source: str
+    sync_scope: str
     incremental: bool
     request_interval_seconds: float
     total_symbols: int
@@ -40,6 +42,21 @@ class MarketSyncResponse(BaseModel):
     total_clean_rows: int
     total_quality_logs: int
     results: list[SymbolSyncResult]
+
+
+class MarketSyncPlanItem(BaseModel):
+    symbol: str
+    name: str | None = None
+    categories: list[str]
+    latest_trade_date: date | None = None
+    has_clean_price: bool
+
+
+class MarketSyncPlanResponse(BaseModel):
+    sync_scope: str
+    total_symbols: int
+    missing_price_count: int
+    symbols: list[MarketSyncPlanItem]
 
 
 class MarketBarRead(BaseModel):
