@@ -18,6 +18,7 @@ from app.services.data_quality_service import add_quality_log, check_clean_bars
 from app.services.tushare_service import fetch_fund_daily, to_tushare_code
 
 EASTMONEY_KLINE_URL = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+EASTMONEY_QUOTE_URL = "https://push2.eastmoney.com/api/qt/stock/get"
 
 
 def default_sync_dates(start_date: date | None, end_date: date | None) -> tuple[date, date]:
@@ -227,6 +228,63 @@ def eastmoney_secid(symbol: str) -> str:
     if symbol.startswith(("5", "6", "9")):
         return f"1.{symbol}"
     return f"0.{symbol}"
+
+
+def fetch_eastmoney_spot_quote(symbol: str) -> dict[str, Any]:
+    response = requests.get(
+        EASTMONEY_QUOTE_URL,
+        params={
+            "secid": eastmoney_secid(symbol),
+            "fields": "f43,f44,f45,f46,f47,f48,f57,f58",
+        },
+        timeout=15,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    response.raise_for_status()
+    data = (response.json().get("data") or {})
+    price = eastmoney_scaled_price(data.get("f43"))
+    if price is None or price <= 0:
+        raise ValueError(f"{symbol} eastmoney spot returned no valid price")
+    return {
+        "symbol": symbol,
+        "name": data.get("f58"),
+        "trade_date": date.today(),
+        "open": eastmoney_scaled_price(data.get("f46")) or price,
+        "high": eastmoney_scaled_price(data.get("f44")) or price,
+        "low": eastmoney_scaled_price(data.get("f45")) or price,
+        "close": price,
+        "volume": _to_decimal(data.get("f47")),
+        "amount": _to_decimal(data.get("f48")),
+        "raw_payload": data,
+    }
+
+
+def sync_eastmoney_spot_quote(db: Session, symbol: str) -> dict[str, Any]:
+    quote = fetch_eastmoney_spot_quote(symbol)
+    row = {
+        "symbol": symbol,
+        "trade_date": quote["trade_date"],
+        "open": quote["open"],
+        "high": quote["high"],
+        "low": quote["low"],
+        "close": quote["close"],
+        "volume": quote["volume"],
+        "amount": quote["amount"],
+        "raw_payload": quote["raw_payload"],
+    }
+    upsert_raw_bars(db, [row], "eastmoney_spot")
+    upsert_clean_bars(db, [row])
+    db.commit()
+    return quote
+
+
+def eastmoney_scaled_price(value: Any) -> Decimal | None:
+    price = _to_decimal(value)
+    if price is None:
+        return None
+    if price > 100:
+        price = price / Decimal("1000")
+    return price.quantize(Decimal("0.000001"))
 
 
 def sync_market_data(

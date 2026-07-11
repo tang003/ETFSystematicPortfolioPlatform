@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.32.3-holding-refresh-combined`
+当前版本：`v0.32.4-holding-quote-fallback`
 
 ## 认证约定
 

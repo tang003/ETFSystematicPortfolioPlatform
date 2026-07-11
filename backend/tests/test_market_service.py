@@ -12,6 +12,12 @@ def test_eastmoney_secid_uses_exchange_prefix() -> None:
     assert market_service.eastmoney_secid("159915") == "0.159915"
 
 
+def test_eastmoney_scaled_price_handles_scaled_quote() -> None:
+    assert market_service.eastmoney_scaled_price("1092") == Decimal("1.092000")
+    assert market_service.eastmoney_scaled_price("1.092") == Decimal("1.092000")
+    assert market_service.eastmoney_scaled_price("-") is None
+
+
 def test_limit_symbols_returns_selected_and_skipped_count() -> None:
     selected, skipped = market_service.limit_symbols(["510300", "510500", "159915"], 2)
     assert selected == ["510300", "510500"]

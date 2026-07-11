@@ -143,7 +143,7 @@ def ensure_position_market_data(db: Session, symbol: str, *, source: str = "aksh
     if latest_clean_bar(db, symbol) is not None:
         return
 
-    from app.services.market_service import sync_market_data
+    from app.services.market_service import sync_eastmoney_spot_quote, sync_market_data
 
     end_date = date.today()
     start_date = end_date - timedelta(days=45)
@@ -159,6 +159,12 @@ def ensure_position_market_data(db: Session, symbol: str, *, source: str = "aksh
         max_symbols=1,
         request_interval_seconds=0,
     )
+    if latest_clean_bar(db, symbol) is None:
+        try:
+            quote = sync_eastmoney_spot_quote(db, symbol)
+            update_asset_from_quote(db, symbol, quote.get("name"))
+        except Exception:  # noqa: BLE001 - keep manual current_price fallback available.
+            return
 
 
 def ensure_position_asset(db: Session, symbol: str) -> AssetMaster:
@@ -184,6 +190,17 @@ def ensure_position_asset(db: Session, symbol: str) -> AssetMaster:
     db.commit()
     db.refresh(asset)
     return asset
+
+
+def update_asset_from_quote(db: Session, symbol: str, name: str | None) -> None:
+    if not name:
+        return
+    asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == symbol))
+    if asset is None:
+        return
+    if asset.name == infer_placeholder_name(symbol):
+        asset.name = name
+        db.commit()
 
 
 def latest_clean_bar(db: Session, symbol: str) -> MarketDataClean | None:
