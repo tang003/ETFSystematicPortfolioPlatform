@@ -49,10 +49,16 @@ def score_etf_tradability(
     resolved_start = start_date or (resolved_end - timedelta(days=365))
     cleaned_symbols = dedupe_symbols(symbols)
     asset_meta = load_asset_meta(db, cleaned_symbols)
+    bars_by_symbol = load_clean_bars_for_symbols(
+        db,
+        symbols=cleaned_symbols,
+        start_date=resolved_start,
+        end_date=resolved_end,
+    )
     return [
         build_compare_metric(
             symbol,
-            load_clean_bars(db, symbol=symbol, start_date=resolved_start, end_date=resolved_end),
+            bars_by_symbol.get(symbol, []),
             asset_meta.get(symbol),
         )
         for symbol in cleaned_symbols
@@ -90,6 +96,33 @@ def load_clean_bars(db: Session, *, symbol: str, start_date: date, end_date: dat
             .order_by(MarketDataClean.trade_date)
         ).all()
     )
+
+
+def load_clean_bars_for_symbols(
+    db: Session,
+    *,
+    symbols: list[str],
+    start_date: date,
+    end_date: date,
+) -> dict[str, list[MarketDataClean]]:
+    if not symbols:
+        return {}
+    rows = list(
+        db.scalars(
+            select(MarketDataClean)
+            .where(
+                MarketDataClean.symbol.in_(symbols),
+                MarketDataClean.trade_date >= start_date,
+                MarketDataClean.trade_date <= end_date,
+                MarketDataClean.close.is_not(None),
+            )
+            .order_by(MarketDataClean.symbol, MarketDataClean.trade_date)
+        ).all()
+    )
+    grouped = {symbol: [] for symbol in symbols}
+    for row in rows:
+        grouped.setdefault(row.symbol, []).append(row)
+    return grouped
 
 
 def build_compare_metric(symbol: str, rows: list[MarketDataClean], asset: AssetMaster | None) -> dict:

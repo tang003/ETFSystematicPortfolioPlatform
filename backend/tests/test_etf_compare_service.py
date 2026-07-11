@@ -39,3 +39,21 @@ def test_correlation_uses_overlapping_return_dates() -> None:
     right = {date(2026, 1, 2): 0.02, date(2026, 1, 3): 0.04, date(2026, 1, 4): 0.06}
 
     assert etf_compare_service.quantize_rate(etf_compare_service.correlation(left, right)) == Decimal("1.000000")
+
+
+def test_score_etf_tradability_keeps_symbols_without_bars(monkeypatch) -> None:
+    monkeypatch.setattr(etf_compare_service, "load_asset_meta", lambda db, symbols: {})
+    monkeypatch.setattr(
+        etf_compare_service,
+        "load_clean_bars_for_symbols",
+        lambda db, symbols, start_date, end_date: {"510300": [Bar(date(2026, 1, 1), "1.00")]},
+    )
+
+    rows = etf_compare_service.score_etf_tradability(
+        db=None,
+        symbols=["510300", "159915"],
+        end_date=date(2026, 1, 2),
+    )
+
+    assert [item["symbol"] for item in rows] == ["510300", "159915"]
+    assert rows[1]["bars"] == 0
