@@ -7,6 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY backend/requirements.txt /app/requirements.txt
+RUN python -m pip install --no-cache-dir --upgrade pip==26.1.2
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend/alembic.ini /app/alembic.ini

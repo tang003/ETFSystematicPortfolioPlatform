@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.core.config import get_settings
 from app.core.security import create_session_token, hash_password, read_session_token, verify_password
 from app.main import create_app
+from app.api.auth_api import resolve_client_key
 
 
 def test_password_hash_round_trip() -> None:
@@ -55,5 +56,21 @@ def test_protected_api_requires_login(monkeypatch) -> None:
 
             assert client.post("/api/auth/logout").status_code == 200
             assert client.get("/api/assets").status_code == 401
+    finally:
+        get_settings.cache_clear()
+
+
+def test_resolve_client_key_uses_rightmost_forwarded_for_when_proxy_trusted(monkeypatch) -> None:
+    class Client:
+        host = "127.0.0.1"
+
+    class Request:
+        headers = {"x-forwarded-for": "198.51.100.10, 203.0.113.20"}
+        client = Client()
+
+    monkeypatch.setenv("TRUST_PROXY_HEADERS", "true")
+    get_settings.cache_clear()
+    try:
+        assert resolve_client_key(Request()) == "203.0.113.20"
     finally:
         get_settings.cache_clear()

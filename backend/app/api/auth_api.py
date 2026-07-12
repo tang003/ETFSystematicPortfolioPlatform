@@ -140,5 +140,5 @@ def resolve_client_key(request: Request) -> str:
     if settings.trust_proxy_headers:
         forwarded_for = request.headers.get("x-forwarded-for", "")
         if forwarded_for:
-            return forwarded_for.split(",", 1)[0].strip()
+            return forwarded_for.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
