@@ -13,7 +13,17 @@
           <el-input v-model="symbolsText" placeholder="多个代码用逗号或空格分隔，建议 2-5 只" />
         </el-form-item>
         <el-form-item label="日期范围">
-          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
+          <el-select v-model="rangeKey" @change="applyRange">
+            <el-option label="最近 6 个月" value="6m" />
+            <el-option label="最近 1 年" value="1y" />
+            <el-option label="最近 3 年" value="3y" />
+            <el-option label="自定义" value="custom" />
+          </el-select>
+          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
+        </el-form-item>
+        <el-form-item label="自动补数">
+          <el-switch v-model="autoSyncMissing" />
+          <span class="form-note">开启后会用 Tushare 尝试补齐本次对比缺失行情，最多 {{ maxAutoSyncSymbols }} 只。</span>
         </el-form-item>
       </el-form>
       <div class="source-hint">
@@ -120,12 +130,16 @@ const loading = ref(false)
 const actionLoading = ref(false)
 const chartRef = ref<HTMLElement>()
 const result = ref<EtfCompareResponse | null>(null)
-const today = new Date().toISOString().slice(0, 10)
-const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const dateRange = ref<[string, string]>([start, today])
+const rangeKey = ref('6m')
+const dateRange = ref<[string, string]>(buildRange(rangeKey.value))
 const symbolsText = ref('510300,159915,513050')
+const autoSyncMissing = ref(false)
+const maxAutoSyncSymbols = ref(5)
 
-onMounted(runCompare)
+onMounted(() => {
+  applyRange()
+  runCompare()
+})
 
 const comparedSymbols = computed(() => result.value?.metrics.map((item) => item.symbol) || [])
 const correlationRows = computed(() =>
@@ -148,7 +162,13 @@ async function runCompare() {
   actionLoading.value = true
   loading.value = true
   try {
-    result.value = await compareEtfs({ symbols, start_date: dateRange.value[0], end_date: dateRange.value[1] })
+    result.value = await compareEtfs({
+      symbols,
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      auto_sync_missing: autoSyncMissing.value,
+      max_auto_sync_symbols: maxAutoSyncSymbols.value,
+    })
     await nextTick()
     renderChart()
   } catch (error) {
@@ -185,6 +205,27 @@ function firstSeriesDates() {
 
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean).slice(0, 8)
+}
+
+function applyRange() {
+  if (rangeKey.value !== 'custom') {
+    dateRange.value = buildRange(rangeKey.value)
+  }
+}
+
+function buildRange(value: string): [string, string] {
+  const end = new Date()
+  const start = new Date(end)
+  const months: Record<string, number> = { '6m': 6, '1y': 12, '3y': 36 }
+  start.setMonth(start.getMonth() - (months[value] || 6))
+  return [formatDate(start), formatDate(end)]
+}
+
+function formatDate(value: Date) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function percent(value: string | null) {

@@ -95,3 +95,32 @@ def test_screen_etfs_filters_and_sorts_candidates(monkeypatch) -> None:
     assert result["total_candidates"] == 2
     assert result["returned"] == 1
     assert [item["symbol"] for item in result["metrics"]] == ["159915"]
+
+
+def test_auto_sync_missing_bars_syncs_limited_missing_symbols(monkeypatch) -> None:
+    calls = []
+
+    def fake_sync(db, **kwargs):
+        calls.append(kwargs)
+        return {"success_count": len(kwargs["symbols"])}
+
+    def fake_load(db, symbols, start_date, end_date):
+        return {symbol: [Bar(date(2026, 1, 1), "1.00")] for symbol in symbols}
+
+    monkeypatch.setattr(etf_compare_service, "sync_market_data", fake_sync)
+    monkeypatch.setattr(etf_compare_service, "load_clean_bars_for_symbols", fake_load)
+
+    result = etf_compare_service.auto_sync_missing_bars(
+        None,
+        symbols=["513500", "159612", "510300"],
+        bars_by_symbol={"510300": [Bar(date(2026, 1, 1), "1.00")] * 30},
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 7, 1),
+        min_bars=20,
+        max_symbols=1,
+    )
+
+    assert calls[0]["symbols"] == ["513500"]
+    assert calls[0]["source"] == "tushare"
+    assert len(result["513500"]) == 1
+    assert "159612" not in result

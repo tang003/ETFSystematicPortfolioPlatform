@@ -25,6 +25,7 @@
         </el-form-item>
         <el-form-item label="日期范围">
           <el-select v-model="rangeKey" @change="applyRange">
+            <el-option label="最近 6 个月" value="6m" />
             <el-option label="最近 1 年" value="1y" />
             <el-option label="最近 3 年" value="3y" />
             <el-option label="最近 5 年" value="5y" />
@@ -52,6 +53,10 @@
         </el-form-item>
         <el-form-item label="返回数量">
           <el-input-number v-model="form.limit" :min="10" :max="200" :step="10" />
+        </el-form-item>
+        <el-form-item label="自动补数">
+          <el-switch v-model="form.auto_sync_missing" />
+          <span class="form-note">适合手动代码少量评估；最多自动补 {{ form.max_auto_sync_symbols }} 只。</span>
         </el-form-item>
       </el-form>
     </section>
@@ -114,7 +119,7 @@ import { screenEtfs, type EtfCompareMetric, type EtfScreenerResponse } from '../
 const loading = ref(false)
 const result = ref<EtfScreenerResponse | null>(null)
 const symbolsText = ref('')
-const rangeKey = ref('3y')
+const rangeKey = ref('6m')
 
 const form = reactive({
   scope: 'enabled',
@@ -125,6 +130,8 @@ const form = reactive({
   min_tradability_score: 50,
   min_buy_score: 45,
   asset_class: '',
+  auto_sync_missing: false,
+  max_auto_sync_symbols: 5,
 })
 
 onMounted(() => {
@@ -149,7 +156,7 @@ const scopeLabel = computed(() => {
 function applyRange() {
   const end = new Date()
   const start = new Date(end)
-  const months: Record<string, number> = { '1y': 12, '3y': 36, '5y': 60, '10y': 120 }
+  const months: Record<string, number> = { '6m': 6, '1y': 12, '3y': 36, '5y': 60, '10y': 120 }
   start.setMonth(start.getMonth() - (months[rangeKey.value] || 36))
   form.start_date = formatDate(start)
   form.end_date = formatDate(end)
@@ -168,6 +175,8 @@ async function runScreen() {
       min_tradability_score: form.min_tradability_score,
       min_buy_score: form.min_buy_score,
       asset_class: form.asset_class || undefined,
+      auto_sync_missing: form.auto_sync_missing,
+      max_auto_sync_symbols: form.max_auto_sync_symbols,
     })
   } catch (error) {
     ElMessage.error(errorMessage(error, '筛选失败'))

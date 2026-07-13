@@ -570,7 +570,7 @@ export const updateAsset = async (symbol: string, payload: {
   description?: string | null
 }) =>
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
-export const compareEtfs = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
+export const compareEtfs = async (payload: { symbols: string[]; start_date?: string; end_date?: string; auto_sync_missing?: boolean; max_auto_sync_symbols?: number }) =>
   (await api.post<EtfCompareResponse>('/api/etf-compare', payload)).data
 export const screenEtfs = async (payload: {
   scope?: string
@@ -583,6 +583,8 @@ export const screenEtfs = async (payload: {
   min_buy_score?: number
   asset_class?: string
   asset_region?: string
+  auto_sync_missing?: boolean
+  max_auto_sync_symbols?: number
 }) => (await api.post<EtfScreenerResponse>('/api/etf-compare/screener', payload)).data
 export const scoreEtfTradability = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<EtfCompareMetric[]>('/api/etf-compare/tradability', payload)).data

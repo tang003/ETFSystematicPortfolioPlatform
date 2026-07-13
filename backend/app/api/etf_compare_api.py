@@ -23,6 +23,8 @@ def compare_etf_metrics(request: EtfCompareRequest, db: Session = Depends(get_db
             symbols=request.symbols,
             start_date=request.start_date,
             end_date=request.end_date,
+            auto_sync_missing=request.auto_sync_missing,
+            max_auto_sync_symbols=request.max_auto_sync_symbols,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -60,6 +62,8 @@ def screen_etf_candidates(
             min_buy_score=request.min_buy_score,
             asset_class=request.asset_class,
             asset_region=request.asset_region,
+            auto_sync_missing=request.auto_sync_missing,
+            max_auto_sync_symbols=request.max_auto_sync_symbols,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -254,7 +254,9 @@
 {
   "symbols": ["510300", "159915"],
   "start_date": "2025-07-13",
-  "end_date": "2026-07-13"
+  "end_date": "2026-07-13",
+  "auto_sync_missing": false,
+  "max_auto_sync_symbols": 5
 }
 ```
 
@@ -272,6 +274,11 @@
 - 标准化净值曲线
 - 相关性矩阵
 
+说明：
+
+- `auto_sync_missing` 默认关闭；开启后会用 Tushare 尝试补齐本次对比中样本不足的少量 ETF。
+- `max_auto_sync_symbols` 用于限制自动补数数量，避免共享数据源被批量消耗。
+
 ### POST /api/etf-compare/screener
 
 批量筛选 ETF 候选，适合作为普通用户寻找“哪些 ETF 值得进一步研究”的第一入口。
@@ -287,7 +294,9 @@
   "min_bars": 120,
   "min_tradability_score": 50,
   "min_buy_score": 45,
-  "asset_class": "equity"
+  "asset_class": "equity",
+  "auto_sync_missing": false,
+  "max_auto_sync_symbols": 5
 }
 ```
 
@@ -299,6 +308,8 @@
 - `min_tradability_score`：最低可交易性评分。
 - `min_buy_score`：最低买入评分。
 - `asset_class` / `asset_region`：可选过滤。
+- `auto_sync_missing`：是否对样本不足 ETF 自动补行情，默认关闭。
+- `max_auto_sync_symbols`：自动补行情数量上限。
 
 返回：
 

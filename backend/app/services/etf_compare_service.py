@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean
-from app.services.market_service import resolve_symbols
+from app.services.market_service import resolve_symbols, sync_market_data
 
 
 def compare_etfs(
@@ -17,6 +17,8 @@ def compare_etfs(
     symbols: list[str],
     start_date: date | None = None,
     end_date: date | None = None,
+    auto_sync_missing: bool = False,
+    max_auto_sync_symbols: int = 5,
 ) -> dict:
     resolved_end = end_date or date.today()
     resolved_start = start_date or (resolved_end - timedelta(days=365))
@@ -26,6 +28,16 @@ def compare_etfs(
         symbol: load_clean_bars(db, symbol=symbol, start_date=resolved_start, end_date=resolved_end)
         for symbol in cleaned_symbols
     }
+    if auto_sync_missing:
+        bars_by_symbol = auto_sync_missing_bars(
+            db,
+            symbols=cleaned_symbols,
+            bars_by_symbol=bars_by_symbol,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            min_bars=20,
+            max_symbols=max_auto_sync_symbols,
+        )
     normalized_series = {symbol: build_normalized_series(rows) for symbol, rows in bars_by_symbol.items()}
     return {
         "start_date": resolved_start,
@@ -79,6 +91,8 @@ def screen_etfs(
     min_buy_score: int = 0,
     asset_class: str | None = None,
     asset_region: str | None = None,
+    auto_sync_missing: bool = False,
+    max_auto_sync_symbols: int = 5,
 ) -> dict:
     resolved_end = end_date or date.today()
     resolved_start = start_date or (resolved_end - timedelta(days=365))
@@ -90,6 +104,16 @@ def screen_etfs(
         start_date=resolved_start,
         end_date=resolved_end,
     )
+    if auto_sync_missing:
+        bars_by_symbol = auto_sync_missing_bars(
+            db,
+            symbols=resolved_symbols,
+            bars_by_symbol=bars_by_symbol,
+            start_date=resolved_start,
+            end_date=resolved_end,
+            min_bars=min_bars,
+            max_symbols=max_auto_sync_symbols,
+        )
     metrics = [
         build_compare_metric(symbol, bars_by_symbol.get(symbol, []), asset_meta.get(symbol))
         for symbol in resolved_symbols
@@ -187,6 +211,38 @@ def load_clean_bars_for_symbols(
     for row in rows:
         grouped.setdefault(row.symbol, []).append(row)
     return grouped
+
+
+def auto_sync_missing_bars(
+    db: Session,
+    *,
+    symbols: list[str],
+    bars_by_symbol: dict[str, list[MarketDataClean]],
+    start_date: date,
+    end_date: date,
+    min_bars: int,
+    max_symbols: int,
+) -> dict[str, list[MarketDataClean]]:
+    missing = [symbol for symbol in symbols if len(bars_by_symbol.get(symbol, [])) < min_bars]
+    if not missing:
+        return bars_by_symbol
+    targets = missing[:max_symbols]
+    sync_market_data(
+        db,
+        symbols=targets,
+        sync_scope="custom",
+        start_date=start_date,
+        end_date=end_date,
+        source="tushare",
+        incremental=False,
+        clean_after_sync=True,
+        max_symbols=max_symbols,
+        request_interval_seconds=0.2,
+    )
+    refreshed = load_clean_bars_for_symbols(db, symbols=targets, start_date=start_date, end_date=end_date)
+    merged = dict(bars_by_symbol)
+    merged.update(refreshed)
+    return merged
 
 
 def build_compare_metric(symbol: str, rows: list[MarketDataClean], asset: AssetMaster | None) -> dict:

@@ -8,6 +8,8 @@ class EtfCompareRequest(BaseModel):
     symbols: list[str] = Field(min_length=1, max_length=8)
     start_date: date | None = None
     end_date: date | None = None
+    auto_sync_missing: bool = False
+    max_auto_sync_symbols: int = Field(default=5, ge=1, le=20)
 
 
 class EtfTradabilityRequest(BaseModel):
@@ -27,6 +29,8 @@ class EtfScreenerRequest(BaseModel):
     min_buy_score: int = Field(default=0, ge=0, le=100)
     asset_class: str | None = None
     asset_region: str | None = None
+    auto_sync_missing: bool = False
+    max_auto_sync_symbols: int = Field(default=5, ge=1, le=20)
 
 
 class EtfCompareSeriesPoint(BaseModel):
