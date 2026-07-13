@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO")
     tushare_token: str | None = None
+    tushare_api_url: str = "https://api.tushare.pro"
     tushare_request_interval_seconds: float = Field(default=1.5)
     deepseek_api_key: str | None = None
     deepseek_base_url: str = "https://api.deepseek.com"

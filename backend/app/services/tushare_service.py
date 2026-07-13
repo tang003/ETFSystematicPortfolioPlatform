@@ -8,7 +8,6 @@ import requests
 
 from app.core.config import get_settings
 
-TUSHARE_API_URL = "https://api.tushare.pro"
 PERMISSION_DENIED_CODE = -2002
 
 
@@ -23,7 +22,7 @@ def tushare_query(
         raise RuntimeError("Tushare token is not configured")
 
     response = requests.post(
-        TUSHARE_API_URL,
+        settings.tushare_api_url,
         json={
             "api_name": api_name,
             "token": settings.tushare_token,
