@@ -3,11 +3,16 @@ from decimal import Decimal
 
 import pytest
 
+from app.schemas.workflow_schema import HistoricalMarketInitRequest
+from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.workflow_service import (
+    HISTORICAL_MARKET_INIT_STEPS,
     WORKFLOW_STEPS,
     WorkflowStepValidationError,
+    historical_init_dates,
     json_ready,
     require_run_id,
+    resolve_historical_init_symbols,
     summarize_result,
     validate_batch_result,
 )
@@ -46,6 +51,25 @@ def test_workflow_steps_keep_expected_order() -> None:
         "rebalance",
         "report",
     ]
+
+
+def test_historical_market_init_steps_keep_expected_order() -> None:
+    assert [step[0] for step in HISTORICAL_MARKET_INIT_STEPS] == ["calendar", "market", "quality"]
+
+
+def test_historical_init_dates_defaults_to_requested_year_window() -> None:
+    request = HistoricalMarketInitRequest(end_date=date(2026, 7, 13), years=10)
+
+    start_date, end_date = historical_init_dates(request)
+
+    assert end_date == date(2026, 7, 13)
+    assert start_date == date(2016, 7, 5)
+
+
+def test_resolve_historical_init_symbols_uses_curated_pool() -> None:
+    request = HistoricalMarketInitRequest(scope="curated", max_symbols=3)
+
+    assert resolve_historical_init_symbols(None, request) == CURATED_ETF_SYMBOLS[:3]
 
 
 def test_require_run_id_rejects_missing_value() -> None:

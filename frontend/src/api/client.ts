@@ -672,6 +672,19 @@ export const startWorkflowTask = async (payload: {
   portfolio_value?: number
   generate_report?: boolean
 }) => (await api.post<{ task_id: number; status: string }>('/api/workflows/run', payload)).data
+export const startHistoricalMarketInit = async (payload: {
+  scope?: string
+  symbols?: string[]
+  years?: number
+  start_date?: string
+  end_date?: string
+  source?: string
+  calendar_source?: string
+  incremental_sync?: boolean
+  clean_after_sync?: boolean
+  request_interval_seconds?: number
+  max_symbols?: number
+}) => (await api.post<{ task_id: number; status: string }>('/api/workflows/historical-init', payload)).data
 export const fetchWorkflowTask = async (taskId: number) =>
   (await api.get<WorkflowTask>(`/api/workflows/${taskId}`)).data
 export const fetchWorkflowTasks = async () =>

@@ -20,6 +20,20 @@ class WorkflowRunRequest(BaseModel):
     generate_report: bool = True
 
 
+class HistoricalMarketInitRequest(BaseModel):
+    scope: str = Field(default="curated", description="curated, enabled, core, positions, or custom")
+    symbols: list[str] | None = None
+    years: int = Field(default=10, ge=1, le=15)
+    start_date: date | None = None
+    end_date: date | None = None
+    source: str = Field(default="tushare")
+    calendar_source: str = Field(default="tushare")
+    incremental_sync: bool = True
+    clean_after_sync: bool = True
+    request_interval_seconds: float = Field(default=0.2, ge=0, le=10)
+    max_symbols: int | None = Field(default=None, ge=1)
+
+
 class WorkflowTaskCreateResponse(BaseModel):
     task_id: int
     status: str

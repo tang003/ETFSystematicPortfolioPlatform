@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.46.0-etf-universe-tushare-fallback`
+当前版本：`v0.48.0-historical-market-init`
 
 默认 API 前缀：`/api`
 
@@ -515,6 +515,43 @@
 - `strategy_code`
 - `portfolio_value`
 - `generate_report`
+
+### POST /api/workflows/historical-init
+
+创建历史行情初始化任务，适合首次部署后为精选 ETF 或指定 ETF 批量补齐长期日线行情。
+
+请求示例：
+
+```json
+{
+  "scope": "curated",
+  "years": 10,
+  "source": "tushare",
+  "calendar_source": "tushare",
+  "incremental_sync": true,
+  "clean_after_sync": true,
+  "request_interval_seconds": 0.2
+}
+```
+
+字段：
+
+- `scope`：同步范围，支持 `curated`、`enabled`、`core`、`positions`、`custom`。
+- `symbols`：`scope=custom` 时传入 ETF 代码列表。
+- `years`：默认 10 年，范围 1-15 年。
+- `start_date` / `end_date`：可选；不填时按 `years` 自动推导。
+- `source`：行情数据源，当前推荐 `tushare`。
+- `calendar_source`：交易日历数据源，当前推荐 `tushare`。
+- `incremental_sync`：是否增量同步，默认开启。
+- `clean_after_sync`：同步后是否自动清洗入 `market_data_clean`。
+- `request_interval_seconds`：单只 ETF 请求后的等待秒数，用于控制共享 token 频率。
+- `max_symbols`：可选，用于测试时限制同步数量。
+
+说明：
+
+- 默认 `scope=curated` 会同步后端内置精选 50 支 ETF。
+- 该接口同步的是日线历史行情，不包含分钟线、实时盘口和 Level-2。
+- 行情落库到 `market_data_raw` 和 `market_data_clean`，供数据健康、ETF 详情、因子、策略、回测、AI 投研使用。
 
 ### GET /api/workflows/{task_id}
 

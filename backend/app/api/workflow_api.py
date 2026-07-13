@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import get_settings
-from app.schemas.workflow_schema import WorkflowRunRequest, WorkflowTaskCreateResponse, WorkflowTaskRead
+from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest, WorkflowTaskCreateResponse, WorkflowTaskRead
 from app.services.workflow_service import (
     cancel_workflow_task,
+    create_historical_market_init_task,
     create_workflow_task,
     get_workflow_task,
     list_workflow_tasks,
@@ -23,6 +24,18 @@ def create_full_workflow(
     db: Session = Depends(get_db),
 ) -> WorkflowTaskCreateResponse:
     task = create_workflow_task(db, request)
+    if get_settings().workflow_execution_mode == "inline":
+        background_tasks.add_task(run_workflow_task, task.id)
+    return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)
+
+
+@router.post("/historical-init", response_model=WorkflowTaskCreateResponse)
+def create_historical_market_init(
+    request: HistoricalMarketInitRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> WorkflowTaskCreateResponse:
+    task = create_historical_market_init_task(db, request)
     if get_settings().workflow_execution_mode == "inline":
         background_tasks.add_task(run_workflow_task, task.id)
     return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)

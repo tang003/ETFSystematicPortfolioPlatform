@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 from app.core.database import Base, SessionLocal, engine
 from app.models.market_data import MarketDataClean, TradingCalendar
 from app.models.workflow import WorkflowTask, WorkflowTaskStep
-from app.schemas.workflow_schema import WorkflowRunRequest
+from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest
+from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.calendar_service import sync_trading_calendar
 from app.services.data_quality_service import check_clean_bars
 from app.services.etf_compare_service import build_compare_metric
@@ -30,6 +31,12 @@ WORKFLOW_STEPS = [
     ("risk", "执行风控"),
     ("rebalance", "生成调仓单"),
     ("report", "生成月度报告"),
+]
+
+HISTORICAL_MARKET_INIT_STEPS = [
+    ("calendar", "同步 10 年交易日历"),
+    ("market", "同步精选 ETF 历史行情"),
+    ("quality", "检查历史行情完整性"),
 ]
 
 TERMINAL_STATUSES = {"success", "failed", "cancelled", "partial_success"}
@@ -58,6 +65,32 @@ def create_workflow_task(db: Session, request: WorkflowRunRequest) -> WorkflowTa
                 status="pending",
             )
             for index, (step_key, step_name) in enumerate(WORKFLOW_STEPS, start=1)
+        ]
+    )
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def create_historical_market_init_task(db: Session, request: HistoricalMarketInitRequest) -> WorkflowTask:
+    ensure_workflow_tables()
+    task = WorkflowTask(
+        task_type="historical_market_init",
+        status="pending",
+        request_payload=json_ready(request.model_dump()),
+    )
+    db.add(task)
+    db.flush()
+    db.add_all(
+        [
+            WorkflowTaskStep(
+                task_id=task.id,
+                step_key=step_key,
+                step_name=step_name,
+                sort_order=index,
+                status="pending",
+            )
+            for index, (step_key, step_name) in enumerate(HISTORICAL_MARKET_INIT_STEPS, start=1)
         ]
     )
     db.commit()
@@ -183,6 +216,9 @@ def run_workflow_task(task_id: int) -> None:
         task = db.get(WorkflowTask, task_id)
         if task is None or task.status == "cancelled":
             return
+        if task.task_type == "historical_market_init":
+            run_historical_market_init_task(db, task)
+            return
         request = WorkflowRunRequest.model_validate(task.request_payload)
         mark_task_running(db, task)
         results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
@@ -281,6 +317,92 @@ def run_workflow_task(task_id: int) -> None:
         fail_task(db, task_id, str(exc))
     finally:
         db.close()
+
+
+def run_historical_market_init_task(db: Session, task: WorkflowTask) -> None:
+    request = HistoricalMarketInitRequest.model_validate(task.request_payload)
+    start_date, end_date = historical_init_dates(request)
+    symbols = resolve_historical_init_symbols(db, request)
+    results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
+    mark_task_running(db, task)
+
+    for step_key, _ in HISTORICAL_MARKET_INIT_STEPS:
+        if is_step_done(db, task.id, step_key):
+            continue
+        check_cancelled(db, task.id)
+        if step_key == "calendar":
+            execute_step(
+                db,
+                task,
+                step_key,
+                lambda: sync_trading_calendar(
+                    db,
+                    start_date,
+                    end_date,
+                    "CN",
+                    request.calendar_source,
+                    request.incremental_sync,
+                ),
+                results,
+            )
+        elif step_key == "market":
+            execute_step(
+                db,
+                task,
+                step_key,
+                lambda: sync_market_data(
+                    db,
+                    symbols=symbols,
+                    start_date=start_date,
+                    end_date=end_date,
+                    source=request.source,
+                    sync_scope="enabled",
+                    incremental=request.incremental_sync,
+                    clean_after_sync=request.clean_after_sync,
+                    max_symbols=None,
+                    request_interval_seconds=request.request_interval_seconds,
+                ),
+                results,
+            )
+        elif step_key == "quality":
+            execute_step(db, task, step_key, lambda: run_quality_checks(db, symbols, start_date, end_date), results)
+
+    task.status = final_status_for_steps(db, task.id)
+    task.current_step = None
+    task.result_payload = json_ready(
+        {
+            "scope": request.scope,
+            "symbols": symbols,
+            "symbol_count": len(symbols),
+            "start_date": start_date,
+            "end_date": end_date,
+            "steps": results,
+        }
+    )
+    task.finished_at = datetime.utcnow()
+    db.commit()
+
+
+def historical_init_dates(request: HistoricalMarketInitRequest) -> tuple[date, date]:
+    end_date = request.end_date or date.today()
+    start_date = request.start_date or (end_date - timedelta(days=365 * request.years + 10))
+    if start_date > end_date:
+        raise ValueError("start_date must not be later than end_date")
+    return start_date, end_date
+
+
+def resolve_historical_init_symbols(db: Session, request: HistoricalMarketInitRequest) -> list[str]:
+    scope = (request.scope or "curated").strip().lower()
+    if scope == "custom":
+        symbols = request.symbols or []
+    elif scope == "curated":
+        symbols = CURATED_ETF_SYMBOLS
+    else:
+        symbols = resolve_symbols(db, None, sync_scope=scope)
+    resolved, _ = limit_symbols(symbols, request.max_symbols)
+    if not resolved:
+        raise ValueError("历史初始化范围中没有可同步的 ETF")
+    return resolved
 
 
 class WorkflowCancelled(Exception):
