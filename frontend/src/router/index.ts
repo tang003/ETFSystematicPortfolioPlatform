@@ -18,6 +18,7 @@ const RiskRebalance = () => import('../views/RiskRebalance.vue')
 const Backtest = () => import('../views/Backtest.vue')
 const Reports = () => import('../views/Reports.vue')
 const SystemStatus = () => import('../views/SystemStatus.vue')
+const AgentAnalysis = () => import('../views/AgentAnalysis.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -30,6 +31,7 @@ const router = createRouter({
     { path: '/assets', component: Assets, meta: { title: 'ETF 池' } },
     { path: '/etf-compare', component: EtfCompare, meta: { title: 'ETF 对比' } },
     { path: '/etf-detail/:symbol', component: EtfDetail, meta: { title: 'ETF 详情' } },
+    { path: '/agent-analysis', component: AgentAnalysis, meta: { title: 'AI 投研委员会' } },
     { path: '/data-health', component: DataHealth, meta: { title: '数据健康' } },
     { path: '/system-status', component: SystemStatus, meta: { title: '系统状态' } },
     { path: '/factors', component: Factors, meta: { title: '因子排名' } },

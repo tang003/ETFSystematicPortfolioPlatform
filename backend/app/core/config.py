@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO")
     tushare_token: str | None = None
     tushare_request_interval_seconds: float = Field(default=1.5)
+    deepseek_api_key: str | None = None
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-v4-flash"
+    deepseek_timeout_seconds: int = Field(default=45, ge=5, le=180)
+    deepseek_max_tokens: int = Field(default=1800, ge=256, le=8000)
+    deepseek_thinking_enabled: bool = False
 
     auth_enabled: bool = False
     auth_admin_username: str = "admin"

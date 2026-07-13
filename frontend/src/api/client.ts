@@ -122,6 +122,34 @@ export interface EtfDetailResponse {
   recent_bars: MarketBarRead[]
 }
 
+export interface AgentOpinion {
+  role: string
+  title: string
+  stance: string
+  score: number
+  summary: string
+  evidence: string[]
+  risks: string[]
+  suggestion: string
+}
+
+export interface EtfAgentAnalysisResponse {
+  symbol: string
+  name: string | null
+  start_date: string
+  end_date: string
+  data_status: string
+  llm_enabled: boolean
+  llm_used: boolean
+  llm_model: string | null
+  final_action: string
+  final_score: number
+  final_summary: string
+  manager_commentary: string
+  agents: AgentOpinion[]
+  warnings: string[]
+}
+
 export interface MarketBarRead {
   symbol: string
   trade_date: string
@@ -441,6 +469,8 @@ export const scoreEtfTradability = async (payload: { symbols: string[]; start_da
   (await api.post<EtfCompareMetric[]>('/api/etf-compare/tradability', payload)).data
 export const fetchEtfDetail = async (symbol: string, params?: { start_date?: string; end_date?: string }) =>
   (await api.get<EtfDetailResponse>(`/api/etf-detail/${symbol}`, { params })).data
+export const analyzeEtfAgents = async (payload: { symbol: string; start_date?: string; end_date?: string; use_llm?: boolean }) =>
+  (await api.post<EtfAgentAnalysisResponse>('/api/agent-analysis/etf', payload)).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchMarketSyncPlan = async (syncScope = 'core') =>

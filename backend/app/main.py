@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.auth_api import require_authenticated_user
+from app.api.agent_analysis_api import router as agent_analysis_router
 from app.api.auth_api import router as auth_router
 from app.api.asset_api import router as asset_router
 from app.api.backtest_api import router as backtest_router
@@ -29,7 +30,7 @@ def create_app() -> FastAPI:
     production = settings.app_env.lower() == "production"
     app = FastAPI(
         title=settings.app_name,
-        version="0.37.1",
+        version="0.38.0",
         docs_url=None if production else "/docs",
         redoc_url=None if production else "/redoc",
         openapi_url=None if production else "/openapi.json",
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.include_router(data_quality_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(etf_compare_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(etf_detail_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(agent_analysis_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(factor_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(strategy_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(portfolio_router, prefix=settings.api_prefix, dependencies=protected)

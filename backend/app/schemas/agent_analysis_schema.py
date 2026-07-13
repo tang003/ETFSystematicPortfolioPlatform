@@ -1,0 +1,38 @@
+from datetime import date
+
+from pydantic import BaseModel, Field
+
+
+class EtfAgentAnalysisRequest(BaseModel):
+    symbol: str = Field(min_length=1, max_length=32)
+    start_date: date | None = None
+    end_date: date | None = None
+    use_llm: bool = True
+
+
+class AgentOpinionRead(BaseModel):
+    role: str
+    title: str
+    stance: str
+    score: int
+    summary: str
+    evidence: list[str]
+    risks: list[str]
+    suggestion: str
+
+
+class EtfAgentAnalysisResponse(BaseModel):
+    symbol: str
+    name: str | None
+    start_date: date
+    end_date: date
+    data_status: str
+    llm_enabled: bool
+    llm_used: bool
+    llm_model: str | None
+    final_action: str
+    final_score: int
+    final_summary: str
+    manager_commentary: str
+    agents: list[AgentOpinionRead]
+    warnings: list[str]

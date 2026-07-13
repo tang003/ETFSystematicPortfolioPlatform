@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.36.0-etf-detail-page`
+当前版本：`v0.38.0-deepseek-agent-analysis`
 
 ## 认证约定
 
@@ -242,6 +242,54 @@ curl "http://localhost:8000/api/etf-detail/510300?start_date=2025-07-11&end_date
 | latest_factor | 最新一条因子记录，可能为空 |
 | curve | 标准化净值、回撤和成交额序列 |
 | recent_bars | 最近 30 条清洗行情 |
+
+说明：
+
+- 详情页只读本地 `asset_master`、`market_data_clean` 和 `factor_daily`。
+- 如果 `curve` 为空，通常表示该日期范围内尚未同步清洗行情，需要先执行 `/api/market/sync`，或在 ETF 详情页点击“同步本 ETF 行情”。
+
+## POST /api/agent-analysis/etf
+
+用途：运行 ETF 多 Agent 投研分析。系统会读取本地 ETF 详情、最新因子、当前持仓、目标组合和持仓分析结果，生成市场环境、技术趋势、流动性、组合持仓、风险控制和复合经理六类观点。配置 DeepSeek 后，复合经理结论会由 DeepSeek 生成自然语言总结；未配置或调用失败时自动退回规则型总结。
+
+请求示例：
+
+```json
+{
+  "symbol": "510300",
+  "start_date": "2025-07-13",
+  "end_date": "2026-07-13",
+  "use_llm": true
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| symbol | string | 是 | ETF 代码 |
+| start_date | date | 否 | 分析开始日期，默认近一年 |
+| end_date | date | 否 | 分析结束日期，默认今天 |
+| use_llm | boolean | 否 | 是否尝试使用 DeepSeek 总结，默认 `true` |
+
+响应字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| data_status | `ready` 表示本地行情可用于分析；`missing_market_data` 表示缺少清洗行情 |
+| llm_enabled | 服务器是否配置了 `DEEPSEEK_API_KEY` |
+| llm_used | 本次是否成功使用 DeepSeek |
+| final_action | 复合经理最终建议 |
+| final_score | 综合评分，0-100 |
+| final_summary | 综合中文结论 |
+| agents | 各 Agent 的立场、评分、证据、风险和建议 |
+| warnings | 数据缺失或 DeepSeek 调用失败等提示 |
+
+注意：
+
+- 该接口不会自动同步行情；如果缺少本地行情，请先在 ETF 详情页点击“同步本 ETF 行情”，或调用 `/api/market/sync`。
+- DeepSeek key 只应配置在 `.env` 或服务器 `.env.production`，不要提交到 Git。
+- 该接口只输出研究建议，不连接券商、不自动下单。
 
 后续计划接口：
 

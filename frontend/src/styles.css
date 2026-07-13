@@ -316,6 +316,47 @@ body {
   grid-template-columns: repeat(4, minmax(160px, 1fr));
 }
 
+.symbol-input {
+  width: 150px;
+}
+
+.report-text {
+  color: #1f2937;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.agent-summary {
+  min-height: 44px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.agent-block {
+  margin-top: 12px;
+}
+
+.agent-block strong {
+  color: #111827;
+  font-size: 13px;
+}
+
+.agent-block ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.agent-action {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .chart {
   width: 100%;
   height: 320px;
