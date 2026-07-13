@@ -43,6 +43,19 @@ def fake_detail():
             "tradability_notes": ["成交活跃度和历史样本较好"],
         },
         "latest_factor": None,
+        "alternatives": [
+            {
+                "symbol": "510310",
+                "name": "沪深300ETF易方达",
+                "recommendation_level": "可替代",
+                "recommendation_score": 78,
+                "tradability_score": 80,
+                "fund_size": Decimal("12000000000"),
+                "expense_ratio": Decimal("0.005"),
+                "average_amount": Decimal("60000000"),
+                "reasons": ["同指数 ETF，可作为备选观察"],
+            }
+        ],
         "curve": [{"trade_date": date(2026, 1, 1), "close": Decimal("4.0")}],
         "recent_bars": [],
     }
@@ -60,7 +73,7 @@ def test_agent_analysis_falls_back_to_rule_summary_without_deepseek(monkeypatch)
     assert result["llm_enabled"] is False
     assert result["llm_used"] is False
     assert result["final_action"]
-    assert len(result["agents"]) == 6
+    assert len(result["agents"]) == 7
 
 
 def test_agent_analysis_uses_deepseek_when_configured(monkeypatch) -> None:

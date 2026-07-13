@@ -54,6 +54,7 @@ def analyze_etf_with_agents(
         liquidity_agent(context),
         portfolio_agent(context),
         risk_control_agent(context),
+        alternative_execution_agent(context),
     ]
     manager = manager_agent(agents, detail)
     agents.append(manager)
@@ -220,6 +221,29 @@ def risk_control_agent(context: dict) -> dict:
     return opinion("risk", "风险控制 Agent", score, evidence, risks, "根据风险等级、跨境属性和回撤控制仓位风险。")
 
 
+def alternative_execution_agent(context: dict) -> dict:
+    alternatives = context["detail"].get("alternatives", [])
+    score = 55
+    evidence: list[str] = []
+    risks: list[str] = []
+    if not alternatives:
+        risks.append("暂未发现同指数 ETF 替代候选，可能是跟踪指数资料缺失或同类池不足")
+        return opinion("execution", "执行替代 Agent", score - 5, evidence, risks, "评估同指数 ETF 是否存在更优替代。")
+    best = alternatives[0]
+    evidence.append(
+        f"同指数候选 {best['symbol']} {best['name']}：{best['recommendation_level']}，综合分 {best['recommendation_score']}"
+    )
+    evidence.extend(best.get("reasons", [])[:2])
+    if best["recommendation_level"] == "首选关注":
+        score += 18
+        risks.append("存在更优替代观察对象，切换前仍需确认税费、滑点和持仓成本")
+    elif best["recommendation_level"] == "可替代":
+        score += 8
+    else:
+        risks.append("候选 ETF 暂未明显优于当前 ETF")
+    return opinion("execution", "执行替代 Agent", score, evidence, risks, "比较同指数 ETF 的规模、费率和交易性，给出替代观察建议。")
+
+
 def manager_agent(agents: list[dict], detail: dict) -> dict:
     scores = [agent["score"] for agent in agents]
     score = int(sum(scores) / len(scores)) if scores else 50
@@ -297,6 +321,20 @@ def build_llm_payload(detail: dict, agents: list[dict], warnings: list[str]) -> 
             "tradability_score": metric["tradability_score"],
             "tradability_level": metric["tradability_level"],
         },
+        "same_index_alternatives": [
+            {
+                "symbol": item["symbol"],
+                "name": item["name"],
+                "recommendation_level": item["recommendation_level"],
+                "recommendation_score": item["recommendation_score"],
+                "tradability_score": item["tradability_score"],
+                "fund_size": item["fund_size"],
+                "expense_ratio": item["expense_ratio"],
+                "average_amount": item["average_amount"],
+                "reasons": item["reasons"],
+            }
+            for item in detail.get("alternatives", [])[:5]
+        ],
         "agent_opinions": agents,
         "warnings": warnings,
     }
@@ -307,6 +345,7 @@ def manager_system_prompt() -> str:
         "你是 ETF 系统化资产配置平台的复合经理。请基于多个 Agent 观点生成中文 ETF 投研结论。"
         "只输出 JSON，字段为 final_action、final_summary、manager_commentary。"
         "必须强调这不是投资承诺，当前系统不自动下单。结论要适合中长期 ETF 配置，不要给短线荐股口吻。"
+        "如果 same_index_alternatives 有候选，请说明是否只适合观察、是否值得进一步比较，不要直接建议无条件换仓。"
         "不得编造用户没有提供、系统没有给出的行情、公告或新闻。"
     )
 

@@ -357,6 +357,7 @@ export interface HoldingAnalysis {
   action_suggestion: string
   alpha_score: string | null
   reason: string | null
+  alternatives: EtfAlternativeCandidate[]
   created_at: string
 }
 

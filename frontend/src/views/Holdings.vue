@@ -181,6 +181,18 @@
           <template #default="{ row }">{{ formatPercent(Number(row.weight_diff || 0)) }}</template>
         </el-table-column>
         <el-table-column prop="alpha_score" label="Alpha" width="100" />
+        <el-table-column label="同指数替代" min-width="250">
+          <template #default="{ row }">
+            <div v-if="row.alternatives?.length" class="alternative-cell">
+              <el-tag size="small" :type="alternativeTag(row.alternatives[0].recommendation_level)">
+                {{ row.alternatives[0].recommendation_level }}
+              </el-tag>
+              <span>{{ row.alternatives[0].symbol }} {{ row.alternatives[0].name }}</span>
+              <small>{{ row.alternatives[0].reasons?.[0] || '同指数 ETF，可继续观察' }}</small>
+            </div>
+            <span v-else class="muted">暂无候选</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="reason" label="原因" min-width="260" />
       </el-table>
     </section>
@@ -570,6 +582,12 @@ function tagType(action: string) {
   if (action === 'ADD') return 'success'
   if (action === 'REDUCE' || action === 'REDUCE_OR_EXIT') return 'warning'
   return 'info'
+}
+
+function alternativeTag(level: string) {
+  if (level.includes('首选')) return 'success'
+  if (level.includes('可替代')) return 'info'
+  return 'warning'
 }
 
 function errorMessage(error: unknown, fallback: string) {

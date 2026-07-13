@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -12,6 +12,7 @@ from app.models.rebalance import RebalanceOrder
 from app.models.report import ReportLog
 from app.models.risk import RiskCheckResult
 from app.models.strategy import AlphaSignal, StrategyRun
+from app.services.etf_detail_service import get_etf_detail
 
 
 def generate_monthly_report(
@@ -34,6 +35,7 @@ def generate_monthly_report(
     asset_status = load_asset_status(db)
     latest_positions = load_latest_positions(db)
     investment_suggestions = load_latest_investment_suggestions(db)
+    alternative_observations = load_holding_alternative_observations(db, latest_positions)
 
     markdown = build_monthly_report_markdown(
         strategy_run=strategy_run,
@@ -47,6 +49,7 @@ def generate_monthly_report(
         asset_status=asset_status,
         latest_positions=latest_positions,
         investment_suggestions=investment_suggestions,
+        alternative_observations=alternative_observations,
     )
 
     report = ReportLog(
@@ -154,6 +157,33 @@ def load_latest_investment_suggestions(db: Session) -> list[InvestmentPlanSugges
     )
 
 
+def load_holding_alternative_observations(db: Session, positions: list[PortfolioPosition]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    report_end = date.today()
+    report_start = report_end - timedelta(days=365)
+    for position in positions:
+        try:
+            detail = get_etf_detail(db, symbol=position.symbol, start_date=report_start, end_date=report_end)
+        except Exception:
+            continue
+        alternatives = detail.get("alternatives", [])
+        if not alternatives:
+            continue
+        best = alternatives[0]
+        rows.append(
+            {
+                "current_symbol": position.symbol,
+                "current_name": position.position_name,
+                "alternative_symbol": best["symbol"],
+                "alternative_name": best["name"],
+                "recommendation_level": best["recommendation_level"],
+                "recommendation_score": best["recommendation_score"],
+                "reason": "；".join(best.get("reasons", [])[:2]),
+            }
+        )
+    return rows
+
+
 def build_monthly_report_markdown(
     *,
     strategy_run: StrategyRun,
@@ -167,10 +197,12 @@ def build_monthly_report_markdown(
     asset_status: dict[str, int] | None = None,
     latest_positions: list[PortfolioPosition] | None = None,
     investment_suggestions: list[InvestmentPlanSuggestion] | None = None,
+    alternative_observations: list[dict[str, Any]] | None = None,
 ) -> str:
     asset_status = asset_status or {"total": 0, "enabled": 0, "cross_border": 0}
     latest_positions = latest_positions or []
     investment_suggestions = investment_suggestions or []
+    alternative_observations = alternative_observations or []
     lines = [
         f"# ETF 月度调仓报告 (Monthly Rebalance Report) - {report_date}",
         "",
@@ -195,6 +227,13 @@ def build_monthly_report_markdown(
     lines.extend(markdown_table(["规则 Rule", "状态 Status", "调整前 Before", "调整后 After", "说明 Message"], risk_rows(risk_results)))
     lines.extend(["", "## 当前持仓快照 (Current Holdings)", ""])
     lines.extend(markdown_table(["代码 Symbol", "名称 Name", "市值 Market Value", "权重 Weight", "浮盈亏 PnL"], position_rows(latest_positions)))
+    lines.extend(["", "## 持仓替代观察 (Same-Index Alternatives)", ""])
+    lines.extend(
+        markdown_table(
+            ["当前 ETF", "候选 ETF", "级别 Level", "综合分 Score", "原因 Reason"],
+            alternative_observation_rows(alternative_observations),
+        )
+    )
     lines.extend(["", "## 定投建议 (DCA Suggestions)", ""])
     lines.extend(markdown_table(["代码 Symbol", "期数 Period", "建议金额 Amount", "权重缺口 Gap", "原因 Reason"], investment_rows(investment_suggestions)))
     lines.extend(["", "## 调仓建议单 (Rebalance Orders)", ""])
@@ -298,6 +337,19 @@ def investment_rows(suggestions: list[InvestmentPlanSuggestion]) -> list[list[st
             item.reason or "",
         ]
         for item in suggestions
+    ]
+
+
+def alternative_observation_rows(rows: list[dict[str, Any]]) -> list[list[str]]:
+    return [
+        [
+            f"{item['current_symbol']} {item.get('current_name') or ''}".strip(),
+            f"{item['alternative_symbol']} {item.get('alternative_name') or ''}".strip(),
+            str(item["recommendation_level"]),
+            str(item["recommendation_score"]),
+            str(item.get("reason") or "同指数 ETF，可作为备选观察"),
+        ]
+        for item in rows
     ]
 
 

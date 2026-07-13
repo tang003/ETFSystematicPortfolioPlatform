@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.43.0-same-index-alternatives`
+当前版本：`v0.44.0-holding-alternative-advice`
 
 默认 API 前缀：`/api`
 
@@ -365,10 +365,17 @@
 
 - 需要先有目标组合。
 - 如果不传 `run_id`，默认使用最新目标组合。
+- 返回 `alternatives` 同指数 ETF 替代候选，用于观察是否存在规模更大、费率更低或交易性更好的同指数 ETF。
+- 替代候选动态计算，不写入持仓分析表，不触发自动交易。
 
 ### GET /api/portfolio/holdings/analysis
 
 查询最近持仓分析结果。
+
+说明：
+
+- 返回结构同样包含 `alternatives`。
+- 页面会展示最佳同指数候选和主要原因。
 
 ### GET /api/portfolio/xray
 
@@ -508,6 +515,8 @@
 
 用途：运行单只 ETF 的 AI 投研委员会分析。系统会读取本地 ETF 详情、因子、当前持仓、目标组合和持仓分析结果，生成多 Agent 观点，并在配置 DeepSeek 后生成中文综合结论。
 
+v0.44.0 起，AI 投研包含“执行替代 Agent”，并把同指数 ETF 候选作为 `same_index_alternatives` 传入 DeepSeek 上下文。
+
 请求：
 
 ```json
@@ -535,6 +544,11 @@
 - `manager_commentary`：复合经理说明。
 - `agents`：各 Agent 的观点、证据、风险和建议。
 - `warnings`：数据缺失或限制提示。
+
+说明：
+
+- 执行替代 Agent 只做同指数 ETF 观察，不会建议无条件换仓。
+- 当前系统仍不连接券商交易，不自动下单。
 
 ### GET /api/agent-analysis/etf/history
 

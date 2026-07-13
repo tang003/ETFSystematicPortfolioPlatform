@@ -16,7 +16,14 @@ from app.schemas.portfolio_schema import (
     PositionResolveRequest,
     TargetPortfolioRead,
 )
-from app.services.holding_service import analyze_holdings, list_holding_analysis, list_positions, resolve_position_details, upsert_position_snapshot
+from app.services.holding_service import (
+    analyze_holdings,
+    enrich_holding_analysis_with_alternatives,
+    list_holding_analysis,
+    list_positions,
+    resolve_position_details,
+    upsert_position_snapshot,
+)
 from app.services.investment_plan_service import (
     analyze_investment_plan,
     create_investment_plan,
@@ -69,14 +76,15 @@ def run_holding_analysis(
     db: Session = Depends(get_db),
 ) -> list[HoldingAnalysisRead]:
     try:
-        return analyze_holdings(db, run_id=request.run_id, analysis_date=request.analysis_date)
+        rows = analyze_holdings(db, run_id=request.run_id, analysis_date=request.analysis_date)
+        return enrich_holding_analysis_with_alternatives(db, rows)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/holdings/analysis", response_model=list[HoldingAnalysisRead])
 def get_holding_analysis(db: Session = Depends(get_db)) -> list[HoldingAnalysisRead]:
-    return list_holding_analysis(db)
+    return enrich_holding_analysis_with_alternatives(db, list_holding_analysis(db))
 
 
 @router.post("/investment-plans", response_model=InvestmentPlanRead)

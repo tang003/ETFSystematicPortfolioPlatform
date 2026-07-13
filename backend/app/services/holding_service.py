@@ -320,6 +320,37 @@ def list_holding_analysis(db: Session, run_id: int | None = None, limit: int = 1
     )
 
 
+def enrich_holding_analysis_with_alternatives(db: Session, rows: list[HoldingAnalysisResult], *, max_alternatives: int = 3) -> list[dict]:
+    from app.services.etf_detail_service import get_etf_detail
+
+    end_date = date.today()
+    start_date = end_date - timedelta(days=365)
+    enriched: list[dict] = []
+    for row in rows:
+        alternatives = []
+        try:
+            detail = get_etf_detail(db, symbol=row.symbol, start_date=start_date, end_date=end_date)
+            alternatives = detail.get("alternatives", [])[:max_alternatives]
+        except Exception:
+            alternatives = []
+        enriched.append(
+            {
+                "run_id": row.run_id,
+                "analysis_date": row.analysis_date,
+                "symbol": row.symbol,
+                "current_weight": row.current_weight,
+                "target_weight": row.target_weight,
+                "weight_diff": row.weight_diff,
+                "action_suggestion": row.action_suggestion,
+                "alpha_score": row.alpha_score,
+                "reason": row.reason,
+                "alternatives": alternatives,
+                "created_at": row.created_at,
+            }
+        )
+    return enriched
+
+
 def resolve_targets(db: Session, run_id: int | None) -> list[TargetPortfolio]:
     if run_id is None:
         return latest_target_portfolio(db)

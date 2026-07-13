@@ -3,6 +3,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.etf_detail_schema import EtfAlternativeCandidate
+
 
 class TargetPortfolioRead(BaseModel):
     run_id: int | None
@@ -82,6 +84,7 @@ class HoldingAnalysisRead(BaseModel):
     action_suggestion: str
     alpha_score: Decimal | None
     reason: str | None
+    alternatives: list[EtfAlternativeCandidate] = []
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -78,6 +78,7 @@ def test_build_monthly_report_markdown_contains_core_sections() -> None:
     assert "## Alpha 排名 (Alpha Ranking)" in markdown
     assert "## 目标组合 (Target Portfolio)" in markdown
     assert "## 风控检查 (Risk Check)" in markdown
+    assert "## 持仓替代观察 (Same-Index Alternatives)" in markdown
     assert "## 调仓建议单 (Rebalance Orders)" in markdown
     assert "## 回测摘要 (Backtest Snapshot)" in markdown
     assert "510300" in markdown

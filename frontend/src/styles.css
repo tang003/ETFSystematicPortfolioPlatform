@@ -201,6 +201,17 @@ body {
   color: #16a34a;
 }
 
+.alternative-cell {
+  display: grid;
+  gap: 4px;
+  align-items: start;
+}
+
+.alternative-cell small {
+  color: #64748b;
+  line-height: 1.4;
+}
+
 .source-hint {
   width: 100%;
   padding: 12px 14px;
