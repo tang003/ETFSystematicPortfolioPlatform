@@ -53,6 +53,13 @@ export interface AssetUpsertItem {
   description?: string | null
 }
 
+export interface HealthStatus {
+  status: string
+  service: string
+  environment: string
+  workflow_execution_mode?: string
+}
+
 export interface AssetUniverseSyncResponse {
   source: string
   total: number
@@ -414,7 +421,9 @@ export interface WorkflowTask {
   steps: WorkflowTaskStep[]
 }
 
-export const fetchHealth = async () => (await api.get('/health')).data
+export const fetchHealth = async () => (await api.get<HealthStatus>('/health')).data
+export const fetchLiveHealth = async () => (await api.get<HealthStatus>('/health/live')).data
+export const fetchReadyHealth = async () => (await api.get<HealthStatus>('/health/ready')).data
 export const fetchAuthStatus = async () => (await api.get<AuthStatus>('/api/auth/status')).data
 export const login = async (payload: { username: string; password: string }) =>
   (await api.post<AuthStatus>('/api/auth/login', payload)).data

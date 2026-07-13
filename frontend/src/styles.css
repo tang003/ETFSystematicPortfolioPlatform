@@ -304,6 +304,18 @@ body {
   font-size: 26px;
 }
 
+.metric span {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.status-summary {
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+}
+
 .chart {
   width: 100%;
   height: 320px;

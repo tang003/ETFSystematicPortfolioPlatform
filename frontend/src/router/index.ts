@@ -1,21 +1,23 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import Dashboard from '../views/Dashboard.vue'
-import PortfolioWorkbench from '../views/PortfolioWorkbench.vue'
-import Workflow from '../views/Workflow.vue'
-import Assets from '../views/Assets.vue'
-import EtfCompare from '../views/EtfCompare.vue'
-import EtfDetail from '../views/EtfDetail.vue'
-import DataHealth from '../views/DataHealth.vue'
-import Factors from '../views/Factors.vue'
-import FactorResearch from '../views/FactorResearch.vue'
-import Portfolio from '../views/Portfolio.vue'
-import Holdings from '../views/Holdings.vue'
-import InvestmentPlans from '../views/InvestmentPlans.vue'
-import RiskRebalance from '../views/RiskRebalance.vue'
-import Backtest from '../views/Backtest.vue'
-import Reports from '../views/Reports.vue'
-import Login from '../views/Login.vue'
 import { fetchAuthStatus } from '../api/client'
+
+const Login = () => import('../views/Login.vue')
+const Dashboard = () => import('../views/Dashboard.vue')
+const PortfolioWorkbench = () => import('../views/PortfolioWorkbench.vue')
+const Workflow = () => import('../views/Workflow.vue')
+const Assets = () => import('../views/Assets.vue')
+const EtfCompare = () => import('../views/EtfCompare.vue')
+const EtfDetail = () => import('../views/EtfDetail.vue')
+const DataHealth = () => import('../views/DataHealth.vue')
+const Factors = () => import('../views/Factors.vue')
+const FactorResearch = () => import('../views/FactorResearch.vue')
+const Portfolio = () => import('../views/Portfolio.vue')
+const Holdings = () => import('../views/Holdings.vue')
+const InvestmentPlans = () => import('../views/InvestmentPlans.vue')
+const RiskRebalance = () => import('../views/RiskRebalance.vue')
+const Backtest = () => import('../views/Backtest.vue')
+const Reports = () => import('../views/Reports.vue')
+const SystemStatus = () => import('../views/SystemStatus.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -29,6 +31,7 @@ const router = createRouter({
     { path: '/etf-compare', component: EtfCompare, meta: { title: 'ETF 对比' } },
     { path: '/etf-detail/:symbol', component: EtfDetail, meta: { title: 'ETF 详情' } },
     { path: '/data-health', component: DataHealth, meta: { title: '数据健康' } },
+    { path: '/system-status', component: SystemStatus, meta: { title: '系统状态' } },
     { path: '/factors', component: Factors, meta: { title: '因子排名' } },
     { path: '/factor-research', component: FactorResearch, meta: { title: '因子研究' } },
     { path: '/portfolio', component: Portfolio, meta: { title: '目标组合' } },
