@@ -28,7 +28,7 @@ class HistoricalMarketInitRequest(BaseModel):
     end_date: date | None = None
     source: str = Field(default="tushare")
     calendar_source: str = Field(default="tushare")
-    incremental_sync: bool = True
+    incremental_sync: bool = False
     clean_after_sync: bool = True
     request_interval_seconds: float = Field(default=0.2, ge=0, le=10)
     max_symbols: int | None = Field(default=None, ge=1)

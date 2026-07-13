@@ -528,7 +528,7 @@
   "years": 10,
   "source": "tushare",
   "calendar_source": "tushare",
-  "incremental_sync": true,
+  "incremental_sync": false,
   "clean_after_sync": true,
   "request_interval_seconds": 0.2
 }
@@ -542,7 +542,7 @@
 - `start_date` / `end_date`：可选；不填时按 `years` 自动推导。
 - `source`：行情数据源，当前推荐 `tushare`。
 - `calendar_source`：交易日历数据源，当前推荐 `tushare`。
-- `incremental_sync`：是否增量同步，默认开启。
+- `incremental_sync`：是否增量同步；历史初始化默认关闭，用于完整回填目标日期区间。
 - `clean_after_sync`：同步后是否自动清洗入 `market_data_clean`。
 - `request_interval_seconds`：单只 ETF 请求后的等待秒数，用于控制共享 token 频率。
 - `max_symbols`：可选，用于测试时限制同步数量。
