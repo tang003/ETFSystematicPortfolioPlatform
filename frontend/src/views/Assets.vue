@@ -222,6 +222,7 @@ import {
   fetchAssets,
   fetchAssetSyncLogs,
   scoreEtfTradability,
+  seedCuratedAssets,
   syncAssetProfiles,
   syncAssetUniverse,
   updateAsset,
@@ -317,7 +318,7 @@ async function refreshTradabilityScores() {
 async function importPresetAssets() {
   actionLoading.value = true
   try {
-    const result = await batchUpsertAssets({ items: presetAssets })
+    const result = await seedCuratedAssets()
     ElMessage.success(`已导入 ${result.inserted_or_updated} 条精选 ETF`)
     await refresh()
   } catch (error) {

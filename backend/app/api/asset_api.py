@@ -17,6 +17,7 @@ from app.services.asset_service import (
     batch_upsert_assets,
     list_asset_sync_logs,
     list_assets,
+    seed_curated_etf_pool,
     sync_etf_profiles,
     sync_etf_universe,
     update_asset,
@@ -27,10 +28,12 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 
 @router.get("", response_model=list[AssetRead])
 def get_assets(
+    q: str | None = Query(default=None, description="按代码、名称、指数或基金公司搜索"),
+    limit: int | None = Query(default=None, ge=1, le=5000),
     enabled: bool | None = Query(default=None, description="按启用状态筛选 ETF"),
     db: Session = Depends(get_db),
 ) -> list[AssetRead]:
-    return list_assets(db=db, enabled=enabled)
+    return list_assets(db=db, enabled=enabled, q=q, limit=limit)
 
 
 @router.post("/batch-upsert", response_model=AssetBatchUpsertResponse)
@@ -40,6 +43,14 @@ def upsert_assets(
 ) -> AssetBatchUpsertResponse:
     count = batch_upsert_assets(db=db, items=request.items)
     return AssetBatchUpsertResponse(total=len(request.items), inserted_or_updated=count)
+
+
+@router.post("/seed-curated", response_model=AssetBatchUpsertResponse)
+def seed_curated_assets(
+    db: Session = Depends(get_db),
+) -> AssetBatchUpsertResponse:
+    result = seed_curated_etf_pool(db=db)
+    return AssetBatchUpsertResponse(total=result["total"], inserted_or_updated=result["inserted_or_updated"])
 
 
 @router.post("/sync-universe", response_model=AssetUniverseSyncResponse)

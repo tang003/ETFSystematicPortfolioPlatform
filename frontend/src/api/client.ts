@@ -525,9 +525,12 @@ export const fetchAuthStatus = async () => (await api.get<AuthStatus>('/api/auth
 export const login = async (payload: { username: string; password: string }) =>
   (await api.post<AuthStatus>('/api/auth/login', payload)).data
 export const logout = async () => (await api.post<AuthStatus>('/api/auth/logout')).data
-export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).data
+export const fetchAssets = async (params?: { enabled?: boolean; q?: string; limit?: number }) =>
+  (await api.get<Asset[]>('/api/assets', { params })).data
 export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =>
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
+export const seedCuratedAssets = async () =>
+  (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/seed-curated')).data
 export const syncAssetUniverse = async (payload: { source?: string; limit?: number }) =>
   (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload, { timeout: 300000 })).data
 export const syncAssetProfiles = async (payload: { source?: string; symbols?: string[]; limit?: number; preserve_existing?: boolean }) =>

@@ -52,10 +52,75 @@ MARKET_SYNC_PRESERVE_FIELDS = {
 }
 
 
-def list_assets(db: Session, enabled: bool | None = None) -> list[AssetMaster]:
+CURATED_ETF_SYMBOLS = [
+    "510050",
+    "510300",
+    "510500",
+    "510880",
+    "512100",
+    "512200",
+    "512400",
+    "512480",
+    "512660",
+    "512690",
+    "512760",
+    "512800",
+    "512880",
+    "512980",
+    "515000",
+    "515030",
+    "515050",
+    "515170",
+    "515790",
+    "516160",
+    "516510",
+    "516950",
+    "560010",
+    "560050",
+    "560660",
+    "561300",
+    "588000",
+    "588080",
+    "588200",
+    "159611",
+    "159629",
+    "159633",
+    "159638",
+    "159647",
+    "159659",
+    "159755",
+    "159781",
+    "159845",
+    "159915",
+    "159919",
+    "159928",
+    "159949",
+    "159967",
+    "159995",
+    "511010",
+    "511380",
+    "511880",
+    "518880",
+    "513050",
+    "513100",
+]
+
+
+def list_assets(db: Session, enabled: bool | None = None, q: str | None = None, limit: int | None = None) -> list[AssetMaster]:
     query = select(AssetMaster).order_by(AssetMaster.asset_class, AssetMaster.symbol)
     if enabled is not None:
         query = query.where(AssetMaster.enabled.is_(enabled))
+    keyword = (q or "").strip()
+    if keyword:
+        pattern = f"%{keyword}%"
+        query = query.where(
+            AssetMaster.symbol.ilike(pattern)
+            | AssetMaster.name.ilike(pattern)
+            | AssetMaster.tracking_index.ilike(pattern)
+            | AssetMaster.fund_company.ilike(pattern)
+        )
+    if limit is not None:
+        query = query.limit(limit)
     return list(db.scalars(query).all())
 
 
@@ -72,6 +137,45 @@ def batch_upsert_assets(db: Session, items: list[AssetUpsertItem]) -> int:
     )
     db.commit()
     return len(payload)
+
+
+def seed_curated_etf_pool(db: Session) -> dict[str, int]:
+    existing_assets = {
+        asset.symbol: asset
+        for asset in db.scalars(select(AssetMaster).where(AssetMaster.symbol.in_(CURATED_ETF_SYMBOLS))).all()
+    }
+    curated_items: list[AssetUpsertItem] = []
+    for symbol in CURATED_ETF_SYMBOLS:
+        existing = existing_assets.get(symbol)
+        if existing:
+            item = AssetUpsertItem(
+                symbol=existing.symbol,
+                name=existing.name,
+                exchange=existing.exchange,
+                asset_class=existing.asset_class,
+                asset_region=existing.asset_region,
+                currency=existing.currency,
+                is_cross_border=existing.is_cross_border,
+                is_leveraged=existing.is_leveraged,
+                is_inverse=existing.is_inverse,
+                enabled=True,
+                risk_level=existing.risk_level,
+                fund_company=truncate_text(existing.fund_company, 100),
+                tracking_index=truncate_text(existing.tracking_index, 100),
+                listing_date=existing.listing_date,
+                fund_size=existing.fund_size,
+                management_fee=existing.management_fee,
+                custody_fee=existing.custody_fee,
+                expense_ratio=existing.expense_ratio,
+                tracking_error=existing.tracking_error,
+                latest_premium_rate=existing.latest_premium_rate,
+                description=existing.description or curated_description(existing),
+            )
+        else:
+            item = fallback_curated_item(symbol)
+        curated_items.append(item)
+    updated = batch_upsert_assets(db, curated_items)
+    return {"total": len(curated_items), "inserted_or_updated": updated, "enabled": len(curated_items)}
 
 
 def sync_etf_universe(db: Session, *, source: str = "auto", limit: int | None = None) -> dict[str, int | str]:
@@ -491,6 +595,80 @@ def build_asset_item_from_tushare_row(row: dict[str, Any]) -> AssetUpsertItem | 
         description="ETF universe synced from Tushare fund_basic; disabled by default until enabled for research.",
         **meta,
     )
+
+
+def fallback_curated_item(symbol: str) -> AssetUpsertItem:
+    names = {
+        "510050": ("上证50ETF", "上证50", "equity", "CN", 4),
+        "510300": ("沪深300ETF", "沪深300", "equity", "CN", 4),
+        "510500": ("中证500ETF", "中证500", "equity", "CN", 4),
+        "510880": ("红利ETF", "上证红利", "equity", "CN", 3),
+        "512100": ("中证1000ETF", "中证1000", "equity", "CN", 5),
+        "512200": ("房地产ETF", "中证全指房地产", "equity", "CN", 5),
+        "512400": ("有色金属ETF", "中证申万有色金属", "equity", "CN", 5),
+        "512480": ("半导体ETF", "中证全指半导体", "equity", "CN", 5),
+        "512660": ("军工ETF", "中证军工", "equity", "CN", 5),
+        "512690": ("酒ETF", "中证酒", "equity", "CN", 5),
+        "512760": ("芯片ETF", "国证芯片", "equity", "CN", 5),
+        "512800": ("银行ETF", "中证银行", "equity", "CN", 4),
+        "512880": ("证券ETF", "中证全指证券公司", "equity", "CN", 5),
+        "512980": ("传媒ETF", "中证传媒", "equity", "CN", 5),
+        "515000": ("科技ETF", "中证科技龙头", "equity", "CN", 5),
+        "515030": ("新能源车ETF", "中证新能源汽车", "equity", "CN", 5),
+        "515050": ("5GETF", "中证5G通信主题", "equity", "CN", 5),
+        "515170": ("食品饮料ETF", "中证细分食品饮料", "equity", "CN", 5),
+        "515790": ("光伏ETF", "中证光伏产业", "equity", "CN", 5),
+        "516160": ("新能源ETF", "中证新能源", "equity", "CN", 5),
+        "516510": ("云计算ETF", "中证云计算与大数据", "equity", "CN", 5),
+        "516950": ("基建ETF", "中证基建", "equity", "CN", 5),
+        "560010": ("1000ETF", "中证1000", "equity", "CN", 5),
+        "560050": ("MSCI中国A50ETF", "MSCI中国A50互联互通", "equity", "CN", 4),
+        "560660": ("绿色电力ETF", "中证绿色电力", "equity", "CN", 5),
+        "561300": ("300增强ETF", "沪深300增强", "equity", "CN", 4),
+        "588000": ("科创50ETF", "科创50", "equity", "CN", 5),
+        "588080": ("科创板50ETF", "科创50", "equity", "CN", 5),
+        "588200": ("科创芯片ETF", "科创芯片", "equity", "CN", 5),
+        "159611": ("电力ETF", "中证全指电力公用事业", "equity", "CN", 4),
+        "159629": ("1000ETF", "中证1000", "equity", "CN", 5),
+        "159633": ("中证1000ETF指数", "中证1000", "equity", "CN", 5),
+        "159638": ("高端制造ETF", "高端制造", "equity", "CN", 5),
+        "159647": ("中药ETF", "中证中药", "equity", "CN", 5),
+        "159659": ("纳指100ETF", "纳斯达克100", "qdii", "US", 5),
+        "159755": ("电池ETF", "中证电池主题", "equity", "CN", 5),
+        "159781": ("双创50ETF", "科创创业50", "equity", "CN", 5),
+        "159845": ("中证1000ETF", "中证1000", "equity", "CN", 5),
+        "159915": ("创业板ETF", "创业板指", "equity", "CN", 5),
+        "159919": ("沪深300ETF", "沪深300", "equity", "CN", 4),
+        "159928": ("消费ETF", "中证主要消费", "equity", "CN", 4),
+        "159949": ("创业板50ETF", "创业板50", "equity", "CN", 5),
+        "159967": ("创成长ETF", "创业板动量成长", "equity", "CN", 5),
+        "159995": ("芯片ETF", "国证芯片", "equity", "CN", 5),
+        "511010": ("国债ETF", "上证5年期国债", "bond", "CN", 2),
+        "511380": ("可转债ETF", "中证可转债及可交换债", "bond", "CN", 3),
+        "511880": ("银华日利ETF", "货币基金", "cash", "CN", 1),
+        "518880": ("黄金ETF", "上海黄金交易所黄金现货", "gold", "GLOBAL", 3),
+        "513050": ("中概互联网ETF", "中证海外中国互联网", "qdii", "CN_HK_US", 5),
+        "513100": ("纳指ETF", "纳斯达克100", "qdii", "US", 5),
+    }
+    name, tracking_index, asset_class, region, risk_level = names[symbol]
+    return AssetUpsertItem(
+        symbol=symbol,
+        name=name,
+        exchange=infer_exchange(symbol),
+        asset_class=asset_class,
+        asset_region=region,
+        currency="CNY",
+        is_cross_border=region in {"HK", "US", "GLOBAL", "CN_HK_US"},
+        enabled=True,
+        risk_level=risk_level,
+        tracking_index=tracking_index,
+        description=f"内置精选 ETF 研究池：{tracking_index}",
+    )
+
+
+def curated_description(asset: AssetMaster) -> str:
+    tracking = asset.tracking_index or asset.name
+    return f"内置精选 ETF 研究池：{tracking}"
 
 
 def upsert_market_assets_preserve_enabled(db: Session, items: list[AssetUpsertItem]) -> int:

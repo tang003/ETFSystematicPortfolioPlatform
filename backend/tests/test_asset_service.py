@@ -195,6 +195,19 @@ def test_build_asset_item_from_tushare_row_truncates_long_profile_fields() -> No
     assert len(item.tracking_index) == 100
 
 
+def test_curated_etf_pool_contains_50_diversified_symbols() -> None:
+    assert len(asset_service.CURATED_ETF_SYMBOLS) == 50
+
+    qdii = asset_service.fallback_curated_item("513100")
+    gold = asset_service.fallback_curated_item("518880")
+    bond = asset_service.fallback_curated_item("511010")
+
+    assert qdii.asset_class == "qdii"
+    assert qdii.is_cross_border is True
+    assert gold.asset_class == "gold"
+    assert bond.asset_class == "bond"
+
+
 def test_friendly_external_error_translates_remote_disconnect() -> None:
     message = asset_service.friendly_external_error(RuntimeError("RemoteDisconnected without response"))
 

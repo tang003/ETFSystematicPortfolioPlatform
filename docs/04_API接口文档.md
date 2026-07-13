@@ -52,10 +52,29 @@
 可选参数：
 
 - `enabled=true|false`
+- `q`：按代码、名称、跟踪指数或基金公司模糊搜索
+- `limit`：限制返回数量，最大 5000
 
 ### POST /api/assets/batch-upsert
 
 批量导入或更新 ETF 主数据。
+
+### POST /api/assets/seed-curated
+
+启用后端内置精选 ETF 研究池。
+
+说明：
+- 当前内置 50 支左右 ETF，覆盖宽基、行业主题、债券、货币、黄金和 QDII。
+- 如果全市场基础库已有真实资料，会优先使用数据库资料；否则使用内置保底资料。
+- 该接口会把精选 ETF 设置为 `enabled=true`，使其进入研究池、行情同步、因子、策略和回测流程。
+
+返回：
+```json
+{
+  "total": 50,
+  "inserted_or_updated": 50
+}
+```
 
 ### POST /api/assets/sync-universe
 
