@@ -529,7 +529,7 @@ export const fetchAssets = async () => (await api.get<Asset[]>('/api/assets')).d
 export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =>
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
 export const syncAssetUniverse = async (payload: { source?: string; limit?: number }) =>
-  (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload)).data
+  (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload, { timeout: 300000 })).data
 export const syncAssetProfiles = async (payload: { source?: string; symbols?: string[]; limit?: number; preserve_existing?: boolean }) =>
   (await api.post<AssetProfileSyncResponse>('/api/assets/sync-profiles', payload)).data
 export const fetchAssetSyncLogs = async (params?: { sync_type?: string; limit?: number }) =>

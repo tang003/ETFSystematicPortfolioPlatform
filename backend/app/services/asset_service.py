@@ -203,6 +203,13 @@ def safe_write_asset_sync_log(db: Session, *, sync_type: str, result: dict[str, 
 
 def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tuple[list[AssetUpsertItem], str]:
     errors: list[Exception] = []
+    if source in {"auto", "eastmoney"}:
+        try:
+            return fetch_eastmoney_etf_universe(limit=limit), "eastmoney"
+        except Exception as exc:  # noqa: BLE001 - fallback source is intentionally attempted.
+            errors.append(exc)
+            if source == "eastmoney":
+                raise
     if source in {"auto", "akshare"}:
         try:
             return fetch_akshare_etf_universe(limit=limit), "akshare"
@@ -210,11 +217,6 @@ def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tup
             errors.append(exc)
             if source == "akshare":
                 raise
-    if source in {"auto", "eastmoney"}:
-        try:
-            return fetch_eastmoney_etf_universe(limit=limit), "eastmoney"
-        except Exception as exc:  # noqa: BLE001 - caller receives a friendly combined error.
-            errors.append(exc)
     if errors:
         raise RuntimeError("；".join(friendly_external_error(error) for error in errors))
     raise ValueError("没有可用 ETF 基础池数据源")
@@ -261,10 +263,10 @@ def fetch_eastmoney_etf_universe(limit: int | None = None) -> list[AssetUpsertIt
 
 
 def fetch_eastmoney_etf_rows(limit: int | None = None, *, retries: int = 3, retry_interval_seconds: float = 1.2) -> list[dict[str, Any]]:
-    page_size = min(max(limit or 5000, 1), 5000)
-    params = {
+    page_size = 100
+    base_params = {
         "pn": "1",
-        "pz": str(page_size),
+        "pz": "100",
         "po": "1",
         "np": "1",
         "ut": "bd1d9ddb04089700cf9c27f6f7426281",
@@ -276,6 +278,49 @@ def fetch_eastmoney_etf_rows(limit: int | None = None, *, retries: int = 3, retr
         "fields": "f12,f13,f14,f20,f21,f38,f402,f297",
     }
     hosts = ["88.push2.eastmoney.com", "push2.eastmoney.com", "21.push2.eastmoney.com"]
+    all_rows: list[dict[str, Any]] = []
+    total = None
+    page_no = 1
+    while True:
+        params = {**base_params, "pn": str(page_no), "pz": str(page_size)}
+        payload = fetch_eastmoney_page(hosts, params, retries=retries, retry_interval_seconds=retry_interval_seconds)
+        data = payload.get("data") or {}
+        if total is None:
+            total = int(data.get("total") or 0)
+        rows = data.get("diff") or []
+        if not rows:
+            break
+        all_rows.extend(rows)
+        if limit is not None and len(all_rows) >= limit:
+            all_rows = all_rows[:limit]
+            break
+        if total and len(all_rows) >= total:
+            break
+        page_no += 1
+        time.sleep(0.15)
+    normalized_rows: list[dict[str, Any]] = []
+    for row in all_rows:
+        normalized_rows.append(
+            {
+                "代码": row.get("f12"),
+                "名称": row.get("f14"),
+                "总市值": row.get("f20"),
+                "流通市值": row.get("f21"),
+                "最新份额": row.get("f38"),
+                "基金折价率": row.get("f402"),
+                "数据日期": row.get("f297"),
+            }
+        )
+    return normalized_rows
+
+
+def fetch_eastmoney_page(
+    hosts: list[str],
+    params: dict[str, str],
+    *,
+    retries: int,
+    retry_interval_seconds: float,
+) -> dict[str, Any]:
     last_error: Exception | None = None
     response: requests.Response | None = None
     for attempt in range(1, retries + 1):
@@ -301,21 +346,7 @@ def fetch_eastmoney_etf_rows(limit: int | None = None, *, retries: int = 3, retr
     payload = response.json()
     if payload.get("rc") != 0:
         raise RuntimeError(f"东方财富备用接口返回异常 rc={payload.get('rc')}")
-    rows = payload.get("data", {}).get("diff") or []
-    normalized_rows: list[dict[str, Any]] = []
-    for row in rows:
-        normalized_rows.append(
-            {
-                "代码": row.get("f12"),
-                "名称": row.get("f14"),
-                "总市值": row.get("f20"),
-                "流通市值": row.get("f21"),
-                "最新份额": row.get("f38"),
-                "基金折价率": row.get("f402"),
-                "数据日期": row.get("f297"),
-            }
-        )
-    return normalized_rows
+    return payload
 
 
 def friendly_external_error(error: Exception) -> str:

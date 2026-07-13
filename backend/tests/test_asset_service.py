@@ -115,6 +115,27 @@ def test_fetch_etf_universe_falls_back_to_eastmoney(monkeypatch) -> None:
     assert items[0].symbol == "510300"
 
 
+def test_fetch_etf_universe_auto_prefers_eastmoney(monkeypatch) -> None:
+    called = {"akshare": False}
+
+    def fail_akshare(limit=None):
+        called["akshare"] = True
+        raise RuntimeError("should not call akshare first")
+
+    monkeypatch.setattr(asset_service, "fetch_akshare_etf_universe", fail_akshare)
+    monkeypatch.setattr(
+        asset_service,
+        "fetch_eastmoney_etf_rows",
+        lambda limit=None: [{"代码": "510300", "名称": "沪深300ETF"}],
+    )
+
+    items, source = asset_service.fetch_etf_universe(source="auto")
+
+    assert source == "eastmoney"
+    assert items[0].symbol == "510300"
+    assert called["akshare"] is False
+
+
 def test_friendly_external_error_translates_remote_disconnect() -> None:
     message = asset_service.friendly_external_error(RuntimeError("RemoteDisconnected without response"))
 
