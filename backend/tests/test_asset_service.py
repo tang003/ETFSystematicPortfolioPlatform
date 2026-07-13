@@ -136,6 +136,48 @@ def test_fetch_etf_universe_auto_prefers_eastmoney(monkeypatch) -> None:
     assert called["akshare"] is False
 
 
+def test_fetch_etf_universe_falls_back_to_tushare_before_akshare(monkeypatch) -> None:
+    called = {"akshare": False}
+
+    class Frame:
+        def to_dict(self, orient):
+            assert orient == "records"
+            return [{"ts_code": "510300.SH", "name": "沪深300ETF", "management": "华泰柏瑞基金"}]
+
+    monkeypatch.setattr(asset_service, "fetch_eastmoney_etf_universe", lambda limit=None: (_ for _ in ()).throw(RuntimeError("eastmoney down")))
+    monkeypatch.setattr(asset_service, "fetch_fund_basic", lambda market="E", status="L": Frame())
+    monkeypatch.setattr(asset_service, "fetch_akshare_etf_universe", lambda limit=None: called.__setitem__("akshare", True))
+
+    items, source = asset_service.fetch_etf_universe(source="auto")
+
+    assert source == "tushare"
+    assert items[0].symbol == "510300"
+    assert called["akshare"] is False
+
+
+def test_build_asset_item_from_tushare_row_maps_fees_and_profile() -> None:
+    item = asset_service.build_asset_item_from_tushare_row(
+        {
+            "ts_code": "159928.SZ",
+            "name": "消费ETF",
+            "management": "汇添富基金",
+            "benchmark": "中证主要消费指数",
+            "m_fee": "0.50",
+            "c_fee": "0.10",
+            "list_date": "20130823",
+        }
+    )
+
+    assert item is not None
+    assert item.symbol == "159928"
+    assert item.exchange == "SZ"
+    assert item.fund_company == "汇添富基金"
+    assert item.tracking_index == "中证主要消费指数"
+    assert item.management_fee == Decimal("0.0050")
+    assert item.custody_fee == Decimal("0.0010")
+    assert item.expense_ratio == Decimal("0.0060")
+
+
 def test_friendly_external_error_translates_remote_disconnect() -> None:
     message = asset_service.friendly_external_error(RuntimeError("RemoteDisconnected without response"))
 

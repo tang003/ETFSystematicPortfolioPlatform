@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.45.0-etf-universe-sync-resilience`
+当前版本：`v0.46.0-etf-universe-tushare-fallback`
 
 默认 API 前缀：`/api`
 
@@ -72,8 +72,9 @@
 
 说明：
 
-- 支持 `auto`、`akshare`、`eastmoney`。
-- `auto` 会先尝试 AKShare，失败后切换东方财富备用接口。
+- 支持 `auto`、`eastmoney`、`tushare`、`akshare`。
+- `auto` 会先尝试东方财富分页源，失败后切换 Tushare `fund_basic`，最后再尝试 AKShare。
+- Tushare 兜底只同步 ETF 档案基础信息，不同步历史行情，通常只消耗一次基础资料查询。
 - 同步进来的 ETF 默认不启用研究。
 - 该接口只同步 ETF 档案列表，不同步历史行情。
 - 外部源失败时不会清空本地已有 ETF 池。

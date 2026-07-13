@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.models.asset import AssetMaster
 from app.models.asset_sync_log import AssetSyncLog
 from app.schemas.asset_schema import AssetUpdateRequest, AssetUpsertItem
+from app.services.tushare_service import fetch_fund_basic
 
 UPSERT_FIELDS = [
     "name",
@@ -74,8 +75,8 @@ def batch_upsert_assets(db: Session, items: list[AssetUpsertItem]) -> int:
 
 
 def sync_etf_universe(db: Session, *, source: str = "auto", limit: int | None = None) -> dict[str, int | str]:
-    if source not in {"auto", "akshare", "eastmoney"}:
-        raise ValueError("ETF 基础池同步当前支持 source=auto、akshare、eastmoney")
+    if source not in {"auto", "akshare", "eastmoney", "tushare"}:
+        raise ValueError("ETF 基础池同步当前支持 source=auto、eastmoney、tushare、akshare")
     try:
         items, actual_source = fetch_etf_universe(source=source, limit=limit)
         inserted = upsert_market_assets_preserve_enabled(db, items)
@@ -210,6 +211,13 @@ def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tup
             errors.append(exc)
             if source == "eastmoney":
                 raise
+    if source in {"auto", "tushare"}:
+        try:
+            return fetch_tushare_etf_universe(limit=limit), "tushare"
+        except Exception as exc:  # noqa: BLE001 - fallback source is intentionally attempted.
+            errors.append(exc)
+            if source == "tushare":
+                raise
     if source in {"auto", "akshare"}:
         try:
             return fetch_akshare_etf_universe(limit=limit), "akshare"
@@ -220,6 +228,21 @@ def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tup
     if errors:
         raise RuntimeError("；".join(friendly_external_error(error) for error in errors))
     raise ValueError("没有可用 ETF 基础池数据源")
+
+
+def fetch_tushare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem]:
+    frame = fetch_fund_basic(market="E", status="L")
+    items: list[AssetUpsertItem] = []
+    for row in frame.to_dict("records"):
+        item = build_asset_item_from_tushare_row(row)
+        if item is None:
+            continue
+        items.append(item)
+        if limit is not None and len(items) >= limit:
+            break
+    if not items:
+        raise ValueError("Tushare fund_basic returned no ETF records")
+    return items
 
 
 def fetch_akshare_etf_universe(limit: int | None = None, *, retries: int = 3, retry_interval_seconds: float = 1.2) -> list[AssetUpsertItem]:
@@ -440,6 +463,36 @@ def build_asset_item_from_market_row(row: dict[str, Any]) -> AssetUpsertItem | N
     )
 
 
+def build_asset_item_from_tushare_row(row: dict[str, Any]) -> AssetUpsertItem | None:
+    ts_code = str(first_value(row, "ts_code", "TS_CODE") or "").strip()
+    symbol = normalize_symbol(ts_code.split(".", 1)[0] if ts_code else None)
+    name = str(first_value(row, "name", "fund_name") or "").strip()
+    if not symbol or not name:
+        return None
+    management_fee = to_tushare_fee_decimal(first_value(row, "m_fee"))
+    custody_fee = to_tushare_fee_decimal(first_value(row, "c_fee"))
+    expense_ratio = None
+    if management_fee is not None or custody_fee is not None:
+        expense_ratio = (management_fee or Decimal("0")) + (custody_fee or Decimal("0"))
+    meta = classify_etf_asset(symbol, name)
+    return AssetUpsertItem(
+        symbol=symbol,
+        name=name,
+        exchange=infer_exchange(symbol),
+        currency="CNY",
+        enabled=False,
+        fund_company=blank_to_none(first_value(row, "management")),
+        tracking_index=blank_to_none(first_value(row, "benchmark")) or infer_tracking_index(name),
+        listing_date=to_date(first_value(row, "list_date", "found_date")),
+        fund_size=None,
+        management_fee=management_fee,
+        custody_fee=custody_fee,
+        expense_ratio=expense_ratio,
+        description="ETF universe synced from Tushare fund_basic; disabled by default until enabled for research.",
+        **meta,
+    )
+
+
 def upsert_market_assets_preserve_enabled(db: Session, items: list[AssetUpsertItem]) -> int:
     if not items:
         return 0
@@ -466,6 +519,22 @@ def first_value(row: dict[str, Any], *keys: str) -> Any:
         if lowered_value is not None:
             return lowered_value
     return None
+
+
+def blank_to_none(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, float) and str(value) == "nan":
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def to_tushare_fee_decimal(value: Any) -> Decimal | None:
+    ratio = to_ratio_decimal(value)
+    if ratio is None:
+        return None
+    return ratio / Decimal("100") if abs(ratio) > Decimal("0.05") else ratio
 
 
 def normalize_symbol(value: Any) -> str | None:

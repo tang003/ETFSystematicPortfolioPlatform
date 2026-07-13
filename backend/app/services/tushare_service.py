@@ -74,6 +74,29 @@ def fetch_fund_daily(ts_code: str, start_date: date, end_date: date) -> pd.DataF
     )
 
 
+def fetch_fund_basic(*, market: str = "E", status: str = "L") -> pd.DataFrame:
+    return tushare_query(
+        "fund_basic",
+        params={"market": market, "status": status},
+        fields=[
+            "ts_code",
+            "name",
+            "management",
+            "custodian",
+            "fund_type",
+            "found_date",
+            "list_date",
+            "delist_date",
+            "issue_amount",
+            "m_fee",
+            "c_fee",
+            "benchmark",
+            "status",
+            "market",
+        ],
+    )
+
+
 def to_tushare_code(symbol: str, exchange: str | None = None) -> str:
     normalized_exchange = (exchange or "").strip().upper()
     if normalized_exchange in {"SH", "SSE", "XSHG"}:
