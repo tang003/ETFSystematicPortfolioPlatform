@@ -1,116 +1,173 @@
 # ETF Systematic Portfolio Platform
 
-ETF 系统化资产配置平台，面向个人中长期 ETF 投研、资产配置、持仓分析、定投计划和复盘报告。系统当前不连接券商账户，不自动下单，所有调仓和买卖建议都需要用户人工确认。
+ETF 系统化资产配置平台，面向个人中长期 ETF 投研、资产配置、持仓分析、定投计划、风险控制、回测复盘和报告生成。
+
+当前系统不连接真实券商账户，不自动下单，不直接操作资金。所有买卖、调仓、定投建议都需要用户人工确认。
 
 ## 当前版本
 
-- 版本：`v0.39.0-agent-analysis-history`
-- 阶段：AI 投研结果落库、ETF 自动补全、历史分析回看
-- 最新能力：
-  - DeepSeek 已接入，默认模型 `deepseek-v4-flash`。
-  - “AI 投研委员会”支持多 Agent ETF 分析、DeepSeek 中文总结、自动补全 ETF 主数据/行情。
-  - 每次 AI 投研结果会保存到 `agent_analysis_log`，前端可查看最近历史记录。
-  - 当前持仓仍采用手动录入方式：用户主要填写 ETF 代码、持仓数量、成本价；名称、类型、现价由系统尽量补全。
-  - 当前系统只生成建议，不自动交易。
+- 版本：`v0.40.0-docs-refresh`
+- 上一功能版本：`v0.39.0-agent-analysis-history`
+- 阶段：核心文档修复、项目说明重写、AI 接手上下文整理
 
-## 常用地址
+## 线上地址
 
-- 本地前端：http://localhost:5173
-- 线上前端：https://etf.8886767.xyz
-- AI 投研页面：https://etf.8886767.xyz/agent-analysis
-- API 健康检查：http://localhost:8000/health
+- Web 控制台：`https://etf.8886767.xyz`
+- AI 投研页面：`https://etf.8886767.xyz/agent-analysis`
+- 健康检查：`https://etf.8886767.xyz/health/ready`
 
-## DeepSeek 配置
+## 技术栈
 
-密钥只写入本地 `.env` 或服务器 `.env.production`，不要提交到 GitHub。
+后端：
 
-```bash
-DEEPSEEK_API_KEY=your_key
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash
-```
+- FastAPI
+- SQLAlchemy
+- Pydantic
+- Alembic
+- PostgreSQL
+- Redis
 
-ETF 系统化资产配置平台，面向个人中长期 ETF 投研、资产配置、持仓分析和月度复盘。系统当前不连接真实券商账户，不自动下单，所有调仓结果都作为人工确认前的建议。
+前端：
 
-## 当前版本
+- Vue 3
+- TypeScript
+- Element Plus
+- ECharts
+- Vite
 
-- 版本：`v0.38.0-deepseek-agent-analysis`
-- 阶段：DeepSeek ETF 多 Agent 投研
-- 业务能力：完整 ETF 投研链路、严格数据门禁、管理员鉴权、生产部署、自动数据库迁移、备份恢复、独立工作流 worker、外部 Caddy 接入、弹窗式持仓维护、ETF 全市场基础池同步、ETF 对比、可交易性评分、ETF 池筛选器、组合 X-Ray、目标定投计划、核心 ETF 分层行情同步、持仓代码自动登记补行情、基础安全响应头、系统状态看板和 DeepSeek 多 Agent ETF 投研
-- 技术栈：FastAPI、PostgreSQL、Redis、SQLAlchemy、Pydantic、Vue 3、Element Plus、Vite、Docker Compose
+部署：
 
-## 快速启动
+- Docker Compose
+- Nginx 前端容器
+- 外部 Caddy 反向代理
+- GitHub 拉取部署
+
+## 当前主要功能
+
+- ETF 池：同步和维护 ETF 主数据，启用研究对象。
+- 行情同步：支持 AKShare、Eastmoney、Tushare 路径。
+- 数据质量：记录行情缺失、异常、清洗结果。
+- 因子计算：趋势、动量、波动、回撤、流动性和 Alpha。
+- ETF 对比：收益、波动、回撤、成交额、相关性、可交易性评分。
+- ETF 详情：单只 ETF 曲线、回撤、因子和最近行情。
+- 策略：核心 ETF 轮动策略 `core_etf_rotation`。
+- 目标组合：生成目标权重。
+- 当前持仓：手动录入代码、数量、成本价，系统补全名称、类型、现价和市值。
+- 持仓分析：判断加仓、减仓、持有或退出。
+- 定投计划：根据资金、周期、目标年化生成每期建议。
+- 风控调仓：执行风控检查并生成调仓建议单。
+- 回测：支持基础策略回测和月度追加资金。
+- 报告：生成中文 Markdown 月度报告。
+- AI 投研：DeepSeek + 多 Agent ETF 分析，并保存历史记录。
+- 部署运维：数据库备份、恢复、迁移、worker 后台任务。
+
+## 本地启动
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-如需启用 Tushare，请在 `.env` 中补充：
+本地地址：
+
+- 前端：`http://localhost:5173`
+- 后端：`http://localhost:8000`
+- Swagger：`http://localhost:8000/docs`
+
+## 常用测试
+
+后端：
+
+```bash
+docker compose build api
+docker compose run --rm api pytest -q
+```
+
+前端：
+
+```bash
+cd frontend
+npm run build
+```
+
+Compose：
+
+```bash
+docker compose config -q
+```
+
+## DeepSeek 配置
+
+DeepSeek 用于 AI 投研中文总结。
+
+```bash
+DEEPSEEK_API_KEY=your_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_TIMEOUT_SECONDS=45
+DEEPSEEK_MAX_TOKENS=1800
+DEEPSEEK_THINKING_ENABLED=false
+```
+
+密钥只能放在 `.env` 或服务器 `.env.production`，不要提交 GitHub。
+
+## Tushare 配置
 
 ```bash
 TUSHARE_TOKEN=your_token
 TUSHARE_REQUEST_INTERVAL_SECONDS=1.5
 ```
 
-如需启用 DeepSeek AI 投研总结，请在 `.env` 或服务器 `.env.production` 中补充：
+共享 token 或低积分时，建议只同步 `core` 范围，并设置请求间隔。
+
+## 生产部署
+
+服务器目录：
 
 ```bash
-DEEPSEEK_API_KEY=your_key
-DEEPSEEK_MODEL=deepseek-v4-flash
+/opt/ETFSystematicPortfolioPlatform
 ```
 
-服务器远程部署必须启用登录保护。先生成密码哈希和会话密钥：
+部署命令：
 
 ```bash
-python scripts/generate_auth_secrets.py
+cd /opt/ETFSystematicPortfolioPlatform
+git pull --ff-only
+python3 scripts/deploy_production.py --compose-file compose.production.external-caddy.yml --env-file .env.production
 ```
 
-把脚本输出写入服务器 `.env`，其中 `AUTH_ENABLED` 和 `AUTH_COOKIE_SECURE` 都应为 `true`。本地开发默认关闭鉴权。
-
-启动后访问：
-
-- Web 控制台：http://localhost:5173
-- API 健康检查：http://localhost:8000/health
-- Swagger 文档：http://localhost:8000/docs
-- ETF 资产列表：http://localhost:8000/api/assets
-
-## 主要功能
-
-- 全流程任务：一键串联行情同步、因子计算、策略运行、风控调仓和报告；行情失败、数据过期或历史样本不足时停止生成建议。
-- 组合工作台：集中查看目标组合、当前持仓、偏离解释、定投建议和调仓建议。
-- 组合风险透视：按资产类别、区域和风险等级查看当前持仓与目标组合暴露，并展示策略前检查结果。
-- ETF 池：管理和查询系统 ETF 主数据，支持同步全市场 ETF 基础池、导入精选示例池、类别/区域/风险/跨境/启用状态/可交易性评分筛选。
-- ETF 对比：选择多只 ETF，对比标准化净值、收益、年化波动、最大回撤、成交额、相关性和可交易性评分。
-- ETF 详情：查看单只 ETF 的基础信息、净值/回撤曲线、可交易性评分、最新因子和最近行情。
-- 数据健康：按核心池、持仓、目标组合、定投、启用池或全部资产分层同步行情，检查缺失数据、异常数据和清洗结果。
-- 多数据源：支持 `akshare`、`eastmoney`，并已预留 `tushare` 真实数据源接入能力。
-- 因子排名：计算趋势、动量、波动、回撤、流动性等指标并生成 Alpha 排名。
-- 因子排名可交易性：因子排名页同步展示 ETF 可交易性评分，避免只看 Alpha 忽略成交活跃度。
-- 因子研究：计算 IC、Rank IC、因子相关性和分组未来收益。
-- 目标组合：运行 `core_etf_rotation` 策略，生成目标权重。
-- 策略可交易性约束：权益 ETF 可交易性评分低于 40 时不进入目标组合，40-60 时目标权重减半并转入现金缓冲。
-- 当前持仓：录入用户已有 ETF 持仓，判断加仓、减仓、持有或退出。
-- 弹窗式持仓维护：新增、编辑和补仓都通过弹窗完成，用户只填写代码、持仓数量和成本价；确认后自动保存到数据库。不在 ETF 池里的代码会自动登记为候选 ETF，系统会先补最近日线行情，日线缺失时再用单只 ETF 最新报价兜底刷新现价，仍缺行情时允许临时填写现价。
-- 定投计划：设置准备资金、投入期数、目标年化和执行模式，系统按目标组合与当前仓位缺口生成本期投入建议；支持固定节奏、回撤增强、信号择时和未来自动执行预览；当前不自动下单。
-- 风控调仓：基于目标组合和真实当前权重生成调仓建议单。
-- 回测：运行基础买入持有回测，或按月度策略调仓并支持每月追加资金。
-- 报告：生成中文为主、保留必要英文术语的月度 Markdown 报告，包含策略、目标组合、风控、当前持仓、定投建议、调仓单和回测摘要。
-- 访问保护：支持单管理员登录、HttpOnly Cookie 会话、密码哈希、登录限速和全部业务 API 鉴权。
-- 数据运维：API 容器启动前自动执行 Alembic 迁移；提供 PostgreSQL 备份、SHA256 校验和恢复脚本。
-- 任务执行：本地默认由 API inline 执行全流程；生产环境由独立 worker 接管 pending 任务，并通过 Redis 心跳参与健康检查。
-- 上线辅助：提供生产环境变量校验脚本、服务器部署脚本和服务器上线清单。
-- 多项目服务器：支持不接管 80/443，仅绑定本机端口并接入已有 Caddy 反向代理。
+生产环境使用外部 Caddy 接管 80/443，本项目通过 `compose.production.external-caddy.yml` 绑定本机端口，避免影响服务器其他项目。
 
 ## 文档入口
 
-核心文档位于 `docs/`。建议优先阅读：
+建议先读：
 
-1. `docs/00_文档导航.md`：文档地图、阅读路径、维护规范。
-2. `docs/10_系统流程说明.md`：从业务角度理解完整系统流程。
-3. `docs/04_API接口文档.md`：查看后端接口、请求参数和响应示例。
-4. `docs/09_开发日志.md`：查看每个版本的变更、验收和后续待办。
-5. `docs/11_服务器上线清单.md`：服务器正式上线前需要准备的信息、部署命令和排查命令。
-6. `docs/12_ETF功能优化路线图.md`：查看 ETF 对比、可交易性评分、回测增强和未来自动执行层路线。
+1. `docs/00_文档导航.md`
+2. `docs/01_项目说明.md`
+3. `docs/02_系统架构.md`
+4. `docs/03_数据库设计.md`
+5. `docs/04_API接口文档.md`
+6. `docs/10_系统流程说明.md`
+7. `docs/09_开发日志.md`
 
-后续每完成一个版本，都需要同步更新相关设计文档和 `docs/09_开发日志.md`，方便自己维护，也方便把文档交给 AI 快速接手项目。
+## 给 AI 修改项目时
+
+最少提供：
+
+- `README.md`
+- `docs/00_文档导航.md`
+- `docs/01_项目说明.md`
+- `docs/02_系统架构.md`
+- `docs/03_数据库设计.md`
+- `docs/04_API接口文档.md`
+- `docs/10_系统流程说明.md`
+- 本次任务相关代码文件
+
+## 投资和安全边界
+
+- 本项目不是投资顾问服务。
+- 系统建议不代表收益承诺。
+- 当前不自动下单。
+- 当前不连接真实券商交易。
+- 后续若接交易接口，必须新增人工确认、风控拦截、订单审计和异常暂停机制。
+- 不要把任何真实 API Key、数据库密码、登录密码提交到 Git。

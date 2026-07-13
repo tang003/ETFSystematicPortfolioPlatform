@@ -1,682 +1,219 @@
 # 04 API 接口文档
 
-当前版本：`v0.38.0-deepseek-agent-analysis`
+当前版本：`v0.39.0-agent-analysis-history`
 
-## 认证约定
+默认 API 前缀：`/api`
 
-服务器设置 `AUTH_ENABLED=true` 后，除 `/health` 和 `/api/auth/*` 外的全部 API 都需要登录。登录成功后服务端写入 HttpOnly Cookie，前端浏览器会自动携带，不需要把 Token 保存到 JavaScript 或 localStorage。
+生产环境开启鉴权后，除 `/health` 和 `/api/auth/*` 外，业务 API 都需要登录。
+
+## 健康检查
+
+### GET /health
+
+返回服务基础状态。
+
+### GET /health/live
+
+用于存活检查。
+
+### GET /health/ready
+
+用于就绪检查。生产环境会检查 API、数据库、worker 等关键状态。
+
+## 鉴权
 
 ### GET /api/auth/status
 
-返回鉴权是否启用、服务器是否配置完整以及当前会话是否已登录。
+返回是否启用鉴权、是否已登录。
 
 ### POST /api/auth/login
+
+请求：
 
 ```json
 {
   "username": "admin",
-  "password": "your-password"
+  "password": "password"
 }
 ```
 
-连续失败达到限制后返回 HTTP 429。用户名或密码错误返回 HTTP 401。
+登录成功后服务端写入 HttpOnly Cookie。
 
 ### POST /api/auth/logout
 
-删除当前登录 Cookie。退出后再次访问业务 API 将返回 HTTP 401。
+退出登录。
 
-## GET /health
+## ETF 池
 
-用途：健康检查，同时验证数据库连接可用。
+### GET /api/assets
 
-请求参数：无
+查询 ETF 主数据。
 
-响应示例：
+可选参数：
 
-```json
-{
-  "status": "ok",
-  "service": "ETF Systematic Portfolio Platform",
-  "environment": "local"
-}
-```
+- `enabled=true|false`
 
-错误示例：
+### POST /api/assets/batch-upsert
 
-如果数据库不可用，接口会返回 `500 Internal Server Error`，需要检查 PostgreSQL 容器状态和 `.env` 数据库配置。
+批量导入或更新 ETF 主数据。
 
-## GET /health/live
+### POST /api/assets/sync-universe
 
-用途：进程存活检查，不访问数据库，适合判断容器进程是否仍在响应。
+同步全市场 ETF 基础池。
 
-## GET /health/ready
-
-用途：生产就绪检查。会验证数据库连接；当 `WORKFLOW_EXECUTION_MODE=worker` 时，还会验证 Redis 中是否存在 worker 心跳。生产 Compose 的 API healthcheck 使用该接口。
-
-## GET /api/assets
-
-用途：查询 ETF 主数据列表。
-
-请求参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| enabled | boolean | 否 | 按启用状态筛选，省略则返回全部 |
-
-请求示例：
-
-```bash
-curl "http://localhost:8000/api/assets?enabled=true"
-```
-
-响应示例：
-
-```json
-[
-  {
-    "symbol": "510300",
-    "name": "沪深300ETF",
-    "exchange": "SH",
-    "asset_class": "equity",
-    "asset_region": "CN",
-    "currency": "CNY",
-    "is_cross_border": false,
-    "is_leveraged": false,
-    "is_inverse": false,
-    "enabled": true,
-    "risk_level": 4,
-    "description": "A股大盘核心宽基 ETF",
-    "created_at": "2026-07-08T00:00:00",
-    "updated_at": "2026-07-08T00:00:00"
-  }
-]
-```
-
-说明：
-
-- 当前内置种子数据是用于快速启动和验证流程的样本池。
-- 如需扩展 ETF 池，可使用下方全市场同步接口或批量导入接口。
-
-## POST /api/assets/batch-upsert
-
-用途：批量新增或更新 ETF 主数据池。适合后续扩展完整 ETF 池、修正名称、补充风险等级和分类。
-
-请求示例：
-
-```json
-{
-  "items": [
-    {
-      "symbol": "510050",
-      "name": "上证50ETF",
-      "exchange": "SH",
-      "asset_class": "equity",
-      "asset_region": "CN",
-      "currency": "CNY",
-      "enabled": true,
-      "risk_level": 4,
-      "description": "A股核心蓝筹 ETF"
-    }
-  ]
-}
-```
-
-响应示例：
-
-```json
-{
-  "total": 1,
-  "inserted_or_updated": 1
-}
-```
-
-## POST /api/assets/sync-universe
-
-用途：从外部数据源同步全市场 ETF 基础池，写入 `asset_master`。该接口只补充“代码、名称、交易所、粗分类、区域、风险等级”等主数据，不同步历史行情。
-
-请求示例：
+请求：
 
 ```json
 {
   "source": "akshare",
-  "limit": 300
-}
-```
-
-参数说明：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| source | string | 否 | 当前支持 `akshare`。AKShare 不需要 token，底层使用公开行情源 |
-| limit | integer | 否 | 限制本次导入数量，调试时可使用；正式同步可不传 |
-
-响应示例：
-
-```json
-{
-  "source": "akshare",
-  "total": 300,
-  "inserted_or_updated": 300
+  "limit": 100
 }
 ```
 
 说明：
 
-- 新同步进来的 ETF 默认 `enabled=false`，不会自动进入行情同步、因子计算、策略和回测。
-- 如果 ETF 已存在，接口会更新名称、交易所、分类、区域等基础信息，但保留原有 `enabled`、风险等级和说明，避免覆盖人工维护内容。
-- 外部数据源短暂不可用时返回 HTTP 502，稍后重试即可，不影响已有 ETF 池。
+- 当前只支持 `akshare`。
+- 同步进来的 ETF 默认不启用研究。
 
-## PATCH /api/assets/{symbol}
+### PATCH /api/assets/{symbol}
 
-用途：更新单只 ETF 主数据的研究状态或基础属性。当前前端主要用它来控制“启用 / 停用研究池”。
+更新单只 ETF 的启用状态、风险等级或说明。
 
-请求示例：
+## 行情与数据质量
 
-```json
-{
-  "enabled": false
-}
-```
+### GET /api/market/sync-plan
 
-响应：返回更新后的 ETF 主数据对象。
+预览某个同步范围会同步哪些 ETF。
 
-## POST /api/etf-compare
+参数：
 
-用途：对比多只 ETF 的收益、年化波动、最大回撤、日均成交额、相关性和可交易性评分。该接口读取 `market_data_clean`，不会主动同步行情。
+- `sync_scope`：`core`、`positions`、`target`、`plans`、`enabled`、`all`
 
-请求示例：
+### POST /api/market/sync
 
-```json
-{
-  "symbols": ["510300", "159915", "513050"],
-  "start_date": "2025-07-11",
-  "end_date": "2026-07-11"
-}
-```
-
-响应字段：
-
-| 字段 | 说明 |
-| --- | --- |
-| metrics | 每只 ETF 的收益、风险、成交额、样本数和可交易性评分 |
-| normalized_series | 以首日为 100 的标准化净值曲线 |
-| correlations | ETF 两两日收益相关性矩阵 |
-
-说明：
-
-- `tradability_score` 为 0-100 分，当前根据历史样本数、日均成交额和零成交量日期粗评。
-- 样本不足或缺少行情时，对应 ETF 的指标会为空或评分偏低，需要先到“数据健康”同步行情。
-
-## POST /api/etf-compare/tradability
-
-用途：批量计算 ETF 可交易性评分，适合 ETF 池、策略前检查和工作流门禁复用。
+同步行情。
 
 请求示例：
 
 ```json
 {
-  "symbols": ["510300", "159915", "513050"],
-  "start_date": "2025-07-11",
-  "end_date": "2026-07-11"
-}
-```
-
-响应：返回与 `POST /api/etf-compare` 中 `metrics` 相同结构的数组。
-
-## GET /api/etf-detail/{symbol}
-
-用途：查看单只 ETF 的详情画像，包含资产主数据、可交易性指标、最新因子、净值/回撤曲线和最近清洗行情。
-
-请求示例：
-
-```bash
-curl "http://localhost:8000/api/etf-detail/510300?start_date=2025-07-11&end_date=2026-07-11"
-```
-
-响应字段：
-
-| 字段 | 说明 |
-| --- | --- |
-| asset | ETF 主数据，可能为空 |
-| metric | 收益、波动、回撤、成交额和可交易性评分 |
-| latest_factor | 最新一条因子记录，可能为空 |
-| curve | 标准化净值、回撤和成交额序列 |
-| recent_bars | 最近 30 条清洗行情 |
-
-说明：
-
-- 详情页只读本地 `asset_master`、`market_data_clean` 和 `factor_daily`。
-- 如果 `curve` 为空，通常表示该日期范围内尚未同步清洗行情，需要先执行 `/api/market/sync`，或在 ETF 详情页点击“同步本 ETF 行情”。
-
-## POST /api/agent-analysis/etf
-
-用途：运行 ETF 多 Agent 投研分析。系统会读取本地 ETF 详情、最新因子、当前持仓、目标组合和持仓分析结果，生成市场环境、技术趋势、流动性、组合持仓、风险控制和复合经理六类观点。配置 DeepSeek 后，复合经理结论会由 DeepSeek 生成自然语言总结；未配置或调用失败时自动退回规则型总结。
-
-请求示例：
-
-```json
-{
-  "symbol": "510300",
+  "symbols": ["510300"],
+  "sync_scope": "core",
   "start_date": "2025-07-13",
   "end_date": "2026-07-13",
-  "use_llm": true
-}
-```
-
-请求字段：
-
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbol | string | 是 | ETF 代码 |
-| start_date | date | 否 | 分析开始日期，默认近一年 |
-| end_date | date | 否 | 分析结束日期，默认今天 |
-| use_llm | boolean | 否 | 是否尝试使用 DeepSeek 总结，默认 `true` |
-
-响应字段：
-
-| 字段 | 说明 |
-| --- | --- |
-| data_status | `ready` 表示本地行情可用于分析；`missing_market_data` 表示缺少清洗行情 |
-| llm_enabled | 服务器是否配置了 `DEEPSEEK_API_KEY` |
-| llm_used | 本次是否成功使用 DeepSeek |
-| final_action | 复合经理最终建议 |
-| final_score | 综合评分，0-100 |
-| final_summary | 综合中文结论 |
-| agents | 各 Agent 的立场、评分、证据、风险和建议 |
-| warnings | 数据缺失或 DeepSeek 调用失败等提示 |
-
-注意：
-
-- 该接口不会自动同步行情；如果缺少本地行情，请先在 ETF 详情页点击“同步本 ETF 行情”，或调用 `/api/market/sync`。
-- DeepSeek key 只应配置在 `.env` 或服务器 `.env.production`，不要提交到 Git。
-- 该接口只输出研究建议，不连接券商、不自动下单。
-
-后续计划接口：
-
-- `POST /api/factors/calculate`
-- `POST /api/strategies/run`
-- `POST /api/portfolio/generate-target`
-- `POST /api/risk/check`
-- `POST /api/rebalance/generate`
-- `POST /api/backtest/run`
-- `POST /api/reports/monthly`
-
-## POST /api/market/sync
-
-用途：同步 ETF 日线行情，写入 `market_data_raw`，并可同步写入 `market_data_clean` 和数据质量日志。
-
-如果 `symbols` 为空，系统会按 `sync_scope` 自动选择同步范围。推荐日常使用 `core`，它会合并“当前持仓、最新目标组合、定投建议涉及 ETF、启用 ETF 池”，避免每次同步市场全部 ETF。
-
-请求示例：
-
-```json
-{
-  "symbols": ["510300"],
-  "sync_scope": "core",
-  "start_date": "2025-07-08",
-  "end_date": "2026-07-08",
   "source": "akshare",
-  "clean_after_sync": true,
-  "max_symbols": 5,
-  "request_interval_seconds": 0.5
-}
-```
-
-参数说明：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbols | string[] | 否 | ETF 代码列表；有值时优先使用手动代码 |
-| sync_scope | string | 否 | `core`、`positions`、`target`、`plans`、`enabled`、`all`；`symbols` 为空时生效 |
-| start_date | date | 否 | 开始日期，默认近一年 |
-| end_date | date | 否 | 结束日期，默认今天 |
-| source | string | 否 | 数据源，支持 `akshare`、`eastmoney`、`tushare`，默认 `akshare` |
-| incremental | boolean | 否 | 是否按增量模式只补最新缺口，默认 `false` |
-| clean_after_sync | boolean | 否 | 是否同步写入 clean 表并执行质量检查 |
-| max_symbols | integer | 否 | 本次最多同步多少只 ETF，适合批量同步时分批执行 |
-| request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，降低上游压力 |
-
-响应示例：
-
-```json
-{
-  "start_date": "2025-07-08",
-  "end_date": "2026-07-08",
-  "source": "akshare",
-  "sync_scope": "core",
   "incremental": true,
-  "request_interval_seconds": 0.5,
-  "total_symbols": 1,
-  "requested_symbols": 1,
-  "skipped_symbols": 0,
-  "success_count": 1,
-  "failed_count": 0,
-  "total_raw_rows": 240,
-  "total_clean_rows": 240,
-  "total_quality_logs": 1,
-  "results": [
-    {
-      "symbol": "510300",
-      "raw_rows": 240,
-      "clean_rows": 240,
-      "quality_logs": 1,
-      "status": "success",
-      "message": null
-    }
-  ]
+  "clean_after_sync": true,
+  "max_symbols": 30,
+  "request_interval_seconds": 1.5
 }
 ```
-
-如果 AKShare 或上游数据源暂时不可用，接口会对单个 symbol 返回 `failed`，并把错误写入 `data_quality_log`。
-
-当前实现中：
-
-- `source=akshare`：先调用 AKShare；若失败，会自动 fallback 到东方财富 K 线 HTTP 接口。
-- `source=eastmoney`：只使用东方财富备用源。
-- `source=tushare`：调用 Tushare `fund_daily` 接口，需要在 `.env` 中配置 `TUSHARE_TOKEN`。
-- `incremental=true`：系统会先检查当前 ETF 已存的最新日期，只补后续缺口；如果已经同步到 `end_date`，则返回 `up_to_date`。
-
-注意：
-
-- 共享 Tushare 账号建议显式传较小的 `max_symbols`，并设置 `request_interval_seconds`，避免短时间内过多请求。
-- 如果 Tushare 返回权限不足，接口会保留单个 ETF 的失败原因，不会自动高频重试。
-
-## GET /api/market/raw
-
-用途：查询 raw 行情。
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbol | string | 否 | ETF 代码 |
-| limit | integer | 否 | 返回条数，默认 100，最大 1000 |
-
-## GET /api/market/clean
-
-用途：查询 clean 行情。
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbol | string | 是 | ETF 代码 |
-| start_date | date | 否 | 开始日期 |
-| end_date | date | 否 | 结束日期 |
-
-## GET /api/market/bars/{symbol}
-
-用途：查询单只 ETF 的 clean 日线行情。
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbol | string | 是 | ETF 代码，位于路径中 |
-| start_date | date | 否 | 开始日期 |
-| end_date | date | 否 | 结束日期 |
-
-## POST /api/data-quality/check
-
-用途：对已存在的 clean 行情重新执行质量检查。
-
-请求示例：
-
-```json
-{
-  "symbols": ["510300"],
-  "start_date": "2025-07-08",
-  "end_date": "2026-07-08"
-}
-```
-
-## GET /api/data-quality/logs
-
-用途：查询数据质量日志。
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbol | string | 否 | ETF 代码 |
-| limit | integer | 否 | 返回条数，默认 100，最大 1000 |
-
-## GET /api/data-quality/status
-
-用途：查询数据质量整体状态。
-
-## POST /api/calendar/sync
-
-用途：同步 A 股交易日历，写入 `trading_calendar`。
-
-请求示例：
-
-```json
-{
-  "start_date": "2026-01-01",
-  "end_date": "2026-12-31",
-  "market": "CN",
-  "source": "tushare"
-}
-```
-
-响应示例：
-
-```json
-{
-  "start_date": "2026-01-01",
-  "end_date": "2026-12-31",
-  "market": "CN",
-  "source": "tushare_trade_cal",
-  "open_days": 242
-}
-```
-
-请求参数补充：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| start_date | date | 是 | 开始日期 |
-| end_date | date | 是 | 结束日期 |
-| market | string | 否 | 市场，默认 `CN` |
-| source | string | 否 | 数据源，支持 `akshare`、`tushare`、`weekday`，默认 `akshare` |
-| incremental | boolean | 否 | 是否按增量模式只补最新缺口，默认 `false` |
 
 说明：
 
-- `source=tushare`：使用 Tushare `trade_cal`，适合正式交易日历同步。
-- `source=akshare`：优先调用 AKShare；失败时使用 `weekday_fallback`。
-- `source=weekday`：直接使用周一到周五，仅适合本地开发验证。
-- `incremental=true`：系统会先看 `trading_calendar` 里该市场的最新交易日，只补后续缺口。
+- 指定 `symbols` 时只同步这些代码。
+- 不指定 `symbols` 时按 `sync_scope` 解析。
+- 共享 Tushare token 时建议设置请求间隔和最大数量。
 
-## GET /api/calendar/trading-days
+### POST /api/calendar/sync
 
-用途：查询交易日历。
+同步交易日历。
 
-参数：
+### POST /api/data-quality/check
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| start_date | date | 是 | 开始日期 |
-| end_date | date | 是 | 结束日期 |
-| market | string | 否 | 市场，默认 `CN` |
+检查行情质量。
 
-## POST /api/factors/calculate
+### GET /api/data-quality/status
 
-用途：基于 `market_data_clean` 计算因子并写入 `factor_daily`。
+数据质量概览。
 
-请求示例：
+### GET /api/data-quality/logs
 
-```json
-{
-  "symbols": ["510300"],
-  "start_date": "2026-07-01",
-  "end_date": "2026-07-08"
-}
-```
+最近数据质量日志。
 
-响应示例：
+## ETF 对比与详情
+
+### POST /api/etf-compare
+
+对比多只 ETF。
+
+请求：
 
 ```json
 {
-  "total_symbols": 1,
-  "success_count": 1,
-  "failed_count": 0,
-  "total_factor_rows": 6,
-  "results": [
-    {
-      "symbol": "510300",
-      "factor_rows": 6,
-      "status": "success",
-      "message": null
-    }
-  ]
+  "symbols": ["510300", "159915"],
+  "start_date": "2025-07-13",
+  "end_date": "2026-07-13"
 }
 ```
 
-## GET /api/factors/{symbol}
+返回包含：
 
-用途：查询单只 ETF 的因子历史。
+- 收益
+- 年化波动
+- 最大回撤
+- 日均成交额
+- 可交易性评分
+- 标准化净值曲线
+- 相关性矩阵
+
+### POST /api/etf-compare/tradability
+
+批量计算可交易性评分。
+
+### GET /api/etf-detail/{symbol}
+
+查询单只 ETF 详情。
 
 参数：
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbol | string | 是 | ETF 代码，位于路径中 |
-| limit | integer | 否 | 返回条数，默认 100，最大 1000 |
+- `start_date`
+- `end_date`
 
-## GET /api/factors/ranking
+说明：
 
-用途：查询最近一个因子日期或指定日期的 ETF 综合评分排名。
+- 详情页默认读取本地 `market_data_clean`。
+- 如果没有曲线，通常表示该区间尚未同步清洗行情。
 
-参数：
+## 因子和策略
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| trade_date | date | 否 | 指定因子日期 |
-| limit | integer | 否 | 返回条数，默认 50 |
+### POST /api/factors/calculate
 
-## POST /api/factors/research
+计算因子。
 
-用途：运行因子研究，计算 IC、Rank IC、因子相关性和分组未来收益。
+### GET /api/factors/ranking
 
-请求示例：
+获取 Alpha 排名。
 
-```json
-{
-  "start_date": "2026-01-01",
-  "end_date": "2026-07-09",
-  "forward_days": 20,
-  "quantiles": 3
-}
-```
+### POST /api/factors/research
 
-响应字段：
+因子研究，查看 IC、Rank IC、因子相关性、分组收益。
 
-- `ic_metrics`：每个因子的平均 IC、平均 Rank IC、IC 为正比例和有效性判断。
-- `correlations`：因子两两相关性矩阵。
-- `quantile_returns`：按因子值分组后的平均未来收益。
+### POST /api/strategies/run
 
-## GET /api/strategies
+运行策略。
 
-用途：查询策略配置。
-
-## POST /api/strategies/run
-
-用途：运行策略，基于指定日期或最新日期的 `factor_daily.alpha_score` 生成 Alpha 信号和目标组合。
-
-请求示例：
+请求：
 
 ```json
 {
   "strategy_code": "core_etf_rotation",
-  "run_date": "2026-07-08",
+  "run_date": "2026-07-13",
   "run_type": "manual"
 }
 ```
 
-响应示例：
+### GET /api/portfolio/target
 
-```json
-{
-  "run_id": 1,
-  "strategy_code": "core_etf_rotation",
-  "strategy_version": "0.1.0",
-  "run_date": "2026-07-08",
-  "signal_count": 1,
-  "target_count": 3,
-  "status": "success"
-}
-```
+查询最新目标组合。
 
-当前版本生成的是风控前目标组合，`raw_target_weight` 和 `final_target_weight` 暂时相同。后续阶段会由独立风控引擎修正 `final_target_weight`。
+## 当前持仓
 
-## GET /api/strategies/latest-signals
+### POST /api/portfolio/positions/resolve
 
-用途：查询最近一次策略运行生成的 Alpha 信号。
+按代码补全持仓名称、类型和现价。
 
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| limit | integer | 否 | 返回条数，默认 100 |
-
-## GET /api/portfolio/target
-
-用途：查询最近一次策略运行生成的目标组合。
-
-## POST /api/portfolio/positions
-
-用途：保存用户当前 ETF 持仓快照。用户最少只需提交代码、持仓数量和成本价；系统会根据资产主表补全名称/类型，根据最新清洗行情补全现价，并按本次快照总市值自动计算每只 ETF 的当前权重。
-
-请求示例：
-
-```json
-{
-  "position_date": "2026-07-09",
-  "positions": [
-    {
-      "symbol": "513050",
-      "quantity": 1700,
-      "cost_price": 1.151
-    },
-    {
-      "symbol": "000519",
-      "quantity": 100,
-      "cost_price": 23.34
-    }
-  ]
-}
-```
-
-参数说明：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| position_date | date | 是 | 持仓快照日期 |
-| positions | array | 是 | 持仓列表，可包含 ETF、场内基金、股票或其他资产 |
-| positions[].symbol | string | 是 | 证券代码 |
-| positions[].position_name | string | 否 | 持仓名称；通常不需要传，系统会按代码从资产主表补全 |
-| positions[].asset_type | string | 否 | 资产类型：`etf`、`stock`、`cash`、`other`；通常不需要传，系统会按代码推断 |
-| positions[].quantity | number | 是 | 持有份额 |
-| positions[].current_price | number | 否 | 当前价格；通常不需要传，系统会使用最新清洗行情收盘价 |
-| positions[].cost_price | number | 是 | 成本价格；与数量一起自动计算持仓成本 |
-| positions[].market_value | number | 否 | 当前市值；兼容旧录入方式 |
-| positions[].cost_basis | number | 否 | 持仓成本；兼容旧录入方式 |
-
-响应：返回保存后的持仓列表，包含系统计算出的 `market_value`、`cost_basis`、`unrealized_pnl`、`unrealized_pnl_rate` 和 `weight`。
-
-如果某个代码没有已清洗行情价格，接口会返回 400，并提示需要先同步该代码行情，或在持仓保存请求中临时补充 `current_price`。当前持仓弹窗会优先自动补行情。
-
-## GET /api/portfolio/positions
-
-用途：查询最近一次持仓快照。
-
-## POST /api/portfolio/positions/resolve
-
-用途：根据代码批量预览持仓补全结果，供前端在保存前展示名称、类型、最新价格和价格日期。
-
-请求示例：
+请求：
 
 ```json
 {
@@ -686,357 +223,203 @@ curl "http://localhost:8000/api/etf-detail/510300?start_date=2025-07-11&end_date
 }
 ```
 
-参数说明：
+说明：
 
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbols | string[] | 是 | 需要补全的 ETF 代码，支持 `513050` 或 `513050.SH` |
-| auto_sync | boolean | 否 | 为 `true` 时，如果资产主表不存在会自动登记为候选 ETF；如果缺行情，会自动同步最近行情 |
-| source | string | 否 | 自动同步行情的数据源，支持 `akshare`、`eastmoney`、`tushare` |
+- `auto_sync=true` 时会尝试补全 ETF 主数据和最近行情。
+- 用户通常只需要输入代码、持仓数量、成本价。
 
-响应示例：
+### POST /api/portfolio/positions
+
+保存当前持仓快照。
+
+请求：
 
 ```json
-[
-  {
-    "symbol": "513050",
-    "position_name": "中概互联",
-    "asset_type": "etf",
-    "current_price": 1.092,
-    "price_date": "2026-07-09",
-    "resolved": true,
-    "message": null
-  }
-]
+{
+  "position_date": "2026-07-13",
+  "positions": [
+    {
+      "symbol": "513050",
+      "quantity": 1700,
+      "cost_price": 1.151
+    }
+  ]
+}
 ```
 
-## POST /api/portfolio/holdings/analyze
+系统会计算：
 
-用途：把当前持仓与目标组合做对比，生成持仓建议。建议动作包括：
+- 现价
+- 市值
+- 成本金额
+- 浮盈亏
+- 权重
 
-- `ADD`：当前权重明显低于目标权重，建议加仓。
-- `REDUCE`：当前权重明显高于目标权重，建议减仓。
-- `HOLD`：当前权重接近目标权重，建议持有。
-- `REDUCE_OR_EXIT`：当前持有但目标组合不再配置，建议减仓或退出。
+### GET /api/portfolio/positions
 
-请求示例：
+查询最新持仓快照。
+
+### POST /api/portfolio/holdings/analyze
+
+运行当前持仓分析。
+
+请求：
 
 ```json
 {
   "run_id": 1,
-  "analysis_date": "2026-07-09"
+  "analysis_date": "2026-07-13"
 }
 ```
-
-响应示例：
-
-```json
-[
-  {
-    "run_id": 1,
-    "analysis_date": "2026-07-09",
-    "symbol": "510300",
-    "current_weight": "0.600000",
-    "target_weight": "0.400000",
-    "weight_diff": "-0.200000",
-    "action_suggestion": "REDUCE",
-    "alpha_score": "44.4887",
-    "reason": "当前权重高于目标权重 20.00%，建议考虑减仓；alpha_score=44.4887",
-    "created_at": "2026-07-09T10:00:00"
-  }
-]
-```
-
-## GET /api/portfolio/holdings/analysis
-
-用途：查询最近一次持仓分析结果。
-
-## GET /api/portfolio/xray
-
-用途：查询组合风险透视和策略前检查结果。系统会按资产类别、区域和风险等级对比当前持仓权重与目标组合权重，并返回行情、因子、目标组合、持仓等准备情况。
-
-响应要点：
-
-- `exposures[].dimension`：`asset_class`、`asset_region` 或 `risk_level`。
-- `exposures[].current_weight`：当前持仓暴露权重。
-- `exposures[].target_weight`：目标组合暴露权重。
-- `readiness.status`：`ready`、`warning` 或 `missing_data`。
-- `readiness.messages`：策略运行前需要关注的提示。
-
-## POST /api/portfolio/investment-plans
-
-用途：创建定投计划。系统只保存计划和生成建议，不会扣款，不会下单。
-
-请求示例：
-
-```json
-{
-  "plan_name": "核心 ETF 月定投",
-  "run_id": 5,
-  "start_date": "2026-07-09",
-  "months": 12,
-  "total_budget": 10000,
-  "target_annual_return": 0.10,
-  "investment_mode": "scheduled_dca",
-  "note": "一年内分批投入，优先补足低配 ETF"
-}
-```
-
-字段说明：
-
-| 字段 | 说明 |
-| --- | --- |
-| `total_budget` | 准备投入的总资金，例如 10000 元；若提供该字段，系统会按 `months` 自动换算每期金额 |
-| `monthly_amount` | 每期金额；如果不提供 `total_budget`，也可以直接提供每期金额 |
-| `target_annual_return` | 目标年化收益率，例如 `0.10` 表示 10%；仅作为策略目标参数，不代表收益承诺 |
-| `investment_mode` | 执行模式：`scheduled_dca` 固定节奏、`drawdown_boost` 回撤增强、`signal_timing` 信号驱动、`auto_execution_preview` 未来自动执行预览 |
-
-响应：返回计划详情，包含 `id`、`monthly_amount`、`total_budget`、`target_annual_return`、`investment_mode` 和状态。
-
-## GET /api/portfolio/investment-plans
-
-用途：查询最近创建的定投计划。
-
-## POST /api/portfolio/investment-plans/{plan_id}/analyze
-
-用途：为某个定投计划生成某一期的投入建议。当前算法会优先把本期定投资金分配给“目标权重大于当前权重”的 ETF，并按权重缺口比例分配；如果没有低配资产，则按目标权重分配。
-
-请求示例：
-
-```json
-{
-  "period_no": 1,
-  "suggestion_date": "2026-07-09"
-}
-```
-
-响应示例：
-
-```json
-[
-  {
-    "plan_id": 1,
-    "run_id": 5,
-    "suggestion_date": "2026-07-09",
-    "period_no": 1,
-    "symbol": "511010",
-    "target_weight": "0.250000",
-    "current_weight": "0.000000",
-    "gap_weight": "0.250000",
-    "suggested_amount": "3000.0000",
-    "action_suggestion": "INVEST",
-    "reason": "511010 当前权重低于目标权重，优先分配本期定投资金 3000.0000 元。",
-    "created_at": "2026-07-09T10:00:00"
-  }
-]
-```
-
-## GET /api/portfolio/investment-plans/{plan_id}/suggestions
-
-用途：查询某个定投计划已经生成的投入建议。
-
-## POST /api/risk/check
-
-用途：对指定策略运行的目标组合执行独立风控检查，修正 `target_portfolio.final_target_weight`，并写入 `risk_check_result`。
-
-请求示例：
-
-```json
-{
-  "run_id": 1
-}
-```
-
-响应示例：
-
-```json
-{
-  "run_id": 1,
-  "check_date": "2026-07-08",
-  "result_count": 1,
-  "adjusted_count": 0,
-  "status": "success"
-}
-```
-
-## GET /api/risk/results
-
-用途：查询风控检查结果。
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| run_id | integer | 否 | 策略运行 ID |
-| limit | integer | 否 | 返回条数，默认 100 |
-
-## POST /api/rebalance/generate
-
-用途：根据风控后的目标组合生成调仓建议单。
-
-请求示例：
-
-```json
-{
-  "run_id": 1,
-  "portfolio_value": 100000
-}
-```
-
-如果已经通过 `/api/portfolio/positions` 保存当前持仓，系统会使用持仓快照中的真实 `current_weight` 计算差额和建议金额；如果没有持仓快照，则当前权重按 0 处理。
-
-## GET /api/rebalance/orders
-
-用途：查询调仓建议单。
-
-参数：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| run_id | integer | 否 | 策略运行 ID |
-| limit | integer | 否 | 返回条数，默认 100 |
-
-## POST /api/backtest/run
-
-用途：运行回测。当前支持两种模式：
-
-- `equal_weight_buy_and_hold`：等权买入持有基线回测。
-- `core_etf_rotation_monthly`：策略月度调仓回测，每月第一个可交易日根据最近 Alpha 排名生成目标权重并调仓。
-
-请求示例：
-
-```json
-{
-  "strategy_code": "equal_weight_buy_and_hold",
-  "name": "510300 baseline",
-  "symbols": ["510300"],
-  "start_date": "2026-07-01",
-  "end_date": "2026-07-08",
-  "initial_cash": 10000,
-  "monthly_contribution": 2000,
-  "fee_rate": 0.001,
-  "slippage_rate": 0.001
-}
-```
-
-策略月度调仓示例：
-
-```json
-{
-  "strategy_code": "core_etf_rotation_monthly",
-  "name": "core rotation monthly",
-  "symbols": ["510300", "510500", "159915", "511010", "511880"],
-  "start_date": "2026-01-01",
-  "end_date": "2026-07-09",
-  "initial_cash": 100000,
-  "monthly_contribution": 3000,
-  "fee_rate": 0.001,
-  "slippage_rate": 0.001
-}
-```
-
-## GET /api/backtest/runs
-
-用途：查询回测运行记录。
-
-## GET /api/backtest/{backtest_id}
-
-用途：查询单个回测运行配置。
-
-## GET /api/backtest/{backtest_id}/equity-curve
-
-用途：查询回测净值曲线。
-
-## GET /api/backtest/{backtest_id}/trades
-
-用途：查询回测交易记录。
-
-## GET /api/backtest/{backtest_id}/metrics
-
-用途：查询回测绩效指标。
-
-## POST /api/reports/monthly
-
-用途：生成月度调仓 Markdown 报告，并保存到 `report_log`。
-
-请求示例：
-
-```json
-{
-  "run_id": 1,
-  "report_date": "2026-07-08"
-}
-```
-
-如果不传 `run_id`，默认使用最近一次策略运行。
-
-## GET /api/reports
-
-用途：查询报告列表。
-
-## GET /api/reports/{report_id}
-
-用途：查询单份报告详情，包括 `content_markdown`。
-
-## POST /api/workflows/run
-
-用途：创建后台全流程任务，由后端异步串联交易日历、行情、数据质量、因子、策略、风控、调仓和报告步骤。
-
-请求示例：
-
-```json
-{
-  "symbols": ["510300", "159915"],
-  "start_date": "2026-01-01",
-  "end_date": "2026-07-09",
-  "max_symbols": 5,
-  "calendar_source": "tushare",
-  "market_source": "tushare",
-  "incremental_sync": true,
-  "request_interval_seconds": 1.5,
-  "strict_data_validation": true,
-  "minimum_history_bars": 200,
-  "strategy_code": "core_etf_rotation",
-  "portfolio_value": 100000,
-  "generate_report": true
-}
-```
-
-参数说明：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| symbols | string[] | 否 | ETF 代码列表；为空时使用全部启用 ETF |
-| start_date | date | 是 | 开始日期 |
-| end_date | date | 是 | 结束日期 |
-| max_symbols | integer | 否 | 本次后台任务最多同步多少只 ETF |
-| calendar_source | string | 否 | 日历源，支持 `tushare`、`akshare`、`weekday` |
-| market_source | string | 否 | 行情源，支持 `tushare`、`akshare`、`eastmoney` |
-| incremental_sync | boolean | 否 | 是否按增量模式同步交易日历和行情，默认 `true` |
-| request_interval_seconds | number | 否 | 每只 ETF 同步之间等待秒数，Tushare 建议 `1.5` 或更高 |
-| strict_data_validation | boolean | 否 | 严格数据门禁，默认 `true`；任一标的失败或不新鲜时停止后续建议生成 |
-| minimum_history_bars | integer | 否 | 每只 ETF 最少历史日线数量，默认 `200`，范围 20~1000 |
-| strategy_code | string | 否 | 策略代码，默认 `core_etf_rotation` |
-| portfolio_value | number | 否 | 组合市值，用于生成调仓建议金额 |
-| generate_report | boolean | 否 | 是否在流程末尾生成月度报告 |
 
 说明：
 
-- `calendar_source` 和 `market_source` 允许前端控制真实数据源与备用数据源。
-- 使用共享 Tushare 账号时，建议同时控制 `max_symbols` 和 `request_interval_seconds`。
-- 全流程会先固定本次 ETF 范围，行情、质量检查和因子计算始终使用同一批代码。
-- 严格门禁会检查批量失败数量、最近交易日和历史样本数；失败详情保存在对应任务步骤的 `result_payload` 中，可补齐数据后重试。
-# 04 API 接口文档
+- 需要先有目标组合。
+- 如果不传 `run_id`，默认使用最新目标组合。
 
-当前版本：`v0.39.0-agent-analysis-history`
+### GET /api/portfolio/holdings/analysis
 
-## AI 投研接口
+查询最近持仓分析结果。
+
+### GET /api/portfolio/xray
+
+组合暴露和策略前检查。
+
+## 定投计划
+
+### POST /api/portfolio/investment-plans
+
+创建定投计划。
+
+请求：
+
+```json
+{
+  "plan_name": "一年 ETF 定投",
+  "start_date": "2026-07-13",
+  "months": 12,
+  "total_budget": 10000,
+  "target_annual_return": 0.1,
+  "investment_mode": "scheduled_dca"
+}
+```
+
+说明：
+
+- `target_annual_return` 是策略目标参数，不是收益承诺。
+- 当前只生成建议，不自动扣款或下单。
+
+### GET /api/portfolio/investment-plans
+
+查询定投计划。
+
+### POST /api/portfolio/investment-plans/{plan_id}/analyze
+
+生成某一期定投建议。
+
+### GET /api/portfolio/investment-plans/{plan_id}/suggestions
+
+查询定投建议历史。
+
+## 风控和调仓
+
+### POST /api/risk/check
+
+执行风控检查。
+
+### GET /api/risk/results
+
+查询风控结果。
+
+### POST /api/rebalance/generate
+
+生成调仓建议单。
+
+### GET /api/rebalance/orders
+
+查询调仓建议单。
+
+## 回测
+
+### POST /api/backtest/run
+
+运行回测。
+
+### GET /api/backtest/runs
+
+查询回测列表。
+
+### GET /api/backtest/{id}/equity-curve
+
+查询净值曲线。
+
+### GET /api/backtest/{id}/metrics
+
+查询回测指标。
+
+### GET /api/backtest/{id}/trades
+
+查询模拟交易记录。
+
+## 报告
+
+### POST /api/reports/monthly
+
+生成月度报告。
+
+### GET /api/reports
+
+查询报告列表。
+
+### GET /api/reports/{id}
+
+查询报告详情。
+
+## 工作流
+
+### POST /api/workflows/run
+
+创建全流程任务。
+
+请求重点字段：
+
+- `symbols`
+- `start_date`
+- `end_date`
+- `max_symbols`
+- `calendar_source`
+- `market_source`
+- `incremental_sync`
+- `request_interval_seconds`
+- `strict_data_validation`
+- `minimum_history_bars`
+- `strategy_code`
+- `portfolio_value`
+- `generate_report`
+
+### GET /api/workflows/{task_id}
+
+查询任务详情。
+
+### GET /api/workflows
+
+查询最近任务。
+
+### POST /api/workflows/{task_id}/cancel
+
+取消任务。
+
+### POST /api/workflows/{task_id}/retry-failed
+
+重试失败任务。
+
+## AI 投研
 
 ### POST /api/agent-analysis/etf
 
-用途：运行单只 ETF 的 AI 投研委员会分析。系统会读取本地 ETF 详情、行情、因子、当前持仓、目标组合和持仓分析结果，生成多 Agent 观点，并在配置 DeepSeek 后生成中文综合结论。
+用途：运行单只 ETF 的 AI 投研委员会分析。系统会读取本地 ETF 详情、因子、当前持仓、目标组合和持仓分析结果，生成多 Agent 观点，并在配置 DeepSeek 后生成中文综合结论。
 
-请求示例：
+请求：
 
 ```json
 {
@@ -1048,33 +431,39 @@ curl "http://localhost:8000/api/etf-detail/510300?start_date=2025-07-11&end_date
 }
 ```
 
-字段说明：
+字段：
 
 - `symbol`：ETF 代码，必填。
-- `start_date` / `end_date`：分析区间，不填时默认最近一年。
-- `use_llm`：是否启用 DeepSeek 综合总结。
-- `auto_sync`：是否在分析前自动补齐资产主数据和最近行情，默认开启。
+- `start_date` / `end_date`：分析区间，不填默认最近一年。
+- `use_llm`：是否启用 DeepSeek 总结。
+- `auto_sync`：是否在分析前自动补齐 ETF 主数据和最近行情。
 
-返回重点字段：
+返回重点：
 
-- `final_action`：综合建议。
-- `final_score`：综合评分，0-100。
+- `final_action`：最终建议。
+- `final_score`：综合评分。
 - `final_summary`：最终结论。
 - `manager_commentary`：复合经理说明。
-- `agents`：市场环境、技术趋势、流动性、组合持仓、风险控制、复合经理等 Agent 的证据、风险和建议。
-- `warnings`：数据缺失、未录入持仓、目标组合缺失等提示。
+- `agents`：各 Agent 的观点、证据、风险和建议。
+- `warnings`：数据缺失或限制提示。
 
 ### GET /api/agent-analysis/etf/history
 
-用途：查询最近 AI 投研历史记录。
+查询最近 AI 投研记录。
 
-查询参数：
+参数：
 
-- `symbol`：可选，只查询某只 ETF。
-- `limit`：可选，默认 20，最大 100。
+- `symbol`：可选。
+- `limit`：默认 20，最大 100。
 
 示例：
 
 ```text
 GET /api/agent-analysis/etf/history?symbol=510300&limit=20
 ```
+
+## 安全注意
+
+- 不要把 `TUSHARE_TOKEN`、`DEEPSEEK_API_KEY`、数据库密码写进 Git。
+- 生产环境必须开启 `AUTH_ENABLED=true`。
+- 当前所有交易相关接口只生成建议，不应直接调用券商交易。
