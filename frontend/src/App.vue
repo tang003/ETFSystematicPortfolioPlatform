@@ -14,6 +14,7 @@
         <el-menu-item index="/portfolio-workbench"><el-icon><Monitor /></el-icon><span>组合工作台</span></el-menu-item>
         <el-menu-item index="/workflow"><el-icon><Operation /></el-icon><span>全流程</span></el-menu-item>
         <el-menu-item index="/assets"><el-icon><Grid /></el-icon><span>ETF 池</span></el-menu-item>
+        <el-menu-item index="/etf-screener"><el-icon><Filter /></el-icon><span>ETF 筛选</span></el-menu-item>
         <el-menu-item index="/etf-compare"><el-icon><DataLine /></el-icon><span>ETF 对比</span></el-menu-item>
         <el-menu-item index="/agent-analysis"><el-icon><MagicStick /></el-icon><span>AI 投研</span></el-menu-item>
         <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
@@ -49,7 +50,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CircleCheck, DataAnalysis, DataBoard, DataLine, Document, Grid, Histogram, MagicStick, Money, Monitor, Operation, PieChart, Setting, SwitchButton, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
+import { CircleCheck, DataAnalysis, DataBoard, DataLine, Document, Filter, Grid, Histogram, MagicStick, Money, Monitor, Operation, PieChart, Setting, SwitchButton, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
 import { fetchAuthStatus, fetchHealth, logout } from './api/client'
 
 const healthOk = ref(false)

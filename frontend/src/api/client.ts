@@ -162,6 +162,15 @@ export interface EtfCompareResponse {
   correlations: EtfCorrelationCell[]
 }
 
+export interface EtfScreenerResponse {
+  start_date: string | null
+  end_date: string | null
+  scope: string
+  total_candidates: number
+  returned: number
+  metrics: EtfCompareMetric[]
+}
+
 export interface EtfDetailCurvePoint {
   trade_date: string
   close: string
@@ -563,6 +572,18 @@ export const updateAsset = async (symbol: string, payload: {
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
 export const compareEtfs = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<EtfCompareResponse>('/api/etf-compare', payload)).data
+export const screenEtfs = async (payload: {
+  scope?: string
+  symbols?: string[]
+  start_date?: string
+  end_date?: string
+  limit?: number
+  min_bars?: number
+  min_tradability_score?: number
+  min_buy_score?: number
+  asset_class?: string
+  asset_region?: string
+}) => (await api.post<EtfScreenerResponse>('/api/etf-compare/screener', payload)).data
 export const scoreEtfTradability = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<EtfCompareMetric[]>('/api/etf-compare/tradability', payload)).data
 export const fetchEtfDetail = async (symbol: string, params?: { start_date?: string; end_date?: string }) =>

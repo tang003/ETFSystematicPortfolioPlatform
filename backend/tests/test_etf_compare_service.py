@@ -61,3 +61,37 @@ def test_score_etf_tradability_keeps_symbols_without_bars(monkeypatch) -> None:
 
     assert [item["symbol"] for item in rows] == ["510300", "159915"]
     assert rows[1]["bars"] == 0
+
+
+def test_screen_etfs_filters_and_sorts_candidates(monkeypatch) -> None:
+    monkeypatch.setattr(etf_compare_service, "resolve_screen_symbols", lambda db, scope, symbols: ["510300", "159915"])
+    monkeypatch.setattr(etf_compare_service, "load_asset_meta", lambda db, symbols: {"510300": Asset(), "159915": Asset()})
+    monkeypatch.setattr(
+        etf_compare_service,
+        "load_clean_bars_for_symbols",
+        lambda db, symbols, start_date, end_date: {"510300": [], "159915": []},
+    )
+
+    def fake_metric(symbol, rows, asset):
+        base = {
+            "symbol": symbol,
+            "asset_class": "equity",
+            "asset_region": "CN",
+            "bars": 250,
+            "tradability_score": 80,
+            "buy_score": 60,
+            "sharpe_ratio": Decimal("0.5"),
+            "annualized_return": Decimal("0.08"),
+        }
+        if symbol == "159915":
+            base["buy_score"] = 82
+            base["sharpe_ratio"] = Decimal("1.2")
+        return base
+
+    monkeypatch.setattr(etf_compare_service, "build_compare_metric", fake_metric)
+
+    result = etf_compare_service.screen_etfs(db=None, scope="enabled", limit=10, min_buy_score=70)
+
+    assert result["total_candidates"] == 2
+    assert result["returned"] == 1
+    assert [item["symbol"] for item in result["metrics"]] == ["159915"]

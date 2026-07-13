@@ -6,6 +6,7 @@ const Dashboard = () => import('../views/Dashboard.vue')
 const PortfolioWorkbench = () => import('../views/PortfolioWorkbench.vue')
 const Workflow = () => import('../views/Workflow.vue')
 const Assets = () => import('../views/Assets.vue')
+const EtfScreener = () => import('../views/EtfScreener.vue')
 const EtfCompare = () => import('../views/EtfCompare.vue')
 const EtfDetail = () => import('../views/EtfDetail.vue')
 const DataHealth = () => import('../views/DataHealth.vue')
@@ -29,6 +30,7 @@ const router = createRouter({
     { path: '/portfolio-workbench', component: PortfolioWorkbench, meta: { title: '组合工作台' } },
     { path: '/workflow', component: Workflow, meta: { title: '全流程向导' } },
     { path: '/assets', component: Assets, meta: { title: 'ETF 池' } },
+    { path: '/etf-screener', component: EtfScreener, meta: { title: 'ETF 筛选' } },
     { path: '/etf-compare', component: EtfCompare, meta: { title: 'ETF 对比' } },
     { path: '/etf-detail/:symbol', component: EtfDetail, meta: { title: 'ETF 详情' } },
     { path: '/agent-analysis', component: AgentAnalysis, meta: { title: 'AI 投研委员会' } },

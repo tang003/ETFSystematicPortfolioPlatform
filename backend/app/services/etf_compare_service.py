@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean
+from app.services.market_service import resolve_symbols
 
 
 def compare_etfs(
@@ -65,6 +66,62 @@ def score_etf_tradability(
     ]
 
 
+def screen_etfs(
+    db: Session,
+    *,
+    scope: str = "enabled",
+    symbols: list[str] | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    limit: int = 50,
+    min_bars: int = 120,
+    min_tradability_score: int = 40,
+    min_buy_score: int = 0,
+    asset_class: str | None = None,
+    asset_region: str | None = None,
+) -> dict:
+    resolved_end = end_date or date.today()
+    resolved_start = start_date or (resolved_end - timedelta(days=365))
+    resolved_symbols = resolve_screen_symbols(db, scope=scope, symbols=symbols)
+    asset_meta = load_asset_meta(db, resolved_symbols)
+    bars_by_symbol = load_clean_bars_for_symbols(
+        db,
+        symbols=resolved_symbols,
+        start_date=resolved_start,
+        end_date=resolved_end,
+    )
+    metrics = [
+        build_compare_metric(symbol, bars_by_symbol.get(symbol, []), asset_meta.get(symbol))
+        for symbol in resolved_symbols
+    ]
+    filtered = [
+        item
+        for item in metrics
+        if item["bars"] >= min_bars
+        and item["tradability_score"] >= min_tradability_score
+        and item["buy_score"] >= min_buy_score
+        and (asset_class is None or item["asset_class"] == asset_class)
+        and (asset_region is None or item["asset_region"] == asset_region)
+    ]
+    filtered.sort(
+        key=lambda item: (
+            item["buy_score"],
+            item["tradability_score"],
+            decimal_sort_value(item["sharpe_ratio"]),
+            decimal_sort_value(item["annualized_return"]),
+        ),
+        reverse=True,
+    )
+    return {
+        "start_date": resolved_start,
+        "end_date": resolved_end,
+        "scope": scope,
+        "total_candidates": len(metrics),
+        "returned": min(len(filtered), limit),
+        "metrics": filtered[:limit],
+    }
+
+
 def dedupe_symbols(symbols: list[str]) -> list[str]:
     resolved: list[str] = []
     seen: set[str] = set()
@@ -74,6 +131,13 @@ def dedupe_symbols(symbols: list[str]) -> list[str]:
             resolved.append(cleaned)
             seen.add(cleaned)
     return resolved
+
+
+def resolve_screen_symbols(db: Session, *, scope: str, symbols: list[str] | None) -> list[str]:
+    normalized_scope = (scope or "enabled").strip().lower()
+    if normalized_scope == "custom":
+        return dedupe_symbols(symbols or [])
+    return resolve_symbols(db, dedupe_symbols(symbols or []) or None, sync_scope=normalized_scope)
 
 
 def load_asset_meta(db: Session, symbols: list[str]) -> dict[str, AssetMaster]:
@@ -441,3 +505,7 @@ def quantize_number(value: Decimal | None) -> Decimal | None:
     if value is None:
         return None
     return value.quantize(Decimal("0.0001"))
+
+
+def decimal_sort_value(value: Decimal | None) -> Decimal:
+    return value if value is not None else Decimal("-999")

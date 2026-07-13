@@ -262,11 +262,49 @@
 
 - 收益
 - 年化波动
+- 下行波动
 - 最大回撤
+- 夏普、Sortino、卡玛
+- 胜率和估算缺口率
 - 日均成交额
 - 可交易性评分
+- 买入评分和候选等级
 - 标准化净值曲线
 - 相关性矩阵
+
+### POST /api/etf-compare/screener
+
+批量筛选 ETF 候选，适合作为普通用户寻找“哪些 ETF 值得进一步研究”的第一入口。
+
+请求：
+
+```json
+{
+  "scope": "enabled",
+  "start_date": "2023-07-13",
+  "end_date": "2026-07-13",
+  "limit": 50,
+  "min_bars": 120,
+  "min_tradability_score": 50,
+  "min_buy_score": 45,
+  "asset_class": "equity"
+}
+```
+
+字段：
+
+- `scope`：支持 `enabled`、`core`、`positions`、`target`、`plans`、`all`、`custom`。
+- `symbols`：`scope=custom` 时传入 ETF 代码列表。
+- `min_bars`：最低历史样本数。
+- `min_tradability_score`：最低可交易性评分。
+- `min_buy_score`：最低买入评分。
+- `asset_class` / `asset_region`：可选过滤。
+
+返回：
+
+- `total_candidates`：筛选前候选数量。
+- `returned`：返回数量。
+- `metrics`：按买入评分、交易性、夏普和年化收益排序后的 ETF 指标。
 
 ### POST /api/etf-compare/tradability
 
