@@ -466,7 +466,7 @@ def build_asset_item_from_market_row(row: dict[str, Any]) -> AssetUpsertItem | N
 def build_asset_item_from_tushare_row(row: dict[str, Any]) -> AssetUpsertItem | None:
     ts_code = str(first_value(row, "ts_code", "TS_CODE") or "").strip()
     symbol = normalize_symbol(ts_code.split(".", 1)[0] if ts_code else None)
-    name = str(first_value(row, "name", "fund_name") or "").strip()
+    name = truncate_text(first_value(row, "name", "fund_name"), 100) or ""
     if not symbol or not name:
         return None
     management_fee = to_tushare_fee_decimal(first_value(row, "m_fee"))
@@ -481,8 +481,8 @@ def build_asset_item_from_tushare_row(row: dict[str, Any]) -> AssetUpsertItem | 
         exchange=infer_exchange(symbol),
         currency="CNY",
         enabled=False,
-        fund_company=blank_to_none(first_value(row, "management")),
-        tracking_index=blank_to_none(first_value(row, "benchmark")) or infer_tracking_index(name),
+        fund_company=truncate_text(first_value(row, "management"), 100),
+        tracking_index=truncate_text(first_value(row, "benchmark"), 100) or infer_tracking_index(name),
         listing_date=to_date(first_value(row, "list_date", "found_date")),
         fund_size=None,
         management_fee=management_fee,
@@ -528,6 +528,13 @@ def blank_to_none(value: Any) -> Any:
         return None
     text = str(value).strip()
     return text or None
+
+
+def truncate_text(value: Any, max_length: int) -> str | None:
+    text = blank_to_none(value)
+    if text is None:
+        return None
+    return str(text)[:max_length]
 
 
 def to_tushare_fee_decimal(value: Any) -> Decimal | None:

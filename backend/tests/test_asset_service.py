@@ -178,6 +178,23 @@ def test_build_asset_item_from_tushare_row_maps_fees_and_profile() -> None:
     assert item.expense_ratio == Decimal("0.0060")
 
 
+def test_build_asset_item_from_tushare_row_truncates_long_profile_fields() -> None:
+    item = asset_service.build_asset_item_from_tushare_row(
+        {
+            "ts_code": "588000.SH",
+            "name": "科创ETF",
+            "management": "基金公司" * 30,
+            "benchmark": "超长跟踪指数" * 30,
+        }
+    )
+
+    assert item is not None
+    assert item.fund_company is not None
+    assert item.tracking_index is not None
+    assert len(item.fund_company) == 100
+    assert len(item.tracking_index) == 100
+
+
 def test_friendly_external_error_translates_remote_disconnect() -> None:
     message = asset_service.friendly_external_error(RuntimeError("RemoteDisconnected without response"))
 
