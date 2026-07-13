@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.44.0-holding-alternative-advice`
+当前版本：`v0.45.0-etf-universe-sync-resilience`
 
 默认 API 前缀：`/api`
 
@@ -59,21 +59,24 @@
 
 ### POST /api/assets/sync-universe
 
-同步全市场 ETF 基础池。
+同步 ETF 基础池。
 
 请求：
 
 ```json
 {
-  "source": "akshare",
+  "source": "auto",
   "limit": 100
 }
 ```
 
 说明：
 
-- 当前只支持 `akshare`。
+- 支持 `auto`、`akshare`、`eastmoney`。
+- `auto` 会先尝试 AKShare，失败后切换东方财富备用接口。
 - 同步进来的 ETF 默认不启用研究。
+- 该接口只同步 ETF 档案列表，不同步历史行情。
+- 外部源失败时不会清空本地已有 ETF 池。
 
 ### POST /api/assets/sync-profiles
 

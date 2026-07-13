@@ -52,7 +52,7 @@ def sync_asset_universe(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - external market data providers are intentionally wrapped.
-        raise HTTPException(status_code=502, detail=f"ETF 全市场数据源暂不可用：{exc}") from exc
+        raise HTTPException(status_code=502, detail=f"ETF 基础池数据源暂不可用：{exc}") from exc
     return AssetUniverseSyncResponse(**result)
 
 

@@ -99,3 +99,23 @@ def test_write_asset_sync_log_marks_partial_status() -> None:
 
     assert db.rows[0].status == "partial"
     assert db.rows[0].updated == 2
+
+
+def test_fetch_etf_universe_falls_back_to_eastmoney(monkeypatch) -> None:
+    monkeypatch.setattr(asset_service, "fetch_akshare_etf_universe", lambda limit=None: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(
+        asset_service,
+        "fetch_eastmoney_etf_rows",
+        lambda limit=None: [{"代码": "510300", "名称": "沪深300ETF"}],
+    )
+
+    items, source = asset_service.fetch_etf_universe(source="auto")
+
+    assert source == "eastmoney"
+    assert items[0].symbol == "510300"
+
+
+def test_friendly_external_error_translates_remote_disconnect() -> None:
+    message = asset_service.friendly_external_error(RuntimeError("RemoteDisconnected without response"))
+
+    assert "外部 ETF 列表接口主动断开连接" in message

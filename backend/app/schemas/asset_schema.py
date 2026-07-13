@@ -68,7 +68,7 @@ class AssetBatchUpsertResponse(BaseModel):
 
 
 class AssetUniverseSyncRequest(BaseModel):
-    source: str = Field(default="akshare")
+    source: str = Field(default="auto")
     limit: int | None = Field(default=None, ge=1, le=3000)
 
 

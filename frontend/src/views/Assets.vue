@@ -4,10 +4,10 @@
       <div class="panel-header">
         <div>
           <h2>ETF 池管理</h2>
-          <p class="section-note">维护 ETF 基础池和研究池；启用后才进入行情、因子、策略和回测流程。</p>
+          <p class="section-note">维护 ETF 基础池和研究池；基础池保存 ETF 档案，启用后才进入行情、因子、策略和回测流程。</p>
         </div>
         <div class="header-actions">
-          <el-button :loading="actionLoading" @click="syncUniverse">同步全市场 ETF</el-button>
+          <el-button :loading="actionLoading" @click="syncUniverse">同步 ETF 基础池</el-button>
           <el-button :loading="actionLoading" @click="syncProfiles">补全当前筛选资料</el-button>
           <el-button type="primary" :loading="actionLoading" @click="importPresetAssets">导入精选示例池</el-button>
           <el-button @click="copyEnabledSymbols">复制已启用代码</el-button>
@@ -63,13 +63,16 @@
     <section class="panel span-4">
       <div class="panel-header">
         <div>
-          <h2>资料补全日志</h2>
-          <p class="section-note">记录最近 ETF 主资料自动补全结果。</p>
+          <h2>同步日志</h2>
+          <p class="section-note">记录最近 ETF 基础池和主资料补全结果。</p>
         </div>
       </div>
       <el-table :data="syncLogs" height="260" empty-text="暂无补全日志">
         <el-table-column label="时间" min-width="140">
           <template #default="{ row }">{{ timeText(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="类型" width="86">
+          <template #default="{ row }">{{ syncTypeText(row.sync_type) }}</template>
         </el-table-column>
         <el-table-column label="状态" width="82">
           <template #default="{ row }">
@@ -131,7 +134,7 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="filteredAssets" height="650" empty-text="暂无 ETF，先导入示例池或同步全市场 ETF">
+      <el-table :data="filteredAssets" height="650" empty-text="暂无 ETF，先导入示例池或同步 ETF 基础池">
         <el-table-column prop="symbol" label="代码" width="100" fixed />
         <el-table-column prop="name" label="名称" min-width="150" fixed />
         <el-table-column label="资料" width="95">
@@ -287,7 +290,7 @@ async function refresh() {
   try {
     const [assetRows, logRows] = await Promise.all([
       fetchAssets(),
-      fetchAssetSyncLogs({ sync_type: 'profile', limit: 10 }),
+      fetchAssetSyncLogs({ limit: 10 }),
     ])
     assets.value = assetRows
     syncLogs.value = logRows
@@ -327,8 +330,8 @@ async function importPresetAssets() {
 async function syncUniverse() {
   actionLoading.value = true
   try {
-    const result = await syncAssetUniverse({ source: 'akshare' })
-    ElMessage.success(`已同步 ${result.inserted_or_updated} 只 ETF 到基础池，默认不启用研究`)
+    const result = await syncAssetUniverse({ source: 'auto' })
+    ElMessage.success(`已通过 ${result.source} 同步 ${result.inserted_or_updated} 只 ETF 到基础池，默认不启用研究`)
     await refresh()
   } catch (error) {
     ElMessage.error(errorMessage(error, '同步失败'))
@@ -584,6 +587,11 @@ function syncLogTag(status: string) {
 function syncLogStatusText(status: string) {
   const map: Record<string, string> = { success: '成功', partial: '部分', failed: '失败' }
   return map[status] || status
+}
+
+function syncTypeText(type: string) {
+  const map: Record<string, string> = { profile: '资料', universe: '基础池' }
+  return map[type] || type
 }
 
 function timeText(value: string) {

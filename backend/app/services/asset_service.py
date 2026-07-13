@@ -1,10 +1,13 @@
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+import time
 from typing import Any
 
 import akshare as ak
+import requests
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.asset import AssetMaster
@@ -70,15 +73,32 @@ def batch_upsert_assets(db: Session, items: list[AssetUpsertItem]) -> int:
     return len(payload)
 
 
-def sync_etf_universe(db: Session, *, source: str = "akshare", limit: int | None = None) -> dict[str, int | str]:
-    if source != "akshare":
-        raise ValueError("ETF 全市场同步当前仅支持 source=akshare")
-    items = fetch_akshare_etf_universe(limit=limit)
-    return {
-        "source": source,
-        "total": len(items),
-        "inserted_or_updated": upsert_market_assets_preserve_enabled(db, items),
-    }
+def sync_etf_universe(db: Session, *, source: str = "auto", limit: int | None = None) -> dict[str, int | str]:
+    if source not in {"auto", "akshare", "eastmoney"}:
+        raise ValueError("ETF 基础池同步当前支持 source=auto、akshare、eastmoney")
+    try:
+        items, actual_source = fetch_etf_universe(source=source, limit=limit)
+        inserted = upsert_market_assets_preserve_enabled(db, items)
+        result = {
+            "source": actual_source,
+            "total": len(items),
+            "inserted_or_updated": inserted,
+        }
+        safe_write_asset_sync_log(
+            db,
+            sync_type="universe",
+            result={"source": actual_source, "total": len(items), "updated": inserted, "skipped": 0, "failed": 0, "results": []},
+            message="ETF 基础池同步完成",
+        )
+        return result
+    except Exception as exc:
+        safe_write_asset_sync_log(
+            db,
+            sync_type="universe",
+            result={"source": source, "total": 1, "updated": 0, "skipped": 0, "failed": 1, "results": [{"message": friendly_external_error(exc)}]},
+            message="ETF 基础池同步失败，已保留本地已有 ETF 池",
+        )
+        raise RuntimeError(friendly_external_error(exc)) from exc
 
 
 def sync_etf_profiles(
@@ -95,8 +115,7 @@ def sync_etf_profiles(
     assets = resolve_profile_assets(db, normalized_symbols, limit=limit)
     if not assets:
         result = {"source": source, "total": 0, "updated": 0, "skipped": 0, "failed": 0, "results": []}
-        write_asset_sync_log(db, sync_type="profile", result=result, message="没有匹配到需要补全的 ETF")
-        db.commit()
+        safe_write_asset_sync_log(db, sync_type="profile", result=result, message="没有匹配到需要补全的 ETF")
         return result
 
     market_rows = fetch_akshare_etf_spot_rows()
@@ -143,8 +162,8 @@ def sync_etf_profiles(
         "failed": failed_count,
         "results": results,
     }
-    write_asset_sync_log(db, sync_type="profile", result=result, message="ETF 主资料补全完成")
     db.commit()
+    safe_write_asset_sync_log(db, sync_type="profile", result=result, message="ETF 主资料补全完成")
     return result
 
 
@@ -174,8 +193,45 @@ def write_asset_sync_log(db: Session, *, sync_type: str, result: dict[str, Any],
     )
 
 
-def fetch_akshare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem]:
-    frame = ak.fund_etf_spot_em()
+def safe_write_asset_sync_log(db: Session, *, sync_type: str, result: dict[str, Any], message: str | None = None) -> None:
+    try:
+        write_asset_sync_log(db, sync_type=sync_type, result=result, message=message)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+
+
+def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tuple[list[AssetUpsertItem], str]:
+    errors: list[Exception] = []
+    if source in {"auto", "akshare"}:
+        try:
+            return fetch_akshare_etf_universe(limit=limit), "akshare"
+        except Exception as exc:  # noqa: BLE001 - fallback source is intentionally attempted.
+            errors.append(exc)
+            if source == "akshare":
+                raise
+    if source in {"auto", "eastmoney"}:
+        try:
+            return fetch_eastmoney_etf_universe(limit=limit), "eastmoney"
+        except Exception as exc:  # noqa: BLE001 - caller receives a friendly combined error.
+            errors.append(exc)
+    if errors:
+        raise RuntimeError("；".join(friendly_external_error(error) for error in errors))
+    raise ValueError("没有可用 ETF 基础池数据源")
+
+
+def fetch_akshare_etf_universe(limit: int | None = None, *, retries: int = 3, retry_interval_seconds: float = 1.2) -> list[AssetUpsertItem]:
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            frame = ak.fund_etf_spot_em()
+            break
+        except Exception as exc:  # noqa: BLE001 - external provider retry.
+            last_error = exc
+            if attempt < retries:
+                time.sleep(retry_interval_seconds * attempt)
+    else:
+        raise RuntimeError(f"AKShare/东方财富 ETF 列表接口连续 {retries} 次不可用：{last_error}") from last_error
     items: list[AssetUpsertItem] = []
     for row in frame.to_dict("records"):
         item = build_asset_item_from_market_row(row)
@@ -187,6 +243,90 @@ def fetch_akshare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem
     if not items:
         raise ValueError("AKShare 未返回可识别的 ETF 基础列表")
     return items
+
+
+def fetch_eastmoney_etf_universe(limit: int | None = None) -> list[AssetUpsertItem]:
+    rows = fetch_eastmoney_etf_rows(limit=limit)
+    items: list[AssetUpsertItem] = []
+    for row in rows:
+        item = build_asset_item_from_market_row(row)
+        if item is None:
+            continue
+        items.append(item)
+        if limit is not None and len(items) >= limit:
+            break
+    if not items:
+        raise ValueError("东方财富备用接口未返回可识别的 ETF 基础列表")
+    return items
+
+
+def fetch_eastmoney_etf_rows(limit: int | None = None, *, retries: int = 3, retry_interval_seconds: float = 1.2) -> list[dict[str, Any]]:
+    page_size = min(max(limit or 5000, 1), 5000)
+    params = {
+        "pn": "1",
+        "pz": str(page_size),
+        "po": "1",
+        "np": "1",
+        "ut": "bd1d9ddb04089700cf9c27f6f7426281",
+        "fltt": "2",
+        "invt": "2",
+        "wbp2u": "|0|0|0|web",
+        "fid": "f12",
+        "fs": "b:MK0021,b:MK0022,b:MK0023,b:MK0024,b:MK0827",
+        "fields": "f12,f13,f14,f20,f21,f38,f402,f297",
+    }
+    hosts = ["88.push2.eastmoney.com", "push2.eastmoney.com", "21.push2.eastmoney.com"]
+    last_error: Exception | None = None
+    response: requests.Response | None = None
+    for attempt in range(1, retries + 1):
+        for host in hosts:
+            try:
+                response = requests.get(
+                    f"https://{host}/api/qt/clist/get",
+                    params=params,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=15,
+                )
+                response.raise_for_status()
+                break
+            except requests.RequestException as exc:
+                last_error = exc
+                response = None
+        if response is not None:
+            break
+        if attempt < retries:
+            time.sleep(retry_interval_seconds * attempt)
+    if response is None:
+        raise RuntimeError(f"东方财富备用接口连续 {retries} 次不可用：{last_error}") from last_error
+    payload = response.json()
+    if payload.get("rc") != 0:
+        raise RuntimeError(f"东方财富备用接口返回异常 rc={payload.get('rc')}")
+    rows = payload.get("data", {}).get("diff") or []
+    normalized_rows: list[dict[str, Any]] = []
+    for row in rows:
+        normalized_rows.append(
+            {
+                "代码": row.get("f12"),
+                "名称": row.get("f14"),
+                "总市值": row.get("f20"),
+                "流通市值": row.get("f21"),
+                "最新份额": row.get("f38"),
+                "基金折价率": row.get("f402"),
+                "数据日期": row.get("f297"),
+            }
+        )
+    return normalized_rows
+
+
+def friendly_external_error(error: Exception) -> str:
+    text = str(error)
+    if "RemoteDisconnected" in text or "Connection aborted" in text:
+        return "外部 ETF 列表接口主动断开连接，通常是数据源限流或临时不稳定；本地已有 ETF 池已保留，请稍后重试"
+    if "Read timed out" in text or "timeout" in text.lower():
+        return "外部 ETF 列表接口响应超时；本地已有 ETF 池已保留，请稍后重试"
+    if "8000" in text and "积分" in text:
+        return "当前 Tushare 权限不足，ETF 基础信息接口通常需要更高积分；请改用 auto/akshare/eastmoney"
+    return f"外部 ETF 列表接口暂不可用：{text}"
 
 
 def fetch_akshare_etf_spot_rows() -> dict[str, dict[str, Any]]:
