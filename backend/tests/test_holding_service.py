@@ -1,8 +1,10 @@
+from datetime import date
 from decimal import Decimal
 
 from app.schemas.portfolio_schema import PortfolioPositionUpsert
 from app.schemas.portfolio_schema import PositionResolveRead
-from app.services.holding_service import infer_asset_type, normalize_position_input, normalize_symbol, suggest_action
+from app.services import holding_service
+from app.services.holding_service import infer_asset_type, normalize_position_input, normalize_symbol, prepare_position_assets, suggest_action
 
 
 def test_suggest_action_add_reduce_hold_and_exit() -> None:
@@ -61,3 +63,30 @@ def test_normalize_symbol_accepts_exchange_suffix() -> None:
     assert normalize_symbol("159928") == "159928"
     assert normalize_symbol("513050.SH") == "513050"
     assert normalize_symbol(" 159928.sz ") == "159928"
+
+
+def test_prepare_position_assets_enables_and_resolves(monkeypatch) -> None:
+    calls = []
+
+    def fake_ensure(db, symbol, source):
+        calls.append((symbol, source))
+        return PositionResolveRead(
+            symbol=symbol,
+            position_name=f"{symbol} ETF",
+            asset_type="etf",
+            current_price=Decimal("1.000"),
+            price_date=None,
+            resolved=True,
+        )
+
+    monkeypatch.setattr(holding_service, "ensure_position_asset_and_market", fake_ensure)
+
+    request = holding_service.PortfolioSnapshotRequest(
+        position_date=date(2026, 7, 13),
+        positions=[PortfolioPositionUpsert(symbol=" 159928.sz ", quantity=Decimal("100"), cost_price=Decimal("0.708"))],
+    )
+
+    result = prepare_position_assets(None, request, source="tushare")
+
+    assert calls == [("159928", "tushare")]
+    assert result["159928"].resolved is True

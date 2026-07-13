@@ -21,8 +21,9 @@ def ensure_holding_tables() -> None:
 
 def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> list[PortfolioPosition]:
     db.execute(delete(PortfolioPosition).where(PortfolioPosition.position_date == request.position_date))
+    prepared_details = prepare_position_assets(db, request)
     normalized = [
-        normalize_position_input(item, resolve_position_detail(db, item.symbol))
+        normalize_position_input(item, prepared_details.get(normalize_symbol(item.symbol)) or resolve_position_detail(db, item.symbol))
         for item in request.positions
         if item.symbol.strip()
     ]
@@ -50,6 +51,22 @@ def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> 
     db.add_all(rows)
     db.commit()
     return list_positions(db, position_date=request.position_date)
+
+
+def prepare_position_assets(
+    db: Session,
+    request: PortfolioSnapshotRequest,
+    *,
+    source: str = "tushare",
+) -> dict[str, PositionResolveRead]:
+    details: dict[str, PositionResolveRead] = {}
+    for item in request.positions:
+        symbol = normalize_symbol(item.symbol)
+        if not symbol:
+            continue
+        detail = ensure_position_asset_and_market(db, symbol, source=source)
+        details[symbol] = detail
+    return details
 
 
 def normalize_position_input(item, detail: PositionResolveRead | None = None) -> dict:
@@ -143,7 +160,7 @@ def resolve_position_detail(db: Session, symbol: str) -> PositionResolveRead:
 
 
 def ensure_position_market_data(db: Session, symbol: str, *, source: str = "akshare") -> None:
-    ensure_position_asset(db, symbol)
+    ensure_position_asset(db, symbol, enabled=True)
     if latest_clean_bar(db, symbol) is not None:
         return
 
@@ -171,9 +188,22 @@ def ensure_position_market_data(db: Session, symbol: str, *, source: str = "aksh
             return
 
 
-def ensure_position_asset(db: Session, symbol: str) -> AssetMaster:
+def ensure_position_asset_and_market(db: Session, symbol: str, *, source: str = "tushare") -> PositionResolveRead:
+    ensure_position_asset(db, symbol, enabled=True)
+    ensure_position_market_data(db, symbol, source=source)
+    return resolve_position_detail(db, symbol)
+
+
+def ensure_position_asset(db: Session, symbol: str, *, enabled: bool = True) -> AssetMaster:
     asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == symbol))
     if asset is not None:
+        changed = False
+        if enabled and not asset.enabled:
+            asset.enabled = True
+            changed = True
+        if changed:
+            db.commit()
+            db.refresh(asset)
         return asset
 
     asset = AssetMaster(

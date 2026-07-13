@@ -4,7 +4,7 @@
       <div class="panel-header">
         <div>
           <h2>录入当前持仓</h2>
-          <p class="section-note">通过弹窗维护持仓；新增、编辑和补仓确认后会自动保存到数据库，并刷新当前持仓快照。</p>
+          <p class="section-note">通过弹窗维护持仓；新增、编辑和补仓确认后会自动保存，持仓 ETF 会自动进入研究范围。</p>
         </div>
         <div class="header-actions">
           <el-button type="primary" @click="openAddDialog">新增持仓</el-button>
@@ -35,7 +35,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="新增、编辑或补仓确认后会自动保存；不在 ETF 池里的代码会自动登记，缺行情时会自动尝试同步。"
+        title="新增、编辑或补仓确认后会自动保存；持仓代码会自动启用研究，不在 ETF 池里的代码会自动登记，缺行情时会自动尝试同步。"
       />
 
       <el-table :data="visibleRows" height="380" empty-text="暂无持仓，点击“新增持仓”开始录入">
