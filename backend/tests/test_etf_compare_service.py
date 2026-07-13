@@ -32,6 +32,10 @@ def test_build_compare_metric_calculates_return_and_drawdown() -> None:
     assert metric["total_return"] == Decimal("0.050000")
     assert metric["max_drawdown"] == Decimal("-0.045455")
     assert metric["tradability_score"] == 75
+    assert metric["sharpe_ratio"] is not None
+    assert metric["positive_day_rate"] == Decimal("0.500000")
+    assert metric["buy_score"] >= 0
+    assert metric["buy_level"] in {"优先候选", "可观察", "谨慎观察", "暂不优先"}
 
 
 def test_correlation_uses_overlapping_return_dates() -> None:

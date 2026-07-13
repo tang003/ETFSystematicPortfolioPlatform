@@ -4,7 +4,7 @@
       <div class="panel-header">
         <div>
           <h2>ETF 对比</h2>
-          <p class="section-note">基于已清洗行情对比收益、波动、回撤、成交额、相关性和可交易性评分。</p>
+          <p class="section-note">基于已清洗行情对比收益、风险调整收益、回撤、成交额、相关性、可交易性和综合买入评分。</p>
         </div>
         <el-button type="primary" :loading="actionLoading" @click="runCompare">开始对比</el-button>
       </div>
@@ -33,12 +33,12 @@
     </section>
 
     <section class="panel span-4">
-      <h2>可交易性提示</h2>
+      <h2>买入候选提示</h2>
       <div class="insight-list">
         <div v-for="item in result?.metrics || []" :key="item.symbol" class="insight-item">
           <span>{{ item.symbol }} {{ item.name || '' }}</span>
-          <strong>{{ item.tradability_score }} / {{ item.tradability_level }}</strong>
-          <p>{{ item.tradability_notes.join('；') }}</p>
+          <strong>{{ item.buy_score }} / {{ item.buy_level }}</strong>
+          <p>{{ item.buy_notes.join('；') || item.tradability_notes.join('；') }}</p>
         </div>
       </div>
     </section>
@@ -62,13 +62,33 @@
         <el-table-column label="年化波动" width="110">
           <template #default="{ row }">{{ percent(row.annualized_volatility) }}</template>
         </el-table-column>
+        <el-table-column label="下行波动" width="110">
+          <template #default="{ row }">{{ percent(row.downside_volatility) }}</template>
+        </el-table-column>
         <el-table-column label="最大回撤" width="110">
           <template #default="{ row }">{{ percent(row.max_drawdown) }}</template>
+        </el-table-column>
+        <el-table-column label="夏普" width="90" sortable>
+          <template #default="{ row }">{{ numberValue(row.sharpe_ratio) }}</template>
+        </el-table-column>
+        <el-table-column label="卡玛" width="90" sortable>
+          <template #default="{ row }">{{ numberValue(row.calmar_ratio) }}</template>
+        </el-table-column>
+        <el-table-column label="胜率" width="100">
+          <template #default="{ row }">{{ percent(row.positive_day_rate) }}</template>
         </el-table-column>
         <el-table-column label="日均成交额" width="130">
           <template #default="{ row }">{{ money(row.average_amount) }}</template>
         </el-table-column>
+        <el-table-column label="缺口率" width="100">
+          <template #default="{ row }">{{ percent(row.estimated_gap_ratio) }}</template>
+        </el-table-column>
         <el-table-column prop="bars" label="样本数" width="90" />
+        <el-table-column label="买入评分" width="130" fixed="right">
+          <template #default="{ row }">
+            <el-tag :type="buyScoreTag(row.buy_score)" size="small">{{ row.buy_score }} {{ row.buy_level }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="可交易性" width="120">
           <template #default="{ row }">
             <el-tag :type="scoreTag(row.tradability_score)" size="small">{{ row.tradability_score }} {{ row.tradability_level }}</el-tag>
@@ -172,6 +192,11 @@ function percent(value: string | null) {
   return `${(Number(value) * 100).toFixed(2)}%`
 }
 
+function numberValue(value: string | null) {
+  if (value == null) return '-'
+  return Number(value).toFixed(2)
+}
+
 function money(value: string | null) {
   if (value == null) return '-'
   const amount = Number(value)
@@ -184,6 +209,13 @@ function scoreTag(score: number) {
   if (score >= 80) return 'success'
   if (score >= 60) return 'info'
   if (score >= 40) return 'warning'
+  return 'danger'
+}
+
+function buyScoreTag(score: number) {
+  if (score >= 75) return 'success'
+  if (score >= 60) return 'info'
+  if (score >= 45) return 'warning'
   return 'danger'
 }
 

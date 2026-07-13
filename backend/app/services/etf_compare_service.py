@@ -133,8 +133,24 @@ def build_compare_metric(symbol: str, rows: list[MarketDataClean], asset: AssetM
     days = max((rows[-1].trade_date - rows[0].trade_date).days, 1) if len(rows) >= 2 else 1
     annualized_return = annualize_return(total_return, days) if total_return is not None else None
     annualized_volatility = Decimal(str(stdev(returns) * sqrt(252))) if len(returns) >= 2 else None
+    downside_volatility = downside_annualized_volatility(returns)
     drawdown = max_drawdown(closes) if closes else None
     score, level, notes = tradability_score(rows, avg_amount)
+    sharpe = risk_adjusted_ratio(annualized_return, annualized_volatility)
+    sortino = risk_adjusted_ratio(annualized_return, downside_volatility)
+    calmar = calmar_ratio(annualized_return, drawdown)
+    hit_rate = positive_return_rate(returns)
+    gap_ratio = estimated_gap_ratio(rows, days)
+    buy_score, buy_level, buy_notes = buy_decision_score(
+        bars=len(rows),
+        annualized_return=annualized_return,
+        annualized_volatility=annualized_volatility,
+        max_drawdown_value=drawdown,
+        sharpe=sharpe,
+        tradability_score_value=score,
+        risk_level=asset.risk_level if asset else None,
+        gap_ratio=gap_ratio,
+    )
     return {
         "symbol": symbol,
         "name": asset.name if asset else None,
@@ -148,11 +164,20 @@ def build_compare_metric(symbol: str, rows: list[MarketDataClean], asset: AssetM
         "total_return": quantize_rate(total_return),
         "annualized_return": quantize_rate(annualized_return),
         "annualized_volatility": quantize_rate(annualized_volatility),
+        "downside_volatility": quantize_rate(downside_volatility),
         "max_drawdown": quantize_rate(drawdown),
+        "sharpe_ratio": quantize_number(sharpe),
+        "sortino_ratio": quantize_number(sortino),
+        "calmar_ratio": quantize_number(calmar),
+        "positive_day_rate": quantize_rate(hit_rate),
+        "estimated_gap_ratio": quantize_rate(gap_ratio),
         "average_amount": avg_amount.quantize(Decimal("0.01")) if avg_amount is not None else None,
         "tradability_score": score,
         "tradability_level": level,
         "tradability_notes": notes,
+        "buy_score": buy_score,
+        "buy_level": buy_level,
+        "buy_notes": buy_notes,
     }
 
 
@@ -166,6 +191,13 @@ def build_normalized_series(rows: list[MarketDataClean]) -> list[dict]:
 
 def daily_returns(closes: list[Decimal]) -> list[float]:
     return [float(closes[index] / closes[index - 1] - Decimal("1")) for index in range(1, len(closes))]
+
+
+def downside_annualized_volatility(returns: list[float]) -> Decimal | None:
+    downside = [value for value in returns if value < 0]
+    if len(downside) < 2:
+        return None
+    return Decimal(str(stdev(downside) * sqrt(252)))
 
 
 def annualize_return(total_return: Decimal, days: int) -> Decimal:
@@ -221,6 +253,139 @@ def tradability_score(rows: list[MarketDataClean], average_amount: Decimal | Non
     return score, "较弱", notes
 
 
+def risk_adjusted_ratio(annualized_return: Decimal | None, annualized_volatility: Decimal | None) -> Decimal | None:
+    if annualized_return is None or annualized_volatility is None or annualized_volatility <= 0:
+        return None
+    risk_free_rate = Decimal("0.02")
+    return (annualized_return - risk_free_rate) / annualized_volatility
+
+
+def calmar_ratio(annualized_return: Decimal | None, drawdown: Decimal | None) -> Decimal | None:
+    if annualized_return is None or drawdown is None or drawdown >= 0:
+        return None
+    return annualized_return / abs(drawdown)
+
+
+def positive_return_rate(returns: list[float]) -> Decimal | None:
+    if not returns:
+        return None
+    return Decimal(sum(1 for value in returns if value > 0)) / Decimal(len(returns))
+
+
+def estimated_gap_ratio(rows: list[MarketDataClean], days: int) -> Decimal | None:
+    if not rows or days <= 0:
+        return None
+    expected_trading_days = max(int(days * 244 / 365), 1)
+    missing = max(expected_trading_days - len(rows), 0)
+    return Decimal(missing) / Decimal(expected_trading_days)
+
+
+def buy_decision_score(
+    *,
+    bars: int,
+    annualized_return: Decimal | None,
+    annualized_volatility: Decimal | None,
+    max_drawdown_value: Decimal | None,
+    sharpe: Decimal | None,
+    tradability_score_value: int,
+    risk_level: int | None,
+    gap_ratio: Decimal | None,
+) -> tuple[int, str, list[str]]:
+    score = 50
+    notes: list[str] = []
+
+    score += score_annualized_return(annualized_return)
+    score += score_sharpe(sharpe)
+    score += score_drawdown_risk(max_drawdown_value)
+    score += score_volatility_risk(annualized_volatility)
+    score += int((tradability_score_value - 60) * 0.25)
+
+    if bars < 120:
+        score -= 20
+        notes.append("样本少于 120 个交易日，结论不稳定")
+    elif bars < 250:
+        score -= 8
+        notes.append("样本不足 1 年，适合观察不适合重仓")
+
+    if risk_level is not None and risk_level >= 5:
+        score -= 8
+        notes.append("风险等级较高，需控制仓位")
+    elif risk_level is not None and risk_level <= 2:
+        score += 4
+
+    if gap_ratio is not None and gap_ratio > Decimal("0.05"):
+        score -= 10
+        notes.append("估算行情缺口较多，先补数据再决策")
+
+    if tradability_score_value < 60:
+        notes.append("可交易性偏弱，不适合频繁调仓")
+
+    score = max(0, min(100, score))
+    if score >= 75:
+        return score, "优先候选", notes or ["收益、风险和交易性综合表现较好"]
+    if score >= 60:
+        return score, "可观察", notes or ["综合表现可用，建议结合持仓和估值分批观察"]
+    if score >= 45:
+        return score, "谨慎观察", notes or ["存在风险或交易性短板，不建议直接重仓"]
+    return score, "暂不优先", notes or ["当前风险收益比不足或数据质量不足"]
+
+
+def score_annualized_return(value: Decimal | None) -> int:
+    if value is None:
+        return -10
+    if value >= Decimal("0.15"):
+        return 18
+    if value >= Decimal("0.08"):
+        return 12
+    if value >= Decimal("0.03"):
+        return 5
+    if value >= Decimal("0"):
+        return 0
+    return -12
+
+
+def score_sharpe(value: Decimal | None) -> int:
+    if value is None:
+        return -8
+    if value >= Decimal("1.2"):
+        return 18
+    if value >= Decimal("0.8"):
+        return 12
+    if value >= Decimal("0.4"):
+        return 5
+    if value >= Decimal("0"):
+        return 0
+    return -10
+
+
+def score_drawdown_risk(value: Decimal | None) -> int:
+    if value is None:
+        return -8
+    if value >= Decimal("-0.08"):
+        return 12
+    if value >= Decimal("-0.15"):
+        return 6
+    if value >= Decimal("-0.25"):
+        return 0
+    if value >= Decimal("-0.35"):
+        return -8
+    return -16
+
+
+def score_volatility_risk(value: Decimal | None) -> int:
+    if value is None:
+        return -5
+    if value <= Decimal("0.15"):
+        return 10
+    if value <= Decimal("0.25"):
+        return 5
+    if value <= Decimal("0.35"):
+        return 0
+    if value <= Decimal("0.50"):
+        return -8
+    return -14
+
+
 def build_correlations(bars_by_symbol: dict[str, list[MarketDataClean]]) -> list[dict]:
     returns_by_symbol = {symbol: returns_by_date(rows) for symbol, rows in bars_by_symbol.items()}
     symbols = list(bars_by_symbol)
@@ -270,3 +435,9 @@ def quantize_rate(value: Decimal | None) -> Decimal | None:
     if value is None:
         return None
     return value.quantize(Decimal("0.000001"))
+
+
+def quantize_number(value: Decimal | None) -> Decimal | None:
+    if value is None:
+        return None
+    return value.quantize(Decimal("0.0001"))

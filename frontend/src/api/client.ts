@@ -127,11 +127,20 @@ export interface EtfCompareMetric {
   total_return: string | null
   annualized_return: string | null
   annualized_volatility: string | null
+  downside_volatility: string | null
   max_drawdown: string | null
+  sharpe_ratio: string | null
+  sortino_ratio: string | null
+  calmar_ratio: string | null
+  positive_day_rate: string | null
+  estimated_gap_ratio: string | null
   average_amount: string | null
   tradability_score: number
   tradability_level: string
   tradability_notes: string[]
+  buy_score: number
+  buy_level: string
+  buy_notes: string[]
 }
 
 export interface EtfCompareSeriesPoint {
