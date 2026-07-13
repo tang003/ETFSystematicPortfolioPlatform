@@ -1,5 +1,35 @@
 # ETF Systematic Portfolio Platform
 
+ETF 系统化资产配置平台，面向个人中长期 ETF 投研、资产配置、持仓分析、定投计划和复盘报告。系统当前不连接券商账户，不自动下单，所有调仓和买卖建议都需要用户人工确认。
+
+## 当前版本
+
+- 版本：`v0.39.0-agent-analysis-history`
+- 阶段：AI 投研结果落库、ETF 自动补全、历史分析回看
+- 最新能力：
+  - DeepSeek 已接入，默认模型 `deepseek-v4-flash`。
+  - “AI 投研委员会”支持多 Agent ETF 分析、DeepSeek 中文总结、自动补全 ETF 主数据/行情。
+  - 每次 AI 投研结果会保存到 `agent_analysis_log`，前端可查看最近历史记录。
+  - 当前持仓仍采用手动录入方式：用户主要填写 ETF 代码、持仓数量、成本价；名称、类型、现价由系统尽量补全。
+  - 当前系统只生成建议，不自动交易。
+
+## 常用地址
+
+- 本地前端：http://localhost:5173
+- 线上前端：https://etf.8886767.xyz
+- AI 投研页面：https://etf.8886767.xyz/agent-analysis
+- API 健康检查：http://localhost:8000/health
+
+## DeepSeek 配置
+
+密钥只写入本地 `.env` 或服务器 `.env.production`，不要提交到 GitHub。
+
+```bash
+DEEPSEEK_API_KEY=your_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+```
+
 ETF 系统化资产配置平台，面向个人中长期 ETF 投研、资产配置、持仓分析和月度复盘。系统当前不连接真实券商账户，不自动下单，所有调仓结果都作为人工确认前的建议。
 
 ## 当前版本

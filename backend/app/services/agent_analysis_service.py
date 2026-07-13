@@ -1,15 +1,18 @@
 from datetime import date, timedelta
 from decimal import Decimal
 import json
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.models.agent_analysis import AgentAnalysisLog
 from app.models.factor import FactorDaily
 from app.models.portfolio import HoldingAnalysisResult, PortfolioPosition, TargetPortfolio
 from app.services.deepseek_service import DeepSeekClientError, complete_json, deepseek_configured
 from app.services.etf_detail_service import get_etf_detail
+from app.services.holding_service import ensure_position_market_data
 
 
 def analyze_etf_with_agents(
@@ -19,10 +22,20 @@ def analyze_etf_with_agents(
     start_date: date | None = None,
     end_date: date | None = None,
     use_llm: bool = True,
+    auto_sync: bool = False,
+    save_result: bool = True,
 ) -> dict:
-    cleaned_symbol = symbol.strip()
+    cleaned_symbol = symbol.strip().upper().split(".", 1)[0]
     resolved_end = end_date or date.today()
     resolved_start = start_date or (resolved_end - timedelta(days=365))
+    warnings: list[str] = []
+
+    if auto_sync:
+        try:
+            ensure_position_market_data(db, cleaned_symbol)
+        except Exception as exc:  # noqa: BLE001 - analysis can still continue with existing local data.
+            warnings.append(f"自动补全 ETF 基础信息/行情失败，已使用本地现有数据分析：{exc}")
+
     detail = get_etf_detail(db, symbol=cleaned_symbol, start_date=resolved_start, end_date=resolved_end)
     factor = detail["latest_factor"]
     position = latest_position(db, cleaned_symbol)
@@ -44,7 +57,8 @@ def analyze_etf_with_agents(
     ]
     manager = manager_agent(agents, detail)
     agents.append(manager)
-    warnings = build_warnings(detail, position, target)
+    warnings.extend(build_warnings(detail, position, target))
+
     llm_used = False
     manager_commentary = manager["summary"]
     final_summary = manager["summary"]
@@ -62,7 +76,8 @@ def analyze_etf_with_agents(
             llm_used = True
         except DeepSeekClientError as exc:
             warnings.append(f"DeepSeek 调用失败，已使用规则总结：{exc}")
-    return {
+
+    result = {
         "symbol": cleaned_symbol,
         "name": detail["asset"].name if detail["asset"] else None,
         "start_date": resolved_start,
@@ -78,6 +93,9 @@ def analyze_etf_with_agents(
         "agents": agents,
         "warnings": warnings,
     }
+    if save_result:
+        save_agent_analysis(db, result)
+    return result
 
 
 def latest_position(db: Session, symbol: str) -> PortfolioPosition | None:
@@ -174,10 +192,10 @@ def portfolio_agent(context: dict) -> dict:
     if target:
         evidence.append(f"最新目标权重 {format_percent(target.final_target_weight)}")
     if holding:
-        evidence.append(f"持仓分析建议：{holding.action_suggestion}")
-        if holding.action_suggestion in {"加仓", "持有"}:
+        evidence.append(f"持仓分析建议：{translate_action(holding.action_suggestion)}")
+        if holding.action_suggestion in {"ADD", "HOLD", "加仓", "持有"}:
             score += 8
-        if holding.action_suggestion in {"减仓", "退出"}:
+        if holding.action_suggestion in {"REDUCE", "REDUCE_OR_EXIT", "减仓", "退出"}:
             score -= 12
     return opinion("portfolio", "组合持仓 Agent", score, evidence, risks, "结合当前持仓、目标组合和持仓分析判断组合动作。")
 
@@ -286,10 +304,77 @@ def build_llm_payload(detail: dict, agents: list[dict], warnings: list[str]) -> 
 
 def manager_system_prompt() -> str:
     return (
-        "你是ETF系统化资产配置平台的复合经理。请基于多个Agent观点生成中文ETF投研结论。"
-        "只输出JSON，字段为 final_action、final_summary、manager_commentary。"
-        "必须强调这不是投资承诺，当前系统不自动下单。结论要适合中长期ETF配置，不要给短线荐股口吻。"
+        "你是 ETF 系统化资产配置平台的复合经理。请基于多个 Agent 观点生成中文 ETF 投研结论。"
+        "只输出 JSON，字段为 final_action、final_summary、manager_commentary。"
+        "必须强调这不是投资承诺，当前系统不自动下单。结论要适合中长期 ETF 配置，不要给短线荐股口吻。"
+        "不得编造用户没有提供、系统没有给出的行情、公告或新闻。"
     )
+
+
+def save_agent_analysis(db: Session, result: dict) -> AgentAnalysisLog | None:
+    if not hasattr(db, "add"):
+        return None
+    row = AgentAnalysisLog(
+        symbol=result["symbol"],
+        name=result["name"],
+        start_date=result["start_date"],
+        end_date=result["end_date"],
+        data_status=result["data_status"],
+        llm_used=result["llm_used"],
+        llm_model=result["llm_model"],
+        final_action=result["final_action"],
+        final_score=result["final_score"],
+        final_summary=result["final_summary"],
+        manager_commentary=result["manager_commentary"],
+        agents_payload=json_safe(result["agents"]),
+        warnings_payload=json_safe(result["warnings"]),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def list_agent_analysis_logs(db: Session, *, symbol: str | None = None, limit: int = 20) -> list[dict]:
+    query = select(AgentAnalysisLog).order_by(AgentAnalysisLog.created_at.desc(), AgentAnalysisLog.id.desc())
+    if symbol:
+        query = query.where(AgentAnalysisLog.symbol == symbol.strip().upper().split(".", 1)[0])
+    rows = db.scalars(query.limit(max(1, min(limit, 100)))).all()
+    return [agent_log_to_dict(row) for row in rows]
+
+
+def agent_log_to_dict(row: AgentAnalysisLog) -> dict:
+    return {
+        "id": row.id,
+        "symbol": row.symbol,
+        "name": row.name,
+        "start_date": row.start_date,
+        "end_date": row.end_date,
+        "data_status": row.data_status,
+        "llm_used": row.llm_used,
+        "llm_model": row.llm_model,
+        "final_action": row.final_action,
+        "final_score": row.final_score,
+        "final_summary": row.final_summary,
+        "manager_commentary": row.manager_commentary,
+        "agents": row.agents_payload or [],
+        "warnings": row.warnings_payload or [],
+        "created_at": row.created_at,
+    }
+
+
+def json_safe(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False, default=str))
+
+
+def translate_action(action: str | None) -> str:
+    mapping = {
+        "ADD": "加仓",
+        "HOLD": "持有",
+        "REDUCE": "减仓",
+        "REDUCE_OR_EXIT": "减仓或退出",
+    }
+    return mapping.get(action or "", action or "-")
 
 
 def format_percent(value: Decimal | None) -> str:

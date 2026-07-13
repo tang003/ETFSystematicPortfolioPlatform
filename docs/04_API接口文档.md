@@ -1026,3 +1026,55 @@ curl "http://localhost:8000/api/etf-detail/510300?start_date=2025-07-11&end_date
 - 使用共享 Tushare 账号时，建议同时控制 `max_symbols` 和 `request_interval_seconds`。
 - 全流程会先固定本次 ETF 范围，行情、质量检查和因子计算始终使用同一批代码。
 - 严格门禁会检查批量失败数量、最近交易日和历史样本数；失败详情保存在对应任务步骤的 `result_payload` 中，可补齐数据后重试。
+# 04 API 接口文档
+
+当前版本：`v0.39.0-agent-analysis-history`
+
+## AI 投研接口
+
+### POST /api/agent-analysis/etf
+
+用途：运行单只 ETF 的 AI 投研委员会分析。系统会读取本地 ETF 详情、行情、因子、当前持仓、目标组合和持仓分析结果，生成多 Agent 观点，并在配置 DeepSeek 后生成中文综合结论。
+
+请求示例：
+
+```json
+{
+  "symbol": "510300",
+  "start_date": "2025-07-13",
+  "end_date": "2026-07-13",
+  "use_llm": true,
+  "auto_sync": true
+}
+```
+
+字段说明：
+
+- `symbol`：ETF 代码，必填。
+- `start_date` / `end_date`：分析区间，不填时默认最近一年。
+- `use_llm`：是否启用 DeepSeek 综合总结。
+- `auto_sync`：是否在分析前自动补齐资产主数据和最近行情，默认开启。
+
+返回重点字段：
+
+- `final_action`：综合建议。
+- `final_score`：综合评分，0-100。
+- `final_summary`：最终结论。
+- `manager_commentary`：复合经理说明。
+- `agents`：市场环境、技术趋势、流动性、组合持仓、风险控制、复合经理等 Agent 的证据、风险和建议。
+- `warnings`：数据缺失、未录入持仓、目标组合缺失等提示。
+
+### GET /api/agent-analysis/etf/history
+
+用途：查询最近 AI 投研历史记录。
+
+查询参数：
+
+- `symbol`：可选，只查询某只 ETF。
+- `limit`：可选，默认 20，最大 100。
+
+示例：
+
+```text
+GET /api/agent-analysis/etf/history?symbol=510300&limit=20
+```

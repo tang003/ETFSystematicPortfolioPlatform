@@ -150,6 +150,11 @@ export interface EtfAgentAnalysisResponse {
   warnings: string[]
 }
 
+export interface EtfAgentAnalysisLog extends EtfAgentAnalysisResponse {
+  id: number
+  created_at: string
+}
+
 export interface MarketBarRead {
   symbol: string
   trade_date: string
@@ -469,8 +474,10 @@ export const scoreEtfTradability = async (payload: { symbols: string[]; start_da
   (await api.post<EtfCompareMetric[]>('/api/etf-compare/tradability', payload)).data
 export const fetchEtfDetail = async (symbol: string, params?: { start_date?: string; end_date?: string }) =>
   (await api.get<EtfDetailResponse>(`/api/etf-detail/${symbol}`, { params })).data
-export const analyzeEtfAgents = async (payload: { symbol: string; start_date?: string; end_date?: string; use_llm?: boolean }) =>
+export const analyzeEtfAgents = async (payload: { symbol: string; start_date?: string; end_date?: string; use_llm?: boolean; auto_sync?: boolean }) =>
   (await api.post<EtfAgentAnalysisResponse>('/api/agent-analysis/etf', payload)).data
+export const fetchEtfAgentAnalysisHistory = async (params?: { symbol?: string; limit?: number }) =>
+  (await api.get<EtfAgentAnalysisLog[]>('/api/agent-analysis/etf/history', { params })).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
 export const fetchMarketSyncPlan = async (syncScope = 'core') =>

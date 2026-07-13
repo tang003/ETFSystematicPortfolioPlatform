@@ -1,3 +1,4 @@
+from app.models.agent_analysis import AgentAnalysisLog
 from app.models.asset import AssetMaster
 from app.models.market_data import EtfNavPremium, MarketDataClean, MarketDataRaw, TradingCalendar
 from app.models.data_quality import DataQualityLog
@@ -13,6 +14,7 @@ from app.models.workflow import WorkflowTask, WorkflowTaskStep
 
 __all__ = [
     "AlphaSignal",
+    "AgentAnalysisLog",
     "AssetMaster",
     "BacktestEquityCurve",
     "BacktestMetrics",

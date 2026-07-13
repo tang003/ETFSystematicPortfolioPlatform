@@ -5,8 +5,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import Base, engine
-from app.models.factor import FactorDaily
 from app.models.asset import AssetMaster
+from app.models.factor import FactorDaily
 from app.models.market_data import MarketDataClean
 from app.models.portfolio import HoldingAnalysisResult, PortfolioPosition, TargetPortfolio
 from app.schemas.portfolio_schema import PortfolioSnapshotRequest, PositionResolveRead
@@ -21,10 +21,14 @@ def ensure_holding_tables() -> None:
 
 def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> list[PortfolioPosition]:
     db.execute(delete(PortfolioPosition).where(PortfolioPosition.position_date == request.position_date))
-    normalized = [normalize_position_input(item, resolve_position_detail(db, item.symbol)) for item in request.positions if item.symbol.strip()]
+    normalized = [
+        normalize_position_input(item, resolve_position_detail(db, item.symbol))
+        for item in request.positions
+        if item.symbol.strip()
+    ]
     total_value = sum((item["market_value"] for item in normalized), Decimal("0"))
     if total_value <= 0:
-        raise ValueError("Total market value must be greater than 0")
+        raise ValueError("持仓总市值必须大于 0")
 
     rows = [
         PortfolioPosition(
@@ -64,7 +68,7 @@ def normalize_position_input(item, detail: PositionResolveRead | None = None) ->
     if cost_price is None and quantity > 0 and cost_basis is not None:
         cost_price = (cost_basis / quantity).quantize(Decimal("0.000001"))
     if market_value is None or market_value <= 0:
-        raise ValueError(f"{item.symbol} 缺少最新价格，无法计算市值。请先同步该代码行情，或临时补充现价。")
+        raise ValueError(f"{item.symbol} 缺少最新价格，无法计算市值。请先刷新该代码行情，或临时补充现价。")
 
     unrealized_pnl = None
     unrealized_pnl_rate = None
@@ -73,7 +77,7 @@ def normalize_position_input(item, detail: PositionResolveRead | None = None) ->
         unrealized_pnl_rate = (unrealized_pnl / cost_basis).quantize(Decimal("0.000001"))
 
     return {
-        "symbol": item.symbol.strip(),
+        "symbol": normalize_symbol(item.symbol),
         "position_name": item.position_name.strip() if item.position_name else (detail.position_name if detail else None),
         "asset_type": (item.asset_type or (detail.asset_type if detail else None) or "etf").strip().lower(),
         "quantity": quantity,
@@ -163,7 +167,7 @@ def ensure_position_market_data(db: Session, symbol: str, *, source: str = "aksh
         try:
             quote = sync_eastmoney_spot_quote(db, symbol)
             update_asset_from_quote(db, symbol, quote.get("name"))
-        except Exception:  # noqa: BLE001 - keep manual current_price fallback available.
+        except Exception:
             return
 
 
