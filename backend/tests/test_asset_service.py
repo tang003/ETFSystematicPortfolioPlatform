@@ -78,3 +78,24 @@ def test_build_profile_patch_parses_market_row() -> None:
     assert patch["custody_fee"] == Decimal("0.0010")
     assert patch["expense_ratio"] == Decimal("0.0060")
     assert patch["latest_premium_rate"] == Decimal("-0.0002")
+
+
+def test_write_asset_sync_log_marks_partial_status() -> None:
+    class Db:
+        def __init__(self) -> None:
+            self.rows = []
+
+        def add(self, row) -> None:
+            self.rows.append(row)
+
+    db = Db()
+
+    asset_service.write_asset_sync_log(
+        db,
+        sync_type="profile",
+        result={"source": "akshare", "total": 3, "updated": 2, "skipped": 0, "failed": 1, "results": []},
+        message="done",
+    )
+
+    assert db.rows[0].status == "partial"
+    assert db.rows[0].updated == 2

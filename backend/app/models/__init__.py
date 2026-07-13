@@ -1,5 +1,6 @@
 from app.models.agent_analysis import AgentAnalysisLog
 from app.models.asset import AssetMaster
+from app.models.asset_sync_log import AssetSyncLog
 from app.models.market_data import EtfNavPremium, MarketDataClean, MarketDataRaw, TradingCalendar
 from app.models.data_quality import DataQualityLog
 from app.models.factor import FactorDaily
@@ -16,6 +17,7 @@ __all__ = [
     "AlphaSignal",
     "AgentAnalysisLog",
     "AssetMaster",
+    "AssetSyncLog",
     "BacktestEquityCurve",
     "BacktestMetrics",
     "BacktestRun",

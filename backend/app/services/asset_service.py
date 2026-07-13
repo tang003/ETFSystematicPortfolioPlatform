@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models.asset import AssetMaster
+from app.models.asset_sync_log import AssetSyncLog
 from app.schemas.asset_schema import AssetUpdateRequest, AssetUpsertItem
 
 UPSERT_FIELDS = [
@@ -93,7 +94,10 @@ def sync_etf_profiles(
     normalized_symbols = [symbol for symbol in (normalize_symbol(item) for item in symbols or []) if symbol]
     assets = resolve_profile_assets(db, normalized_symbols, limit=limit)
     if not assets:
-        return {"source": source, "total": 0, "updated": 0, "skipped": 0, "failed": 0, "results": []}
+        result = {"source": source, "total": 0, "updated": 0, "skipped": 0, "failed": 0, "results": []}
+        write_asset_sync_log(db, sync_type="profile", result=result, message="没有匹配到需要补全的 ETF")
+        db.commit()
+        return result
 
     market_rows = fetch_akshare_etf_spot_rows()
     results: list[dict[str, Any]] = []
@@ -131,8 +135,7 @@ def sync_etf_profiles(
                     "message": str(exc),
                 }
             )
-    db.commit()
-    return {
+    result = {
         "source": source,
         "total": len(assets),
         "updated": updated_count,
@@ -140,6 +143,35 @@ def sync_etf_profiles(
         "failed": failed_count,
         "results": results,
     }
+    write_asset_sync_log(db, sync_type="profile", result=result, message="ETF 主资料补全完成")
+    db.commit()
+    return result
+
+
+def list_asset_sync_logs(db: Session, *, sync_type: str | None = None, limit: int = 20) -> list[AssetSyncLog]:
+    query = select(AssetSyncLog)
+    if sync_type:
+        query = query.where(AssetSyncLog.sync_type == sync_type)
+    query = query.order_by(AssetSyncLog.created_at.desc(), AssetSyncLog.id.desc()).limit(limit)
+    return list(db.scalars(query).all())
+
+
+def write_asset_sync_log(db: Session, *, sync_type: str, result: dict[str, Any], message: str | None = None) -> None:
+    failed = int(result.get("failed") or 0)
+    status = "failed" if failed and failed >= int(result.get("total") or 0) else "partial" if failed else "success"
+    db.add(
+        AssetSyncLog(
+            sync_type=sync_type,
+            source=str(result.get("source") or "unknown"),
+            status=status,
+            total=int(result.get("total") or 0),
+            updated=int(result.get("updated") or 0),
+            skipped=int(result.get("skipped") or 0),
+            failed=failed,
+            message=message,
+            details={"results": result.get("results", [])[:200]},
+        )
+    )
 
 
 def fetch_akshare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem]:

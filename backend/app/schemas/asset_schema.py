@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -97,6 +99,22 @@ class AssetProfileSyncResponse(BaseModel):
     skipped: int
     failed: int
     results: list[AssetProfileSyncItem]
+
+
+class AssetSyncLogRead(BaseModel):
+    id: int
+    sync_type: str
+    source: str
+    status: str
+    total: int
+    updated: int
+    skipped: int
+    failed: int
+    message: str | None = None
+    details: dict[str, Any] | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AssetUpdateRequest(BaseModel):

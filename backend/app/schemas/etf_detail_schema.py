@@ -17,10 +17,25 @@ class EtfDetailCurvePoint(BaseModel):
     amount: Decimal | None = None
 
 
+class EtfAlternativeCandidate(BaseModel):
+    symbol: str
+    name: str
+    fund_company: str | None = None
+    tracking_index: str | None = None
+    fund_size: Decimal | None = None
+    expense_ratio: Decimal | None = None
+    average_amount: Decimal | None = None
+    tradability_score: int
+    recommendation_score: int
+    recommendation_level: str
+    reasons: list[str]
+
+
 class EtfDetailResponse(BaseModel):
     symbol: str
     asset: AssetRead | None = None
     metric: EtfCompareMetric
     latest_factor: FactorRead | None = None
+    alternatives: list[EtfAlternativeCandidate]
     curve: list[EtfDetailCurvePoint]
     recent_bars: list[MarketBarRead]

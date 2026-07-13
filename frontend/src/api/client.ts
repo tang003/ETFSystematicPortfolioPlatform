@@ -100,6 +100,20 @@ export interface AssetProfileSyncResponse {
   }>
 }
 
+export interface AssetSyncLog {
+  id: number
+  sync_type: string
+  source: string
+  status: string
+  total: number
+  updated: number
+  skipped: number
+  failed: number
+  message?: string | null
+  details?: Record<string, unknown> | null
+  created_at: string
+}
+
 export interface EtfCompareMetric {
   symbol: string
   name: string | null
@@ -147,11 +161,26 @@ export interface EtfDetailCurvePoint {
   amount: string | null
 }
 
+export interface EtfAlternativeCandidate {
+  symbol: string
+  name: string
+  fund_company: string | null
+  tracking_index: string | null
+  fund_size: string | null
+  expense_ratio: string | null
+  average_amount: string | null
+  tradability_score: number
+  recommendation_score: number
+  recommendation_level: string
+  reasons: string[]
+}
+
 export interface EtfDetailResponse {
   symbol: string
   asset: Asset | null
   metric: EtfCompareMetric
   latest_factor: Factor | null
+  alternatives: EtfAlternativeCandidate[]
   curve: EtfDetailCurvePoint[]
   recent_bars: MarketBarRead[]
 }
@@ -502,6 +531,8 @@ export const syncAssetUniverse = async (payload: { source?: string; limit?: numb
   (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload)).data
 export const syncAssetProfiles = async (payload: { source?: string; symbols?: string[]; limit?: number; preserve_existing?: boolean }) =>
   (await api.post<AssetProfileSyncResponse>('/api/assets/sync-profiles', payload)).data
+export const fetchAssetSyncLogs = async (params?: { sync_type?: string; limit?: number }) =>
+  (await api.get<AssetSyncLog[]>('/api/assets/sync-logs', { params })).data
 export const updateAsset = async (symbol: string, payload: {
   enabled?: boolean
   risk_level?: number

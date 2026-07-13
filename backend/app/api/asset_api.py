@@ -8,11 +8,19 @@ from app.schemas.asset_schema import (
     AssetProfileSyncRequest,
     AssetProfileSyncResponse,
     AssetRead,
+    AssetSyncLogRead,
     AssetUniverseSyncRequest,
     AssetUniverseSyncResponse,
     AssetUpdateRequest,
 )
-from app.services.asset_service import batch_upsert_assets, list_assets, sync_etf_profiles, sync_etf_universe, update_asset
+from app.services.asset_service import (
+    batch_upsert_assets,
+    list_asset_sync_logs,
+    list_assets,
+    sync_etf_profiles,
+    sync_etf_universe,
+    update_asset,
+)
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -66,6 +74,15 @@ def sync_asset_profiles(
     except Exception as exc:  # noqa: BLE001 - external market data providers are intentionally wrapped.
         raise HTTPException(status_code=502, detail=f"ETF 资料补全暂不可用：{exc}") from exc
     return AssetProfileSyncResponse(**result)
+
+
+@router.get("/sync-logs", response_model=list[AssetSyncLogRead])
+def get_asset_sync_logs(
+    sync_type: str | None = Query(default=None, description="同步类型，例如 profile"),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> list[AssetSyncLogRead]:
+    return list_asset_sync_logs(db=db, sync_type=sync_type, limit=limit)
 
 
 @router.patch("/{symbol}", response_model=AssetRead)

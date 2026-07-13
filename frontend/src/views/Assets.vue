@@ -60,6 +60,28 @@
       </el-form>
     </section>
 
+    <section class="panel span-4">
+      <div class="panel-header">
+        <div>
+          <h2>资料补全日志</h2>
+          <p class="section-note">记录最近 ETF 主资料自动补全结果。</p>
+        </div>
+      </div>
+      <el-table :data="syncLogs" height="260" empty-text="暂无补全日志">
+        <el-table-column label="时间" min-width="140">
+          <template #default="{ row }">{{ timeText(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="82">
+          <template #default="{ row }">
+            <el-tag :type="syncLogTag(row.status)" size="small">{{ syncLogStatusText(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="结果" min-width="160">
+          <template #default="{ row }">补全 {{ row.updated }} / 跳过 {{ row.skipped }} / 失败 {{ row.failed }}</template>
+        </el-table-column>
+      </el-table>
+    </section>
+
     <section class="panel span-8">
       <div class="panel-header">
         <div>
@@ -192,7 +214,19 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchUpsertAssets, fetchAssets, scoreEtfTradability, syncAssetProfiles, syncAssetUniverse, updateAsset, type Asset, type AssetUpsertItem, type EtfCompareMetric } from '../api/client'
+import {
+  batchUpsertAssets,
+  fetchAssets,
+  fetchAssetSyncLogs,
+  scoreEtfTradability,
+  syncAssetProfiles,
+  syncAssetUniverse,
+  updateAsset,
+  type Asset,
+  type AssetSyncLog,
+  type AssetUpsertItem,
+  type EtfCompareMetric,
+} from '../api/client'
 
 type ProfileForm = {
   symbol: string
@@ -210,6 +244,7 @@ type ProfileForm = {
 }
 
 const assets = ref<Asset[]>([])
+const syncLogs = ref<AssetSyncLog[]>([])
 const tradabilityMetrics = ref<Record<string, EtfCompareMetric>>({})
 const loading = ref(true)
 const actionLoading = ref(false)
@@ -250,7 +285,12 @@ onMounted(refresh)
 
 async function refresh() {
   try {
-    assets.value = await fetchAssets()
+    const [assetRows, logRows] = await Promise.all([
+      fetchAssets(),
+      fetchAssetSyncLogs({ sync_type: 'profile', limit: 10 }),
+    ])
+    assets.value = assetRows
+    syncLogs.value = logRows
     await refreshTradabilityScores()
   } finally {
     loading.value = false
@@ -533,6 +573,21 @@ function scoreTagType(value: number | null) {
   if (value >= 60) return 'info'
   if (value >= 40) return 'warning'
   return 'danger'
+}
+
+function syncLogTag(status: string) {
+  if (status === 'success') return 'success'
+  if (status === 'partial') return 'warning'
+  return 'danger'
+}
+
+function syncLogStatusText(status: string) {
+  const map: Record<string, string> = { success: '成功', partial: '部分', failed: '失败' }
+  return map[status] || status
+}
+
+function timeText(value: string) {
+  return value ? value.replace('T', ' ').slice(0, 16) : '-'
 }
 
 function fundSizeText(value: string | null | undefined) {

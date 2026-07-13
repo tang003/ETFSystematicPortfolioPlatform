@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.42.0-etf-profile-autofill`
+当前版本：`v0.43.0-same-index-alternatives`
 
 默认 API 前缀：`/api`
 
@@ -115,6 +115,24 @@
 - 当前只支持 `akshare`，不消耗 Tushare token。
 - `preserve_existing=true` 时只补空字段，不覆盖手工维护的数据。
 - 不传 `symbols` 时按 ETF 池顺序补全，受 `limit` 限制。
+
+### GET /api/assets/sync-logs
+
+查询 ETF 池同步日志。
+
+参数：
+
+- `sync_type`：可选，例如 `profile`
+- `limit`：默认 20，最大 100
+
+返回字段：
+
+- `sync_type`：同步类型，当前主资料补全为 `profile`
+- `source`：数据源
+- `status`：`success`、`partial` 或 `failed`
+- `total`、`updated`、`skipped`、`failed`
+- `message`
+- `created_at`
 
 ### PATCH /api/assets/{symbol}
 
@@ -244,6 +262,7 @@
 
 - 详情页默认读取本地 `market_data_clean`。
 - 如果没有曲线，通常表示该区间尚未同步清洗行情。
+- 返回 `alternatives` 同指数 ETF 候选，用于比较同跟踪指数下的规模、费率、交易性和替代优先级。
 
 ## 因子和策略
 

@@ -76,6 +76,45 @@
     </section>
 
     <section class="panel span-12">
+      <div class="panel-header">
+        <div>
+          <h2>同指数 ETF 替代</h2>
+          <p class="section-note">基于同一跟踪指数，综合交易性、规模和费率排序；用于观察替代，不代表自动交易。</p>
+        </div>
+      </div>
+      <el-empty v-if="detail && !detail.alternatives.length" description="暂无同指数 ETF 候选；可先补全 ETF 主资料中的跟踪指数" />
+      <el-table v-else :data="detail?.alternatives || []" height="300">
+        <el-table-column prop="symbol" label="代码" width="100" />
+        <el-table-column prop="name" label="名称" min-width="150" />
+        <el-table-column prop="fund_company" label="基金公司" min-width="130" />
+        <el-table-column label="推荐" width="110">
+          <template #default="{ row }">
+            <el-tag :type="alternativeTag(row.recommendation_level)" size="small">{{ row.recommendation_level }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="recommendation_score" label="综合分" width="90" />
+        <el-table-column prop="tradability_score" label="交易性" width="90" />
+        <el-table-column label="规模" width="120">
+          <template #default="{ row }">{{ fundSizeText(row.fund_size) }}</template>
+        </el-table-column>
+        <el-table-column label="费率" width="100">
+          <template #default="{ row }">{{ feeText(row.expense_ratio) }}</template>
+        </el-table-column>
+        <el-table-column label="日均成交额" width="130">
+          <template #default="{ row }">{{ money(row.average_amount) }}</template>
+        </el-table-column>
+        <el-table-column label="原因" min-width="240">
+          <template #default="{ row }">{{ row.reasons.join('；') }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="90" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="$router.push(`/etf-detail/${row.symbol}`)">详情</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <section class="panel span-12">
       <h2>最近行情</h2>
       <el-table :data="detail?.recent_bars || []" height="300">
         <el-table-column prop="trade_date" label="日期" width="120" />
@@ -221,6 +260,12 @@ function scoreTag(score: number | null) {
   if (score >= 60) return 'info'
   if (score >= 40) return 'warning'
   return 'danger'
+}
+
+function alternativeTag(level: string) {
+  if (level.includes('首选')) return 'success'
+  if (level.includes('可替代')) return 'info'
+  return 'warning'
 }
 
 function assetClassText(value: string | null | undefined) {
