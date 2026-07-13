@@ -49,3 +49,32 @@ def test_asset_upsert_item_accepts_profile_fields() -> None:
 
     assert item.tracking_index == "沪深300"
     assert item.fund_size == Decimal("10000000000")
+
+
+def test_infer_profile_from_etf_name() -> None:
+    assert asset_service.infer_fund_company("华夏上证50ETF") == "华夏基金"
+    assert asset_service.infer_tracking_index("华夏上证50ETF") == "上证50"
+    assert asset_service.infer_tracking_index("纳指ETF") == "纳斯达克100"
+
+
+def test_build_profile_patch_parses_market_row() -> None:
+    patch = asset_service.build_profile_patch(
+        "510300",
+        "沪深300ETF",
+        {
+            "名称": "华泰柏瑞沪深300ETF",
+            "基金规模": "890.25亿",
+            "管理费率": "0.50%",
+            "托管费率": "0.10%",
+            "溢价率": "-0.02%",
+        },
+    )
+
+    assert patch["name"] == "华泰柏瑞沪深300ETF"
+    assert patch["fund_company"] == "华泰柏瑞基金"
+    assert patch["tracking_index"] == "沪深300"
+    assert patch["fund_size"] == Decimal("89025000000.00")
+    assert patch["management_fee"] == Decimal("0.0050")
+    assert patch["custody_fee"] == Decimal("0.0010")
+    assert patch["expense_ratio"] == Decimal("0.0060")
+    assert patch["latest_premium_rate"] == Decimal("-0.0002")

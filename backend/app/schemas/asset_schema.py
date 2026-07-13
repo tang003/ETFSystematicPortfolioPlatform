@@ -76,6 +76,29 @@ class AssetUniverseSyncResponse(BaseModel):
     inserted_or_updated: int
 
 
+class AssetProfileSyncRequest(BaseModel):
+    source: str = Field(default="akshare")
+    symbols: list[str] | None = None
+    limit: int | None = Field(default=100, ge=1, le=1000)
+    preserve_existing: bool = True
+
+
+class AssetProfileSyncItem(BaseModel):
+    symbol: str
+    status: str
+    updated_fields: list[str] = Field(default_factory=list)
+    message: str | None = None
+
+
+class AssetProfileSyncResponse(BaseModel):
+    source: str
+    total: int
+    updated: int
+    skipped: int
+    failed: int
+    results: list[AssetProfileSyncItem]
+
+
 class AssetUpdateRequest(BaseModel):
     enabled: bool | None = None
     risk_level: int | None = Field(default=None, ge=1, le=5)

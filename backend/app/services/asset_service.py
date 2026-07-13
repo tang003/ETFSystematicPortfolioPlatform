@@ -1,3 +1,5 @@
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import akshare as ak
@@ -78,6 +80,68 @@ def sync_etf_universe(db: Session, *, source: str = "akshare", limit: int | None
     }
 
 
+def sync_etf_profiles(
+    db: Session,
+    *,
+    source: str = "akshare",
+    symbols: list[str] | None = None,
+    limit: int | None = 100,
+    preserve_existing: bool = True,
+) -> dict[str, Any]:
+    if source != "akshare":
+        raise ValueError("ETF 资料补全当前仅支持 source=akshare")
+    normalized_symbols = [symbol for symbol in (normalize_symbol(item) for item in symbols or []) if symbol]
+    assets = resolve_profile_assets(db, normalized_symbols, limit=limit)
+    if not assets:
+        return {"source": source, "total": 0, "updated": 0, "skipped": 0, "failed": 0, "results": []}
+
+    market_rows = fetch_akshare_etf_spot_rows()
+    results: list[dict[str, Any]] = []
+    updated_count = 0
+    skipped_count = 0
+    failed_count = 0
+    for asset in assets:
+        try:
+            row = market_rows.get(asset.symbol, {})
+            profile = build_profile_patch(asset.symbol, asset.name, row)
+            updated_fields = apply_profile_patch(asset, profile, preserve_existing=preserve_existing)
+            if updated_fields:
+                updated_count += 1
+                status = "updated"
+                message = "已补全 ETF 主资料"
+            else:
+                skipped_count += 1
+                status = "skipped"
+                message = "没有可补充的新字段"
+            results.append(
+                {
+                    "symbol": asset.symbol,
+                    "status": status,
+                    "updated_fields": updated_fields,
+                    "message": message,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - one symbol failing should not stop the batch.
+            failed_count += 1
+            results.append(
+                {
+                    "symbol": asset.symbol,
+                    "status": "failed",
+                    "updated_fields": [],
+                    "message": str(exc),
+                }
+            )
+    db.commit()
+    return {
+        "source": source,
+        "total": len(assets),
+        "updated": updated_count,
+        "skipped": skipped_count,
+        "failed": failed_count,
+        "results": results,
+    }
+
+
 def fetch_akshare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem]:
     frame = ak.fund_etf_spot_em()
     items: list[AssetUpsertItem] = []
@@ -91,6 +155,69 @@ def fetch_akshare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem
     if not items:
         raise ValueError("AKShare 未返回可识别的 ETF 基础列表")
     return items
+
+
+def fetch_akshare_etf_spot_rows() -> dict[str, dict[str, Any]]:
+    try:
+        frame = ak.fund_etf_spot_em()
+    except Exception:
+        return {}
+    rows: dict[str, dict[str, Any]] = {}
+    for row in frame.to_dict("records"):
+        symbol = normalize_symbol(first_value(row, "代码", "基金代码", "symbol", "code"))
+        if symbol:
+            rows[symbol] = row
+    return rows
+
+
+def resolve_profile_assets(db: Session, symbols: list[str], *, limit: int | None) -> list[AssetMaster]:
+    query = select(AssetMaster).order_by(AssetMaster.enabled.desc(), AssetMaster.symbol)
+    if symbols:
+        query = query.where(AssetMaster.symbol.in_(symbols))
+    if limit is not None:
+        query = query.limit(limit)
+    return list(db.scalars(query).all())
+
+
+def build_profile_patch(symbol: str, name: str, row: dict[str, Any] | None = None) -> dict[str, Any]:
+    row = row or {}
+    market_name = str(first_value(row, "名称", "基金简称", "name") or "").strip()
+    effective_name = market_name or name
+    management_fee = to_ratio_decimal(first_value(row, "管理费率", "管理费", "management_fee"))
+    custody_fee = to_ratio_decimal(first_value(row, "托管费率", "托管费", "custody_fee"))
+    expense_ratio = to_ratio_decimal(first_value(row, "综合费率", "费率", "expense_ratio"))
+    if expense_ratio is None and (management_fee is not None or custody_fee is not None):
+        expense_ratio = (management_fee or Decimal("0")) + (custody_fee or Decimal("0"))
+    return {
+        "name": effective_name,
+        "exchange": infer_exchange(symbol),
+        "fund_company": infer_fund_company(effective_name),
+        "tracking_index": infer_tracking_index(effective_name),
+        "listing_date": to_date(first_value(row, "上市日期", "成立日期", "日期", "listing_date")),
+        "fund_size": to_money_decimal(first_value(row, "基金规模", "最新规模", "规模", "总市值", "流通市值", "总份额")),
+        "management_fee": management_fee,
+        "custody_fee": custody_fee,
+        "expense_ratio": expense_ratio,
+        "tracking_error": to_ratio_decimal(first_value(row, "跟踪误差", "年化跟踪误差", "tracking_error")),
+        "latest_premium_rate": to_ratio_decimal(first_value(row, "溢价率", "折溢价率", "premium_rate")),
+        "description": build_profile_description(symbol, effective_name),
+        **classify_etf_asset(symbol, effective_name),
+    }
+
+
+def apply_profile_patch(asset: AssetMaster, profile: dict[str, Any], *, preserve_existing: bool) -> list[str]:
+    updated_fields: list[str] = []
+    for field, value in profile.items():
+        if value is None or value == "":
+            continue
+        current_value = getattr(asset, field)
+        if preserve_existing and current_value not in (None, ""):
+            continue
+        if current_value == value:
+            continue
+        setattr(asset, field, value)
+        updated_fields.append(field)
+    return updated_fields
 
 
 def build_asset_item_from_market_row(row: dict[str, Any]) -> AssetUpsertItem | None:
@@ -204,6 +331,153 @@ def infer_cross_border_region(name: str) -> str:
     if "德国" in name:
         return "DE"
     return "GLOBAL"
+
+
+def infer_fund_company(name: str) -> str | None:
+    company_prefixes = {
+        "华夏": "华夏基金",
+        "华泰柏瑞": "华泰柏瑞基金",
+        "易方达": "易方达基金",
+        "嘉实": "嘉实基金",
+        "南方": "南方基金",
+        "广发": "广发基金",
+        "国泰": "国泰基金",
+        "富国": "富国基金",
+        "博时": "博时基金",
+        "鹏华": "鹏华基金",
+        "银华": "银华基金",
+        "华安": "华安基金",
+        "天弘": "天弘基金",
+        "招商": "招商基金",
+        "工银": "工银瑞信基金",
+        "景顺长城": "景顺长城基金",
+        "汇添富": "汇添富基金",
+        "建信": "建信基金",
+        "平安": "平安基金",
+        "中欧": "中欧基金",
+        "华宝": "华宝基金",
+        "国联安": "国联安基金",
+        "海富通": "海富通基金",
+        "大成": "大成基金",
+    }
+    compact_name = name.replace(" ", "")
+    for prefix, company in company_prefixes.items():
+        if compact_name.startswith(prefix):
+            return company
+    return None
+
+
+def infer_tracking_index(name: str) -> str | None:
+    index_keywords = [
+        ("沪深300", "沪深300"),
+        ("中证A500", "中证A500"),
+        ("A500", "中证A500"),
+        ("中证500", "中证500"),
+        ("中证1000", "中证1000"),
+        ("上证50", "上证50"),
+        ("科创50", "科创50"),
+        ("创业板50", "创业板50"),
+        ("创业板", "创业板指"),
+        ("恒生科技", "恒生科技"),
+        ("恒生互联网", "恒生互联网科技业"),
+        ("恒生", "恒生指数"),
+        ("纳斯达克100", "纳斯达克100"),
+        ("纳指", "纳斯达克100"),
+        ("标普500", "标普500"),
+        ("日经225", "日经225"),
+        ("德国", "德国DAX"),
+        ("中证红利", "中证红利"),
+        ("红利低波", "红利低波"),
+        ("国债", "债券指数"),
+        ("黄金", "上海黄金交易所黄金现货"),
+        ("证券", "证券公司指数"),
+        ("银行", "银行指数"),
+        ("消费", "消费主题指数"),
+        ("医药", "医药卫生指数"),
+        ("芯片", "芯片产业指数"),
+        ("半导体", "半导体指数"),
+        ("新能源", "新能源指数"),
+        ("光伏", "光伏产业指数"),
+        ("军工", "军工指数"),
+        ("畜牧", "畜牧养殖指数"),
+        ("绿色电力", "绿色电力指数"),
+    ]
+    compact_name = name.upper().replace(" ", "")
+    for keyword, index_name in index_keywords:
+        if keyword.upper() in compact_name:
+            return index_name
+    return None
+
+
+def build_profile_description(symbol: str, name: str) -> str:
+    meta = classify_etf_asset(symbol, name)
+    labels = {
+        "equity": "权益 ETF",
+        "bond": "债券 ETF",
+        "gold": "黄金 ETF",
+        "commodity": "商品 ETF",
+        "cash": "货币现金 ETF",
+        "qdii": "跨境 QDII ETF",
+    }
+    return f"系统根据全市场 ETF 列表和名称规则自动补全；类型识别为{labels.get(meta['asset_class'], 'ETF')}。"
+
+
+def to_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return value
+    text = str(value).strip().replace(",", "")
+    if not text or text in {"-", "--", "nan", "None"}:
+        return None
+    for suffix in ["亿元", "亿", "%", "元", "份"]:
+        text = text.replace(suffix, "")
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        return None
+
+
+def to_ratio_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    number = to_decimal(text)
+    if number is None:
+        return None
+    if "%" in text or abs(number) > Decimal("1"):
+        return number / Decimal("100")
+    return number
+
+
+def to_money_decimal(value: Any) -> Decimal | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    number = to_decimal(text)
+    if number is None:
+        return None
+    if "亿" in text:
+        return number * Decimal("100000000")
+    return number
+
+
+def to_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text or text in {"-", "--", "nan", "None"}:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"):
+        try:
+            return datetime.strptime(text[:10] if fmt != "%Y%m%d" else text[:8], fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def update_asset(

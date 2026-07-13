@@ -8,6 +8,7 @@
         </div>
         <div class="header-actions">
           <el-button :loading="actionLoading" @click="syncUniverse">同步全市场 ETF</el-button>
+          <el-button :loading="actionLoading" @click="syncProfiles">补全当前筛选资料</el-button>
           <el-button type="primary" :loading="actionLoading" @click="importPresetAssets">导入精选示例池</el-button>
           <el-button @click="copyEnabledSymbols">复制已启用代码</el-button>
         </div>
@@ -191,7 +192,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchUpsertAssets, fetchAssets, scoreEtfTradability, syncAssetUniverse, updateAsset, type Asset, type AssetUpsertItem, type EtfCompareMetric } from '../api/client'
+import { batchUpsertAssets, fetchAssets, scoreEtfTradability, syncAssetProfiles, syncAssetUniverse, updateAsset, type Asset, type AssetUpsertItem, type EtfCompareMetric } from '../api/client'
 
 type ProfileForm = {
   symbol: string
@@ -291,6 +292,29 @@ async function syncUniverse() {
     await refresh()
   } catch (error) {
     ElMessage.error(errorMessage(error, '同步失败'))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function syncProfiles() {
+  const symbols = filteredAssets.value.map((item) => item.symbol).slice(0, 100)
+  if (!symbols.length) {
+    ElMessage.warning('当前筛选结果为空，无法补全资料')
+    return
+  }
+  actionLoading.value = true
+  try {
+    const result = await syncAssetProfiles({
+      source: 'akshare',
+      symbols,
+      limit: symbols.length,
+      preserve_existing: true,
+    })
+    ElMessage.success(`已补全 ${result.updated} 只 ETF，跳过 ${result.skipped} 只，失败 ${result.failed} 只`)
+    await refresh()
+  } catch (error) {
+    ElMessage.error(errorMessage(error, '资料补全失败'))
   } finally {
     actionLoading.value = false
   }

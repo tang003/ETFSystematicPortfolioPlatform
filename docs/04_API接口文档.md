@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.39.0-agent-analysis-history`
+当前版本：`v0.42.0-etf-profile-autofill`
 
 默认 API 前缀：`/api`
 
@@ -74,6 +74,47 @@
 
 - 当前只支持 `akshare`。
 - 同步进来的 ETF 默认不启用研究。
+
+### POST /api/assets/sync-profiles
+
+按 ETF 代码批量补全主资料。
+
+请求：
+
+```json
+{
+  "source": "akshare",
+  "symbols": ["510300", "159915"],
+  "limit": 100,
+  "preserve_existing": true
+}
+```
+
+返回：
+
+```json
+{
+  "source": "akshare",
+  "total": 2,
+  "updated": 2,
+  "skipped": 0,
+  "failed": 0,
+  "results": [
+    {
+      "symbol": "510300",
+      "status": "updated",
+      "updated_fields": ["fund_company", "tracking_index"],
+      "message": "已补全 ETF 主资料"
+    }
+  ]
+}
+```
+
+说明：
+
+- 当前只支持 `akshare`，不消耗 Tushare token。
+- `preserve_existing=true` 时只补空字段，不覆盖手工维护的数据。
+- 不传 `symbols` 时按 ETF 池顺序补全，受 `limit` 限制。
 
 ### PATCH /api/assets/{symbol}
 

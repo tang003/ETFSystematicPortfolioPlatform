@@ -86,6 +86,20 @@ export interface AssetUniverseSyncResponse {
   inserted_or_updated: number
 }
 
+export interface AssetProfileSyncResponse {
+  source: string
+  total: number
+  updated: number
+  skipped: number
+  failed: number
+  results: Array<{
+    symbol: string
+    status: string
+    updated_fields: string[]
+    message?: string | null
+  }>
+}
+
 export interface EtfCompareMetric {
   symbol: string
   name: string | null
@@ -486,6 +500,8 @@ export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
 export const syncAssetUniverse = async (payload: { source?: string; limit?: number }) =>
   (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload)).data
+export const syncAssetProfiles = async (payload: { source?: string; symbols?: string[]; limit?: number; preserve_existing?: boolean }) =>
+  (await api.post<AssetProfileSyncResponse>('/api/assets/sync-profiles', payload)).data
 export const updateAsset = async (symbol: string, payload: {
   enabled?: boolean
   risk_level?: number
