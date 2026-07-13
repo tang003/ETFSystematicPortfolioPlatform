@@ -89,7 +89,7 @@
       <div class="panel-header">
         <div>
           <h2>ETF 主数据</h2>
-          <p class="section-note">筛选后 {{ filteredAssets.length }} 只；资料完整度越高，ETF 对比、AI 投研和报告质量越好。</p>
+          <p class="section-note">筛选后 {{ filteredAssets.length }} 只，当前显示 {{ displayedAssets.length }} 只；资料完整度越高，ETF 对比、AI 投研和报告质量越好。</p>
         </div>
         <div class="task-tags">
           <el-tag type="success">启用 {{ enabledAssets.length }}</el-tag>
@@ -134,7 +134,7 @@
         </el-form-item>
       </el-form>
 
-      <el-table :data="filteredAssets" height="650" empty-text="暂无 ETF，先导入示例池或同步 ETF 基础池">
+      <el-table :data="displayedAssets" height="650" empty-text="暂无 ETF，先导入示例池或同步 ETF 基础池">
         <el-table-column prop="symbol" label="代码" width="100" fixed />
         <el-table-column prop="name" label="名称" min-width="150" fixed />
         <el-table-column label="资料" width="95">
@@ -295,14 +295,16 @@ async function refresh() {
     ])
     assets.value = assetRows
     syncLogs.value = logRows
-    await refreshTradabilityScores()
   } finally {
     loading.value = false
   }
+  void refreshTradabilityScores()
 }
 
 async function refreshTradabilityScores() {
-  const symbols = assets.value.map((item) => item.symbol)
+  const preferred = assets.value.filter((item) => item.enabled).map((item) => item.symbol)
+  const visible = filteredAssets.value.map((item) => item.symbol)
+  const symbols = Array.from(new Set([...preferred, ...visible])).slice(0, 100)
   if (!symbols.length) {
     tradabilityMetrics.value = {}
     return
@@ -510,6 +512,8 @@ const filteredAssets = computed(() =>
     return matchesKeyword && matchesEnabled && matchesClass && matchesRegion && matchesRisk && matchesTradability && matchesProfile
   }),
 )
+
+const displayedAssets = computed(() => filteredAssets.value.slice(0, 300))
 
 function profileScore(asset: Asset) {
   const fields = [
