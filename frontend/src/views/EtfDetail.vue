@@ -8,6 +8,7 @@
         </div>
         <div class="header-actions">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
+          <el-button :loading="syncLoading" @click="syncCurrentEtf">同步本 ETF 行情</el-button>
           <el-button type="primary" :loading="loading" @click="refresh">刷新</el-button>
         </div>
       </div>
@@ -24,7 +25,8 @@
         <h2>净值与回撤</h2>
         <el-tag :type="scoreTag(detail?.metric.tradability_score ?? null)" size="small">{{ tradabilityText }}</el-tag>
       </div>
-      <div ref="chartRef" class="chart"></div>
+      <el-empty v-if="detail && !detail.curve.length" description="当前日期范围内没有本地清洗行情，请先同步本 ETF 行情" />
+      <div v-show="detail?.curve.length" ref="chartRef" class="chart"></div>
     </section>
 
     <section class="panel span-4">
@@ -76,12 +78,13 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { fetchEtfDetail, type EtfDetailResponse } from '../api/client'
+import { fetchEtfDetail, syncMarket, type EtfDetailResponse } from '../api/client'
 
 const route = useRoute()
 const symbol = computed(() => String(route.params.symbol || ''))
 const detail = ref<EtfDetailResponse | null>(null)
 const loading = ref(false)
+const syncLoading = ref(false)
 const chartRef = ref<HTMLElement>()
 const today = new Date().toISOString().slice(0, 10)
 const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -121,8 +124,32 @@ async function refresh() {
   }
 }
 
+async function syncCurrentEtf() {
+  if (!symbol.value) return
+  syncLoading.value = true
+  try {
+    await syncMarket({
+      symbols: [symbol.value],
+      sync_scope: 'custom',
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      source: 'akshare',
+      incremental: true,
+      max_symbols: 1,
+      clean_after_sync: true,
+      request_interval_seconds: 0,
+    })
+    ElMessage.success('已同步本 ETF 行情')
+    await refresh()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '同步本 ETF 行情失败')
+  } finally {
+    syncLoading.value = false
+  }
+}
+
 function renderChart() {
-  if (!chartRef.value || !detail.value) return
+  if (!chartRef.value || !detail.value?.curve.length) return
   const chart = echarts.init(chartRef.value)
   chart.setOption({
     tooltip: { trigger: 'axis' },
