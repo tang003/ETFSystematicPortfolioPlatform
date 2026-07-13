@@ -35,6 +35,17 @@ export interface Asset {
   enabled: boolean
   risk_level: number
   is_cross_border: boolean
+  is_leveraged?: boolean
+  is_inverse?: boolean
+  fund_company?: string | null
+  tracking_index?: string | null
+  listing_date?: string | null
+  fund_size?: string | null
+  management_fee?: string | null
+  custody_fee?: string | null
+  expense_ratio?: string | null
+  tracking_error?: string | null
+  latest_premium_rate?: string | null
   description?: string | null
 }
 
@@ -50,6 +61,15 @@ export interface AssetUpsertItem {
   is_inverse?: boolean
   enabled?: boolean
   risk_level?: number
+  fund_company?: string | null
+  tracking_index?: string | null
+  listing_date?: string | null
+  fund_size?: number | null
+  management_fee?: number | null
+  custody_fee?: number | null
+  expense_ratio?: number | null
+  tracking_error?: number | null
+  latest_premium_rate?: number | null
   description?: string | null
 }
 
@@ -466,7 +486,20 @@ export const batchUpsertAssets = async (payload: { items: AssetUpsertItem[] }) =
   (await api.post<{ total: number; inserted_or_updated: number }>('/api/assets/batch-upsert', payload)).data
 export const syncAssetUniverse = async (payload: { source?: string; limit?: number }) =>
   (await api.post<AssetUniverseSyncResponse>('/api/assets/sync-universe', payload)).data
-export const updateAsset = async (symbol: string, payload: { enabled?: boolean; risk_level?: number; description?: string | null }) =>
+export const updateAsset = async (symbol: string, payload: {
+  enabled?: boolean
+  risk_level?: number
+  fund_company?: string | null
+  tracking_index?: string | null
+  listing_date?: string | null
+  fund_size?: number | null
+  management_fee?: number | null
+  custody_fee?: number | null
+  expense_ratio?: number | null
+  tracking_error?: number | null
+  latest_premium_rate?: number | null
+  description?: string | null
+}) =>
   (await api.patch<Asset>(`/api/assets/${symbol}`, payload)).data
 export const compareEtfs = async (payload: { symbols: string[]; start_date?: string; end_date?: string }) =>
   (await api.post<EtfCompareResponse>('/api/etf-compare', payload)).data

@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,6 +16,15 @@ class AssetRead(BaseModel):
     is_inverse: bool
     enabled: bool
     risk_level: int
+    fund_company: str | None = None
+    tracking_index: str | None = None
+    listing_date: date | None = None
+    fund_size: Decimal | None = None
+    management_fee: Decimal | None = None
+    custody_fee: Decimal | None = None
+    expense_ratio: Decimal | None = None
+    tracking_error: Decimal | None = None
+    latest_premium_rate: Decimal | None = None
     description: str | None
     created_at: datetime
     updated_at: datetime
@@ -34,6 +44,15 @@ class AssetUpsertItem(BaseModel):
     is_inverse: bool = False
     enabled: bool = True
     risk_level: int = Field(default=3, ge=1, le=5)
+    fund_company: str | None = None
+    tracking_index: str | None = None
+    listing_date: date | None = None
+    fund_size: Decimal | None = None
+    management_fee: Decimal | None = None
+    custody_fee: Decimal | None = None
+    expense_ratio: Decimal | None = None
+    tracking_error: Decimal | None = None
+    latest_premium_rate: Decimal | None = None
     description: str | None = None
 
 
@@ -60,4 +79,13 @@ class AssetUniverseSyncResponse(BaseModel):
 class AssetUpdateRequest(BaseModel):
     enabled: bool | None = None
     risk_level: int | None = Field(default=None, ge=1, le=5)
+    fund_company: str | None = None
+    tracking_index: str | None = None
+    listing_date: date | None = None
+    fund_size: Decimal | None = None
+    management_fee: Decimal | None = None
+    custody_fee: Decimal | None = None
+    expense_ratio: Decimal | None = None
+    tracking_error: Decimal | None = None
+    latest_premium_rate: Decimal | None = None
     description: str | None = None

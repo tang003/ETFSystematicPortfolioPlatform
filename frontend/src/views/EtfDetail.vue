@@ -4,7 +4,9 @@
       <div class="panel-header">
         <div>
           <h2>{{ detail?.asset?.name || symbol }} 详情</h2>
-          <p class="section-note">{{ symbol }} · {{ assetClassText(detail?.asset?.asset_class) }} · {{ regionText(detail?.asset?.asset_region) }}</p>
+          <p class="section-note">
+            {{ symbol }} · {{ assetClassText(detail?.asset?.asset_class) }} · {{ regionText(detail?.asset?.asset_region) }}
+          </p>
         </div>
         <div class="header-actions">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
@@ -51,23 +53,38 @@
     </section>
 
     <section class="panel span-5">
+      <h2>ETF 主资料</h2>
+      <el-descriptions :column="1" border size="small">
+        <el-descriptions-item label="基金公司">{{ detail?.asset?.fund_company || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="跟踪指数">{{ detail?.asset?.tracking_index || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="上市日期">{{ detail?.asset?.listing_date || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="基金规模">{{ fundSizeText(detail?.asset?.fund_size) }}</el-descriptions-item>
+        <el-descriptions-item label="管理费">{{ feeText(detail?.asset?.management_fee) }}</el-descriptions-item>
+        <el-descriptions-item label="托管费">{{ feeText(detail?.asset?.custody_fee) }}</el-descriptions-item>
+        <el-descriptions-item label="综合费率">{{ feeText(detail?.asset?.expense_ratio ?? totalFee) }}</el-descriptions-item>
+        <el-descriptions-item label="跟踪误差">{{ percent(detail?.asset?.tracking_error) }}</el-descriptions-item>
+        <el-descriptions-item label="最新溢价率">{{ percent(detail?.asset?.latest_premium_rate) }}</el-descriptions-item>
+      </el-descriptions>
+    </section>
+
+    <section class="panel span-7">
       <h2>最新因子</h2>
-      <el-table :data="factorRows" height="300">
+      <el-table :data="factorRows" height="320">
         <el-table-column prop="name" label="指标" min-width="120" />
         <el-table-column prop="value" label="数值" min-width="120" />
       </el-table>
     </section>
 
-    <section class="panel span-7">
+    <section class="panel span-12">
       <h2>最近行情</h2>
       <el-table :data="detail?.recent_bars || []" height="300">
         <el-table-column prop="trade_date" label="日期" width="120" />
         <el-table-column prop="open" label="开盘" width="100" />
         <el-table-column prop="close" label="收盘" width="100" />
-        <el-table-column label="成交额" width="130">
+        <el-table-column label="成交额" width="140">
           <template #default="{ row }">{{ money(row.amount) }}</template>
         </el-table-column>
-        <el-table-column prop="data_status" label="状态" width="100" />
+        <el-table-column prop="data_status" label="状态" width="120" />
       </el-table>
     </section>
   </div>
@@ -95,6 +112,14 @@ onMounted(refresh)
 const tradabilityText = computed(() => {
   if (!detail.value) return '-'
   return `${detail.value.metric.tradability_score} ${detail.value.metric.tradability_level}`
+})
+
+const totalFee = computed(() => {
+  const asset = detail.value?.asset
+  if (!asset) return null
+  const management = asset.management_fee ? Number(asset.management_fee) : 0
+  const custody = asset.custody_fee ? Number(asset.custody_fee) : 0
+  return management || custody ? management + custody : null
 })
 
 const factorRows = computed(() => {
@@ -167,9 +192,14 @@ function renderChart() {
   })
 }
 
-function percent(value: string | null | undefined) {
+function percent(value: string | number | null | undefined) {
   if (value == null) return '-'
   return `${(Number(value) * 100).toFixed(2)}%`
+}
+
+function feeText(value: string | number | null | undefined) {
+  if (value == null) return '-'
+  return `${(Number(value) * 100).toFixed(3)}%`
 }
 
 function money(value: string | null | undefined) {
@@ -178,6 +208,11 @@ function money(value: string | null | undefined) {
   if (amount >= 100000000) return `${(amount / 100000000).toFixed(2)} 亿`
   if (amount >= 10000) return `${(amount / 10000).toFixed(2)} 万`
   return amount.toFixed(2)
+}
+
+function fundSizeText(value: string | null | undefined) {
+  if (!value) return '-'
+  return `${(Number(value) / 100000000).toFixed(2)} 亿`
 }
 
 function scoreTag(score: number | null) {
@@ -194,7 +229,7 @@ function assetClassText(value: string | null | undefined) {
 }
 
 function regionText(value: string | null | undefined) {
-  const map: Record<string, string> = { CN: '中国内地', HK: '港股', US: '美国', GLOBAL: '全球', CN_HK_US: '中概/港美' }
+  const map: Record<string, string> = { CN: '中国内地', HK: '港股', US: '美国', GLOBAL: '全球', CN_HK_US: '中概/港美', JP: '日本', DE: '德国' }
   return map[value || ''] || value || '-'
 }
 </script>

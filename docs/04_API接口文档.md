@@ -79,6 +79,35 @@
 
 更新单只 ETF 的启用状态、风险等级或说明。
 
+可更新字段包括：
+
+- `enabled`
+- `risk_level`
+- `fund_company`
+- `tracking_index`
+- `listing_date`
+- `fund_size`
+- `management_fee`
+- `custody_fee`
+- `expense_ratio`
+- `tracking_error`
+- `latest_premium_rate`
+- `description`
+
+请求示例：
+
+```json
+{
+  "fund_company": "华泰柏瑞基金",
+  "tracking_index": "沪深300",
+  "fund_size": 89000000000,
+  "management_fee": 0.005,
+  "custody_fee": 0.001,
+  "expense_ratio": 0.006,
+  "description": "A股核心宽基 ETF"
+}
+```
+
 ## 行情与数据质量
 
 ### GET /api/market/sync-plan

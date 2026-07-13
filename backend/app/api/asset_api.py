@@ -58,6 +58,7 @@ def patch_asset(
         enabled=request.enabled,
         risk_level=request.risk_level,
         description=request.description,
+        profile=request,
     )
     if asset is None:
         raise HTTPException(status_code=404, detail="Asset not found")

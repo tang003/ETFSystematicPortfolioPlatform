@@ -6,7 +6,43 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.models.asset import AssetMaster
-from app.schemas.asset_schema import AssetUpsertItem
+from app.schemas.asset_schema import AssetUpdateRequest, AssetUpsertItem
+
+UPSERT_FIELDS = [
+    "name",
+    "exchange",
+    "asset_class",
+    "asset_region",
+    "currency",
+    "is_cross_border",
+    "is_leveraged",
+    "is_inverse",
+    "enabled",
+    "risk_level",
+    "fund_company",
+    "tracking_index",
+    "listing_date",
+    "fund_size",
+    "management_fee",
+    "custody_fee",
+    "expense_ratio",
+    "tracking_error",
+    "latest_premium_rate",
+    "description",
+]
+
+MARKET_SYNC_PRESERVE_FIELDS = {
+    "enabled": AssetMaster.enabled,
+    "fund_company": AssetMaster.fund_company,
+    "tracking_index": AssetMaster.tracking_index,
+    "listing_date": AssetMaster.listing_date,
+    "fund_size": AssetMaster.fund_size,
+    "management_fee": AssetMaster.management_fee,
+    "custody_fee": AssetMaster.custody_fee,
+    "expense_ratio": AssetMaster.expense_ratio,
+    "tracking_error": AssetMaster.tracking_error,
+    "latest_premium_rate": AssetMaster.latest_premium_rate,
+}
 
 
 def list_assets(db: Session, enabled: bool | None = None) -> list[AssetMaster]:
@@ -24,19 +60,7 @@ def batch_upsert_assets(db: Session, items: list[AssetUpsertItem]) -> int:
     db.execute(
         statement.on_conflict_do_update(
             index_elements=["symbol"],
-            set_={
-                "name": statement.excluded.name,
-                "exchange": statement.excluded.exchange,
-                "asset_class": statement.excluded.asset_class,
-                "asset_region": statement.excluded.asset_region,
-                "currency": statement.excluded.currency,
-                "is_cross_border": statement.excluded.is_cross_border,
-                "is_leveraged": statement.excluded.is_leveraged,
-                "is_inverse": statement.excluded.is_inverse,
-                "enabled": statement.excluded.enabled,
-                "risk_level": AssetMaster.risk_level,
-                "description": AssetMaster.description,
-            },
+            set_={field: getattr(statement.excluded, field) for field in UPSERT_FIELDS},
         )
     )
     db.commit()
@@ -91,22 +115,12 @@ def upsert_market_assets_preserve_enabled(db: Session, items: list[AssetUpsertIt
         return 0
     payload = [item.model_dump() for item in items]
     statement = insert(AssetMaster).values(payload)
+    update_fields = {field: getattr(statement.excluded, field) for field in UPSERT_FIELDS}
+    update_fields.update(MARKET_SYNC_PRESERVE_FIELDS)
     db.execute(
         statement.on_conflict_do_update(
             index_elements=["symbol"],
-            set_={
-                "name": statement.excluded.name,
-                "exchange": statement.excluded.exchange,
-                "asset_class": statement.excluded.asset_class,
-                "asset_region": statement.excluded.asset_region,
-                "currency": statement.excluded.currency,
-                "is_cross_border": statement.excluded.is_cross_border,
-                "is_leveraged": statement.excluded.is_leveraged,
-                "is_inverse": statement.excluded.is_inverse,
-                "enabled": AssetMaster.enabled,
-                "risk_level": statement.excluded.risk_level,
-                "description": statement.excluded.description,
-            },
+            set_=update_fields,
         )
     )
     db.commit()
@@ -148,7 +162,7 @@ def classify_etf_asset(symbol: str, name: str) -> dict[str, Any]:
         keyword in normalized_name
         for keyword in ["QDII", "恒生", "港股", "中概", "纳指", "纳斯达克", "标普", "德国", "日经", "印度", "法国", "海外", "美国", "全球"]
     )
-    if any(keyword in normalized_name for keyword in ["货币", "现金", "添富快线", "日利"]):
+    if any(keyword in normalized_name for keyword in ["货币", "现金", "添富快线", "日利", "保证金"]):
         asset_class = "cash"
         region = "CN"
         risk_level = 1
@@ -156,7 +170,7 @@ def classify_etf_asset(symbol: str, name: str) -> dict[str, Any]:
         asset_class = "bond"
         region = "CN"
         risk_level = 2
-    elif any(keyword in normalized_name for keyword in ["黄金", "商品", "有色", "能源", "豆粕"]):
+    elif any(keyword in normalized_name for keyword in ["黄金", "商品", "有色", "能源", "豆粕", "原油"]):
         asset_class = "gold" if "黄金" in normalized_name else "commodity"
         region = "CN"
         risk_level = 3
@@ -179,7 +193,7 @@ def classify_etf_asset(symbol: str, name: str) -> dict[str, Any]:
 
 
 def infer_cross_border_region(name: str) -> str:
-    if any(keyword in name for keyword in ["中概", "中国互联网", "中证海外中国"]):
+    if any(keyword in name for keyword in ["中概", "中国互联网", "海外中国"]):
         return "CN_HK_US"
     if any(keyword in name for keyword in ["恒生", "港股", "香港", "H股"]):
         return "HK"
@@ -187,7 +201,7 @@ def infer_cross_border_region(name: str) -> str:
         return "US"
     if any(keyword in name for keyword in ["日经", "日本"]):
         return "JP"
-    if any(keyword in name for keyword in ["德国"]):
+    if "德国" in name:
         return "DE"
     return "GLOBAL"
 
@@ -199,6 +213,7 @@ def update_asset(
     enabled: bool | None = None,
     risk_level: int | None = None,
     description: str | None = None,
+    profile: AssetUpdateRequest | None = None,
 ) -> AssetMaster | None:
     asset = db.scalar(select(AssetMaster).where(AssetMaster.symbol == symbol))
     if asset is None:
@@ -209,6 +224,11 @@ def update_asset(
         asset.risk_level = risk_level
     if description is not None:
         asset.description = description
+    if profile is not None:
+        for field, value in profile.model_dump(exclude_unset=True).items():
+            if field in {"enabled", "risk_level", "description"}:
+                continue
+            setattr(asset, field, value)
     db.commit()
     db.refresh(asset)
     return asset
