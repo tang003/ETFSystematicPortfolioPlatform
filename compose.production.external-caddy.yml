@@ -10,6 +10,8 @@ services:
       - postgres_data_prod:/var/lib/postgresql/data
       - ./sql/init_schema.sql:/docker-entrypoint-initdb.d/01_init_schema.sql:ro
       - ./sql/seed_assets.sql:/docker-entrypoint-initdb.d/02_seed_assets.sql:ro
+    ports:
+      - "${POSTGRES_BIND_ADDRESS:-127.0.0.1}:${POSTGRES_HOST_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
