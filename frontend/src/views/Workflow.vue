@@ -49,11 +49,15 @@
         <el-form-item label="严格门禁">
           <el-switch v-model="strictDataValidation" />
         </el-form-item>
-        <el-form-item label="最少样本">
-          <el-input-number v-model="minimumHistoryBars" :min="20" :max="1000" :step="20" />
-        </el-form-item>
-        <el-form-item label="策略代码">
-          <el-input v-model="strategyCode" />
+        <el-form-item label="策略">
+          <el-select v-model="strategyCode" placeholder="选择内置策略">
+            <el-option
+              v-for="item in enabledStrategies"
+              :key="item.strategy_code"
+              :label="`${item.strategy_name} (${item.strategy_code})`"
+              :value="item.strategy_code"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="组合市值">
           <el-input-number v-model="portfolioValue" :min="1000" :step="10000" />
@@ -122,7 +126,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { cancelWorkflowTask, fetchWorkflowTask, fetchWorkflowTasks, retryFailedWorkflowTask, startWorkflowTask, type WorkflowTask, type WorkflowTaskStep } from '../api/client'
+import {
+  cancelWorkflowTask,
+  fetchStrategies,
+  fetchWorkflowTask,
+  fetchWorkflowTasks,
+  retryFailedWorkflowTask,
+  startWorkflowTask,
+  type StrategyConfig,
+  type WorkflowTask,
+  type WorkflowTaskStep,
+} from '../api/client'
 
 type StepStatus = 'wait' | 'process' | 'finish' | 'error' | 'success'
 
@@ -156,8 +170,8 @@ const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
 const incrementalSync = ref(true)
 const strictDataValidation = ref(true)
-const minimumHistoryBars = ref(200)
 const strategyCode = ref('core_etf_rotation')
+const strategies = ref<StrategyConfig[]>([])
 const portfolioValue = ref(100000)
 const shouldGenerateReport = ref(true)
 const task = ref<WorkflowTask>()
@@ -174,7 +188,12 @@ const datePresetOptions = [
   { label: '自定义', value: 'custom' },
 ]
 
-onMounted(loadTasks)
+onMounted(async () => {
+  await Promise.all([loadTasks(), loadStrategies()])
+})
+
+const minimumHistoryBars = computed(() => autoMinimumHistoryBars(datePreset.value, dateRange.value))
+const enabledStrategies = computed(() => strategies.value.filter((item) => item.enabled))
 
 const displaySteps = computed<DisplayStep[]>(() => {
   if (!task.value?.steps.length) return defaultSteps()
@@ -218,7 +237,7 @@ const workflowHintText = computed(() => {
   const scopeText = syncScope.value === 'custom' ? `自定义代码 ${splitSymbols()?.join('、') || '未填写'}` : scopeLabel(syncScope.value)
   const dateText = datePreset.value === 'custom' ? `${dateRange.value[0]} 至 ${dateRange.value[1]}` : datePresetLabel(datePreset.value)
   return incrementalSync.value
-    ? `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；已开启增量同步和数据门禁。`
+    ? `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；样本门禁自动设置为 ${minimumHistoryBars.value} 根日线。`
     : `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；全量模式建议缩短周期。`
 })
 
@@ -272,6 +291,24 @@ async function refreshTask() {
 
 async function loadTasks() {
   tasks.value = await fetchWorkflowTasks()
+}
+
+async function loadStrategies() {
+  try {
+    strategies.value = await fetchStrategies()
+    if (!strategies.value.some((item) => item.strategy_code === strategyCode.value && item.enabled)) {
+      strategyCode.value = enabledStrategies.value[0]?.strategy_code || 'core_etf_rotation'
+    }
+  } catch {
+    strategies.value = [{
+      strategy_code: 'core_etf_rotation',
+      strategy_name: '核心 ETF 轮动策略',
+      version: 'local',
+      rebalance_frequency: 'monthly',
+      config: {},
+      enabled: true,
+    }]
+  }
 }
 
 async function selectTask(row: WorkflowTask | undefined) {
@@ -406,6 +443,18 @@ function datePresetLabel(value: string) {
     custom: '自定义日期',
   }
   return map[value] || value
+}
+
+function autoMinimumHistoryBars(preset: string, customRange: [string, string]) {
+  if (preset === '6m') return 60
+  if (preset === '1y') return 120
+  if (preset === '3y') return 200
+  if (preset === '5y') return 250
+  if (preset === 'inception') return 200
+  const [start, end] = customRange
+  const spanDays = Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000))
+  const estimatedTradeDays = Math.floor(spanDays * 0.68)
+  return Math.max(20, Math.min(250, Math.floor(estimatedTradeDays * 0.6)))
 }
 
 onBeforeUnmount(stopPolling)

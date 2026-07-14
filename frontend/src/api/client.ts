@@ -486,6 +486,15 @@ export interface BacktestRun {
   status: string
 }
 
+export interface StrategyConfig {
+  strategy_code: string
+  strategy_name: string
+  version: string
+  rebalance_frequency: string
+  config: Record<string, unknown>
+  enabled: boolean
+}
+
 export interface BacktestCurvePoint {
   trade_date: string
   total_equity: string | null
@@ -688,6 +697,7 @@ export const calculateFactors = async (payload: { symbols?: string[]; start_date
   (await api.post<RunSummary>('/api/factors/calculate', payload)).data
 export const researchFactors = async (payload: { start_date?: string; end_date?: string; forward_days: number; quantiles: number }) =>
   (await api.post<FactorResearchResult>('/api/factors/research', payload)).data
+export const fetchStrategies = async () => (await api.get<StrategyConfig[]>('/api/strategies')).data
 export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
 export const checkRisk = async (payload: { run_id: number }) =>
