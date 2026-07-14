@@ -496,6 +496,48 @@
 - `deepseek` 的数据库配置会覆盖 `DEEPSEEK_API_KEY` 和 `DEEPSEEK_BASE_URL`。
 - 未适配的数据源应保持 `adapter_status=metadata_only` 或 `planned`。
 
+## 新闻资讯
+
+### POST /api/news/sync
+
+同步财经新闻到本地数据库。
+
+请求：
+
+```json
+{
+  "source": "juhe_finance_news",
+  "num": 50,
+  "page": 1
+}
+```
+
+说明：
+
+- 当前新闻适配器支持 `juhe_finance_news`。
+- `num` 最大 50。
+- 接口会按 `source + external_id` 去重。
+- 新闻源 Key 从数据源管理的 `juhe_finance_news.secret_value` 读取，不写入代码。
+
+### GET /api/news
+
+查询本地新闻列表。
+
+参数：
+
+- `q`：按标题或摘要搜索。
+- `symbol`：只看关联某只 ETF 的新闻。
+- `limit`：返回数量，默认 50。
+
+### GET /api/news/related/{symbol}
+
+查询某只 ETF 的相关新闻。
+
+说明：
+
+- 第一版关联逻辑基于标题关键词、ETF 代码、ETF 名称和跟踪指数。
+- 后续可以加入 AI 摘要、情绪分数和事件影响等级。
+
 ### GET /api/portfolio/target
 
 查询最新目标组合。

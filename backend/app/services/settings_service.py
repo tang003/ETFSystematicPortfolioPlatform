@@ -34,6 +34,23 @@ ENV_PROVIDER_DEFAULTS = {
         "used_by": ["AI 投研委员会", "ETF 详情解释", "报告增强"],
         "notes": ["AI 结论只作为投研解释层，不直接代替量化信号和风控门禁。"],
     },
+    "juhe_finance_news": {
+        "provider_name": "聚合数据财经新闻",
+        "provider_type": "news",
+        "base_url_attr": None,
+        "secret_attr": None,
+        "request_interval_attr": None,
+        "supported_usages": ["news"],
+        "adapter_status": "runtime_supported",
+        "used_by": ["新闻资讯", "ETF 关键词关联", "AI 投研事件输入"],
+        "notes": [
+            "财经新闻源，第一版用于低频同步和 ETF 关键词关联。",
+            "免费/低配额度通常较低，建议后端批量同步，不让前端直接请求外部接口。",
+        ],
+        "base_url": "https://apis.juhe.cn/fapigx/caijing/query",
+        "request_interval_seconds": 7200,
+        "quota_per_day": 50,
+    },
 }
 
 
@@ -115,14 +132,19 @@ def ensure_default_data_sources(db: Session) -> None:
             provider_name=defaults["provider_name"],
             provider_type=defaults["provider_type"],
             enabled=True,
-            base_url=getattr(settings, defaults["base_url_attr"]),
+            base_url=(
+                getattr(settings, defaults["base_url_attr"])
+                if defaults.get("base_url_attr")
+                else defaults.get("base_url")
+            ),
             auth_type="bearer" if provider_code == "deepseek" else "token",
             secret_value=None,
             request_interval_seconds=(
                 getattr(settings, defaults["request_interval_attr"])
                 if defaults.get("request_interval_attr")
-                else None
+                else defaults.get("request_interval_seconds")
             ),
+            quota_per_day=defaults.get("quota_per_day"),
             supported_usages=defaults["supported_usages"],
             adapter_status=defaults["adapter_status"],
             notes=defaults["notes"],
@@ -136,8 +158,12 @@ def ensure_default_data_sources(db: Session) -> None:
 def build_provider_read(row: DataSourceConfig) -> DataSourceProviderRead:
     settings = get_settings()
     defaults = ENV_PROVIDER_DEFAULTS.get(row.provider_code, {})
-    env_secret = getattr(settings, defaults.get("secret_attr", ""), None) if defaults else None
-    env_base_url = getattr(settings, defaults.get("base_url_attr", ""), None) if defaults else None
+    env_secret = getattr(settings, defaults.get("secret_attr", ""), None) if defaults.get("secret_attr") else None
+    env_base_url = (
+        getattr(settings, defaults.get("base_url_attr"), None)
+        if defaults.get("base_url_attr")
+        else defaults.get("base_url")
+    )
     env_interval = (
         getattr(settings, defaults.get("request_interval_attr"), None)
         if defaults.get("request_interval_attr")
@@ -219,4 +245,3 @@ def usage_labels(usages: list[str], fallback: list[str]) -> list[str]:
         "report_enhancement": "报告增强",
     }
     return [labels.get(item, item) for item in usages]
-

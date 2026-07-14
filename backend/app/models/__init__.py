@@ -2,6 +2,7 @@ from app.models.agent_analysis import AgentAnalysisLog
 from app.models.asset import AssetMaster
 from app.models.asset_sync_log import AssetSyncLog
 from app.models.market_data import EtfNavPremium, MarketDataClean, MarketDataRaw, TradingCalendar
+from app.models.news import NewsArticle
 from app.models.data_quality import DataQualityLog
 from app.models.factor import FactorDaily
 from app.models.strategy import AlphaSignal, StrategyConfig, StrategyRun
@@ -32,6 +33,7 @@ __all__ = [
     "InvestmentPlanSuggestion",
     "MarketDataClean",
     "MarketDataRaw",
+    "NewsArticle",
     "PerformanceAttribution",
     "PortfolioPosition",
     "RebalanceOrder",

@@ -526,6 +526,25 @@ export interface DataSourceSettings {
   providers: DataSourceProvider[]
 }
 
+export interface NewsArticle {
+  id: number
+  source: string
+  external_id: string
+  title: string
+  source_name: string | null
+  url: string | null
+  image_url: string | null
+  publish_time: string | null
+  summary: string | null
+  keywords: string[]
+  related_symbols: string[]
+  related_asset_class: string[]
+  related_region: string[]
+  sentiment_score: number | null
+  impact_level: string | null
+  created_at: string
+}
+
 export interface BacktestCurvePoint {
   trade_date: string
   total_equity: string | null
@@ -777,6 +796,12 @@ export const updateDataSource = async (providerCode: string, payload: {
   adapter_status?: string
   notes?: string[]
 }) => (await api.patch<DataSourceProvider>(`/api/settings/data-sources/${providerCode}`, payload)).data
+export const fetchNews = async (params?: { symbol?: string; q?: string; limit?: number }) =>
+  (await api.get<NewsArticle[]>('/api/news', { params })).data
+export const fetchRelatedNews = async (symbol: string, params?: { limit?: number }) =>
+  (await api.get<NewsArticle[]>(`/api/news/related/${symbol}`, { params })).data
+export const syncNews = async (payload: { source?: string; num?: number; page?: number }) =>
+  (await api.post<RunSummary>('/api/news/sync', payload)).data
 export const checkRisk = async (payload: { run_id: number }) =>
   (await api.post<RunSummary>('/api/risk/check', payload)).data
 export const generateRebalanceOrders = async (payload: { run_id: number; portfolio_value?: number }) =>

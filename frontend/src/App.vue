@@ -18,6 +18,7 @@
         <el-menu-item index="/etf-screener"><el-icon><Filter /></el-icon><span>ETF 筛选</span></el-menu-item>
         <el-menu-item index="/etf-compare"><el-icon><DataLine /></el-icon><span>ETF 对比</span></el-menu-item>
         <el-menu-item index="/agent-analysis"><el-icon><MagicStick /></el-icon><span>AI 投研</span></el-menu-item>
+        <el-menu-item index="/news"><el-icon><Document /></el-icon><span>新闻资讯</span></el-menu-item>
         <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
         <el-menu-item index="/data-sources"><el-icon><Setting /></el-icon><span>数据源管理</span></el-menu-item>
         <el-menu-item index="/system-status"><el-icon><Setting /></el-icon><span>系统状态</span></el-menu-item>

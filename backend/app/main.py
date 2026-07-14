@@ -13,6 +13,7 @@ from app.api.etf_detail_api import router as etf_detail_router
 from app.api.factor_api import router as factor_router
 from app.api.health_api import router as health_router
 from app.api.market_api import router as market_router
+from app.api.news_api import router as news_router
 from app.api.portfolio_api import router as portfolio_router
 from app.api.rebalance_api import router as rebalance_router
 from app.api.report_api import router as report_router
@@ -44,6 +45,7 @@ def create_app() -> FastAPI:
     app.include_router(asset_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(calendar_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(market_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(news_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(data_quality_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(etf_compare_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(etf_detail_router, prefix=settings.api_prefix, dependencies=protected)
