@@ -178,6 +178,27 @@ def test_build_asset_item_from_tushare_row_maps_fees_and_profile() -> None:
     assert item.expense_ratio == Decimal("0.0060")
 
 
+def test_tushare_fee_boundary_half_basis_percent_is_converted() -> None:
+    item = asset_service.build_tushare_profile_patch(
+        "159338",
+        "国泰中证A500ETF",
+        {
+            "ts_code": "159338.SZ",
+            "name": "国泰中证A500ETF",
+            "management": "国泰基金管理有限公司",
+            "benchmark": "中证A500指数收益率×100%",
+            "m_fee": "0.15",
+            "c_fee": "0.05",
+            "list_date": "20241015",
+        },
+    )
+
+    assert item["tracking_index"] == "中证A500"
+    assert item["management_fee"] == Decimal("0.0015")
+    assert item["custody_fee"] == Decimal("0.0005")
+    assert item["expense_ratio"] == Decimal("0.0020")
+
+
 def test_build_asset_item_from_tushare_row_truncates_long_profile_fields() -> None:
     item = asset_service.build_asset_item_from_tushare_row(
         {

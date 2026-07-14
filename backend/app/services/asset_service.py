@@ -765,7 +765,7 @@ def to_tushare_fee_decimal(value: Any) -> Decimal | None:
     ratio = to_ratio_decimal(value)
     if ratio is None:
         return None
-    return ratio / Decimal("100") if abs(ratio) > Decimal("0.05") else ratio
+    return ratio / Decimal("100") if abs(ratio) >= Decimal("0.05") else ratio
 
 
 def normalize_symbol(value: Any) -> str | None:
