@@ -193,10 +193,25 @@ export interface EtfAlternativeCandidate {
   reasons: string[]
 }
 
+export interface EtfDecisionSummary {
+  action: string
+  score: number
+  level: string
+  confidence: string
+  position_hint: string
+  entry_plan: string
+  stop_loss_hint: string
+  data_quality: string
+  reasons: string[]
+  risks: string[]
+  next_steps: string[]
+}
+
 export interface EtfDetailResponse {
   symbol: string
   asset: Asset | null
   metric: EtfCompareMetric
+  decision: EtfDecisionSummary
   latest_factor: Factor | null
   alternatives: EtfAlternativeCandidate[]
   curve: EtfDetailCurvePoint[]

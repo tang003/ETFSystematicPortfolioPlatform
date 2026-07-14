@@ -334,7 +334,9 @@
 
 - 详情页默认读取本地 `market_data_clean`。
 - 如果没有曲线，通常表示该区间尚未同步清洗行情。
+- 返回 `decision` 买入决策摘要，包括 `action`、`score`、`confidence`、`position_hint`、`entry_plan`、`stop_loss_hint`、`reasons`、`risks` 和 `next_steps`。
 - 返回 `alternatives` 同指数 ETF 候选，用于比较同跟踪指数下的规模、费率、交易性和替代优先级。
+- `decision` 用于普通用户快速判断“是否值得买、适合什么仓位、风险在哪里”，不代表自动交易或收益承诺。
 
 ## 因子和策略
 

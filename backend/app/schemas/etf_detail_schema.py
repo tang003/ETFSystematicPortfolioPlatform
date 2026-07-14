@@ -31,10 +31,25 @@ class EtfAlternativeCandidate(BaseModel):
     reasons: list[str]
 
 
+class EtfDecisionSummary(BaseModel):
+    action: str
+    score: int
+    level: str
+    confidence: str
+    position_hint: str
+    entry_plan: str
+    stop_loss_hint: str
+    data_quality: str
+    reasons: list[str]
+    risks: list[str]
+    next_steps: list[str]
+
+
 class EtfDetailResponse(BaseModel):
     symbol: str
     asset: AssetRead | None = None
     metric: EtfCompareMetric
+    decision: EtfDecisionSummary
     latest_factor: FactorRead | None = None
     alternatives: list[EtfAlternativeCandidate]
     curve: list[EtfDetailCurvePoint]

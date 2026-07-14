@@ -1,24 +1,56 @@
 <template>
   <div class="page-grid" v-loading="loading">
-    <section class="panel span-12">
+    <section class="panel span-12 decision-panel">
       <div class="panel-header">
         <div>
-          <h2>{{ detail?.asset?.name || symbol }} 详情</h2>
+          <h2>{{ detail?.asset?.name || symbol }} 买入决策</h2>
           <p class="section-note">
             {{ symbol }} · {{ assetClassText(detail?.asset?.asset_class) }} · {{ regionText(detail?.asset?.asset_region) }}
           </p>
         </div>
         <div class="header-actions">
-          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
+          <el-segmented v-model="rangeKey" :options="rangeOptions" @change="applyRange" />
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            value-format="YYYY-MM-DD"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            @change="rangeKey = 'custom'"
+          />
           <el-button :loading="syncLoading" @click="syncCurrentEtf">同步本 ETF 行情</el-button>
           <el-button type="primary" :loading="loading" @click="refresh">刷新</el-button>
         </div>
       </div>
+
+      <div class="decision-grid">
+        <div class="decision-main">
+          <span>系统结论</span>
+          <strong>{{ detail?.decision.action || '-' }}</strong>
+          <p>{{ detail?.decision.position_hint || '请选择 ETF 并刷新数据。' }}</p>
+        </div>
+        <div class="decision-score">
+          <span>买入评分</span>
+          <strong>{{ detail?.decision.score ?? '-' }}</strong>
+          <el-tag :type="scoreTag(detail?.decision.score ?? null)" size="small">
+            {{ detail?.decision.level || '-' }} · 置信度 {{ detail?.decision.confidence || '-' }}
+          </el-tag>
+        </div>
+        <div class="decision-card">
+          <span>买入节奏</span>
+          <p>{{ detail?.decision.entry_plan || '-' }}</p>
+        </div>
+        <div class="decision-card">
+          <span>风险阈值</span>
+          <p>{{ detail?.decision.stop_loss_hint || '-' }}</p>
+        </div>
+      </div>
+
       <div class="summary-grid">
-        <div class="metric">最新价格<strong>{{ detail?.metric.latest_close || '-' }}</strong></div>
-        <div class="metric">总收益<strong>{{ percent(detail?.metric.total_return) }}</strong></div>
-        <div class="metric">最大回撤<strong>{{ percent(detail?.metric.max_drawdown) }}</strong></div>
-        <div class="metric">可交易性<strong>{{ tradabilityText }}</strong></div>
+        <div class="metric">最新价格<strong>{{ detail?.metric.latest_close || '-' }}</strong><span>{{ detail?.metric.latest_trade_date || '-' }}</span></div>
+        <div class="metric">区间收益<strong :class="profitClass(detail?.metric.total_return)">{{ percent(detail?.metric.total_return) }}</strong><span>{{ rangeLabel }}</span></div>
+        <div class="metric">最大回撤<strong class="profit-down">{{ percent(detail?.metric.max_drawdown) }}</strong><span>回撤越深，仓位越要保守</span></div>
+        <div class="metric">可交易性<strong>{{ tradabilityText }}</strong><span>{{ detail?.decision.data_quality || '-' }}</span></div>
       </div>
     </section>
 
@@ -32,22 +64,25 @@
     </section>
 
     <section class="panel span-4">
-      <h2>资产画像</h2>
+      <h2>关键解释</h2>
       <div class="insight-list">
         <div class="insight-item">
-          <span>样本数</span>
-          <strong>{{ detail?.metric.bars || 0 }}</strong>
-          <p>区间：{{ detail?.metric.first_trade_date || '-' }} 至 {{ detail?.metric.latest_trade_date || '-' }}</p>
+          <span>为什么是这个结论</span>
+          <ul>
+            <li v-for="item in detail?.decision.reasons || []" :key="item">{{ item }}</li>
+          </ul>
         </div>
         <div class="insight-item">
-          <span>日均成交额</span>
-          <strong>{{ money(detail?.metric.average_amount) }}</strong>
-          <p>{{ detail?.metric.tradability_notes.join('；') || '暂无评分说明' }}</p>
+          <span>主要风险</span>
+          <ul>
+            <li v-for="item in detail?.decision.risks || []" :key="item">{{ item }}</li>
+          </ul>
         </div>
         <div class="insight-item">
-          <span>年化波动</span>
-          <strong>{{ percent(detail?.metric.annualized_volatility) }}</strong>
-          <p>风险等级：{{ detail?.asset?.risk_level ? `R${detail.asset.risk_level}` : '-' }}</p>
+          <span>下一步</span>
+          <ul>
+            <li v-for="item in detail?.decision.next_steps || []" :key="item">{{ item }}</li>
+          </ul>
         </div>
       </div>
     </section>
@@ -79,7 +114,7 @@
       <div class="panel-header">
         <div>
           <h2>同指数 ETF 替代</h2>
-          <p class="section-note">基于同一跟踪指数，综合交易性、规模和费率排序；用于观察替代，不代表自动交易。</p>
+          <p class="section-note">同样跟踪一个指数时，优先比较规模、费率、成交额和数据质量；这里用于人工选择，不会自动交易。</p>
         </div>
       </div>
       <el-empty v-if="detail && !detail.alternatives.length" description="暂无同指数 ETF 候选；可先补全 ETF 主资料中的跟踪指数" />
@@ -142,9 +177,14 @@ const detail = ref<EtfDetailResponse | null>(null)
 const loading = ref(false)
 const syncLoading = ref(false)
 const chartRef = ref<HTMLElement>()
-const today = new Date().toISOString().slice(0, 10)
-const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const dateRange = ref<[string, string]>([start, today])
+const rangeKey = ref('6m')
+const rangeOptions = [
+  { label: '6个月', value: '6m' },
+  { label: '1年', value: '1y' },
+  { label: '3年', value: '3y' },
+  { label: '自定义', value: 'custom' },
+]
+const dateRange = ref<[string, string]>(buildRange('6m'))
 
 onMounted(refresh)
 
@@ -152,6 +192,8 @@ const tradabilityText = computed(() => {
   if (!detail.value) return '-'
   return `${detail.value.metric.tradability_score} ${detail.value.metric.tradability_level}`
 })
+
+const rangeLabel = computed(() => `${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 
 const totalFee = computed(() => {
   const asset = detail.value?.asset
@@ -197,11 +239,11 @@ async function syncCurrentEtf() {
       sync_scope: 'custom',
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
-      source: 'akshare',
+      source: 'tushare',
       incremental: true,
       max_symbols: 1,
       clean_after_sync: true,
-      request_interval_seconds: 0,
+      request_interval_seconds: 0.2,
     })
     ElMessage.success('已同步本 ETF 行情')
     await refresh()
@@ -210,6 +252,28 @@ async function syncCurrentEtf() {
   } finally {
     syncLoading.value = false
   }
+}
+
+function applyRange() {
+  if (rangeKey.value === 'custom') return
+  dateRange.value = buildRange(rangeKey.value)
+  void refresh()
+}
+
+function buildRange(key: string): [string, string] {
+  const end = new Date()
+  const start = new Date(end)
+  if (key === '3y') start.setFullYear(start.getFullYear() - 3)
+  else if (key === '1y') start.setFullYear(start.getFullYear() - 1)
+  else start.setMonth(start.getMonth() - 6)
+  return [formatDate(start), formatDate(end)]
+}
+
+function formatDate(value: Date) {
+  const year = value.getFullYear()
+  const month = String(value.getMonth() + 1).padStart(2, '0')
+  const day = String(value.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function renderChart() {
@@ -260,6 +324,11 @@ function scoreTag(score: number | null) {
   if (score >= 60) return 'info'
   if (score >= 40) return 'warning'
   return 'danger'
+}
+
+function profitClass(value: string | number | null | undefined) {
+  if (value == null) return ''
+  return Number(value) >= 0 ? 'profit-up' : 'profit-down'
 }
 
 function alternativeTag(level: string) {
