@@ -498,16 +498,23 @@ export interface StrategyConfig {
 }
 
 export interface DataSourceProvider {
+  id: number | null
   provider_code: string
   provider_name: string
+  provider_type: string
   enabled: boolean
   configured: boolean
   base_url: string | null
+  auth_type: string
   token_masked: string | null
   request_interval_seconds: number | null
   max_requests_per_minute: number | null
+  quota_per_minute: number | null
+  quota_per_day: number | null
   status: string
+  adapter_status: string
   used_by: string[]
+  supported_usages: string[]
   notes: string[]
 }
 
@@ -740,6 +747,36 @@ export const updateStrategy = async (strategyCode: string, payload: {
 export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
 export const fetchDataSourceSettings = async () => (await api.get<DataSourceSettings>('/api/settings/data-sources')).data
+export const createDataSource = async (payload: {
+  provider_code: string
+  provider_name: string
+  provider_type?: string
+  enabled?: boolean
+  base_url?: string | null
+  auth_type?: string
+  secret_value?: string | null
+  request_interval_seconds?: number | null
+  quota_per_minute?: number | null
+  quota_per_day?: number | null
+  supported_usages?: string[]
+  adapter_status?: string
+  notes?: string[]
+}) => (await api.post<DataSourceProvider>('/api/settings/data-sources', payload)).data
+export const updateDataSource = async (providerCode: string, payload: {
+  provider_name?: string
+  provider_type?: string
+  enabled?: boolean
+  base_url?: string | null
+  auth_type?: string
+  secret_value?: string | null
+  clear_secret?: boolean
+  request_interval_seconds?: number | null
+  quota_per_minute?: number | null
+  quota_per_day?: number | null
+  supported_usages?: string[]
+  adapter_status?: string
+  notes?: string[]
+}) => (await api.patch<DataSourceProvider>(`/api/settings/data-sources/${providerCode}`, payload)).data
 export const checkRisk = async (payload: { run_id: number }) =>
   (await api.post<RunSummary>('/api/risk/check', payload)).data
 export const generateRebalanceOrders = async (payload: { run_id: number; portfolio_value?: number }) =>

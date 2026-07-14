@@ -7,6 +7,8 @@ import pandas as pd
 import requests
 
 from app.core.config import get_settings
+from app.core.database import SessionLocal
+from app.models.settings import DataSourceConfig
 
 PERMISSION_DENIED_CODE = -2002
 
@@ -17,15 +19,15 @@ def tushare_query(
     params: dict[str, Any] | None = None,
     fields: list[str] | None = None,
 ) -> pd.DataFrame:
-    settings = get_settings()
-    if not settings.tushare_token:
+    token, api_url = get_tushare_runtime_config()
+    if not token:
         raise RuntimeError("Tushare token is not configured")
 
     response = requests.post(
-        settings.tushare_api_url,
+        api_url,
         json={
             "api_name": api_name,
-            "token": settings.tushare_token,
+            "token": token,
             "params": params or {},
             "fields": ",".join(fields) if fields else "",
         },
@@ -47,6 +49,23 @@ def tushare_query(
     if not items:
         return pd.DataFrame(columns=columns)
     return pd.DataFrame(items, columns=columns)
+
+
+def get_tushare_runtime_config() -> tuple[str | None, str]:
+    settings = get_settings()
+    token = settings.tushare_token
+    api_url = settings.tushare_api_url
+    try:
+        with SessionLocal() as db:
+            row = db.query(DataSourceConfig).filter(DataSourceConfig.provider_code == "tushare").first()
+            if row and not row.enabled:
+                return None, row.base_url or api_url
+            if row:
+                token = row.secret_value or token
+                api_url = row.base_url or api_url
+    except Exception:
+        return token, api_url
+    return token, api_url
 
 
 def fetch_trade_calendar(start_date: date, end_date: date, exchange: str = "SSE") -> pd.DataFrame:

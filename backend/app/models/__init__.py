@@ -11,6 +11,7 @@ from app.models.rebalance import RebalanceOrder
 from app.models.backtest import BacktestEquityCurve, BacktestMetrics, BacktestRun, BacktestTrade
 from app.models.attribution import PerformanceAttribution
 from app.models.report import ReportLog
+from app.models.settings import DataSourceConfig
 from app.models.workflow import WorkflowTask, WorkflowTaskStep
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     "BacktestRun",
     "BacktestTrade",
     "DataQualityLog",
+    "DataSourceConfig",
     "EtfNavPremium",
     "FactorDaily",
     "HoldingAnalysisResult",

@@ -442,6 +442,60 @@
 - Tushare 配置状态、API 地址、脱敏 Token、请求间隔。
 - DeepSeek 配置状态、API 地址、脱敏 Token、模型说明。
 
+### POST /api/settings/data-sources
+
+新增数据源配置。新增数据源默认只是配置登记，是否能用于正式同步取决于后端是否开发了对应适配器。
+
+请求：
+
+```json
+{
+  "provider_code": "my_news_api",
+  "provider_name": "自定义新闻源",
+  "provider_type": "news",
+  "enabled": true,
+  "base_url": "https://api.example.com",
+  "auth_type": "bearer",
+  "secret_value": "只写入不回显",
+  "request_interval_seconds": 1.5,
+  "quota_per_minute": 60,
+  "quota_per_day": 10000,
+  "supported_usages": ["news"],
+  "adapter_status": "metadata_only",
+  "notes": ["仅登记配置，尚未接入业务运行时"]
+}
+```
+
+### PATCH /api/settings/data-sources/{provider_code}
+
+更新数据源配置。
+
+请求：
+
+```json
+{
+  "base_url": "http://140.143.171.60:38765",
+  "secret_value": "新的 token",
+  "request_interval_seconds": 0.3,
+  "quota_per_minute": 500
+}
+```
+
+清空数据库中保存的密钥：
+
+```json
+{
+  "clear_secret": true
+}
+```
+
+说明：
+
+- `secret_value` 只允许写入或替换，接口响应不会返回明文。
+- `tushare` 的数据库配置会覆盖 `TUSHARE_TOKEN` 和 `TUSHARE_API_URL`。
+- `deepseek` 的数据库配置会覆盖 `DEEPSEEK_API_KEY` 和 `DEEPSEEK_BASE_URL`。
+- 未适配的数据源应保持 `adapter_status=metadata_only` 或 `planned`。
+
 ### GET /api/portfolio/target
 
 查询最新目标组合。
