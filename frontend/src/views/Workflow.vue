@@ -137,6 +137,7 @@ import {
   type WorkflowTask,
   type WorkflowTaskStep,
 } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 type StepStatus = 'wait' | 'process' | 'finish' | 'error' | 'success'
 
@@ -158,10 +159,8 @@ const stepDescriptions: Record<string, string> = {
   report: '汇总策略、组合、风控、调仓和回测信息。',
 }
 
-const today = new Date().toISOString().slice(0, 10)
-const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const datePreset = ref<'6m' | '1y' | '3y' | '5y' | 'inception' | 'custom'>('1y')
-const dateRange = ref<[string, string]>([lastYear, today])
+const datePreset = ref<AnalysisPreset>('1y')
+const dateRange = ref<[string, string]>(buildPresetRange(datePreset.value))
 const syncScope = ref<'core' | 'positions' | 'target' | 'plans' | 'enabled' | 'all' | 'custom'>('core')
 const symbolsText = ref('')
 const maxSymbols = ref(20)
@@ -179,14 +178,7 @@ const tasks = ref<WorkflowTask[]>([])
 const running = ref(false)
 let timer: number | undefined
 
-const datePresetOptions = [
-  { label: '半年', value: '6m' },
-  { label: '1 年', value: '1y' },
-  { label: '3 年', value: '3y' },
-  { label: '5 年', value: '5y' },
-  { label: '成立以来', value: 'inception' },
-  { label: '自定义', value: 'custom' },
-]
+const datePresetOptions = analysisPresetOptions
 
 onMounted(async () => {
   await Promise.all([loadTasks(), loadStrategies()])
@@ -235,7 +227,7 @@ const workflowHintTitle = computed(() => {
 
 const workflowHintText = computed(() => {
   const scopeText = syncScope.value === 'custom' ? `自定义代码 ${splitSymbols()?.join('、') || '未填写'}` : scopeLabel(syncScope.value)
-  const dateText = datePreset.value === 'custom' ? `${dateRange.value[0]} 至 ${dateRange.value[1]}` : datePresetLabel(datePreset.value)
+  const dateText = datePreset.value === 'custom' ? `${dateRange.value[0]} 至 ${dateRange.value[1]}` : presetLabel(datePreset.value)
   return incrementalSync.value
     ? `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；样本门禁自动设置为 ${minimumHistoryBars.value} 根日线。`
     : `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；全量模式建议缩短周期。`
@@ -429,18 +421,6 @@ function scopeLabel(value: string) {
     enabled: '启用 ETF',
     all: '全市场基础池',
     custom: '自定义代码',
-  }
-  return map[value] || value
-}
-
-function datePresetLabel(value: string) {
-  const map: Record<string, string> = {
-    '6m': '最近半年',
-    '1y': '最近 1 年',
-    '3y': '最近 3 年',
-    '5y': '最近 5 年',
-    inception: '成立以来',
-    custom: '自定义日期',
   }
   return map[value] || value
 }

@@ -19,12 +19,13 @@
             <el-segmented v-model="holdingPeriod" :options="holdingOptions" />
           </div>
           <el-date-picker
+            v-if="rangeKey === 'custom'"
             v-model="dateRange"
             type="daterange"
             value-format="YYYY-MM-DD"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
-            @change="rangeKey = 'custom'"
+            @change="refresh"
           />
           <el-button :loading="syncLoading" @click="syncCurrentEtf">同步本 ETF 行情</el-button>
           <el-button type="primary" :loading="loading" @click="refresh">刷新</el-button>
@@ -194,6 +195,7 @@ import { useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { fetchEtfDetail, syncMarket, type EtfDetailResponse } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const route = useRoute()
 const symbol = computed(() => String(route.params.symbol || ''))
@@ -201,13 +203,8 @@ const detail = ref<EtfDetailResponse | null>(null)
 const loading = ref(false)
 const syncLoading = ref(false)
 const chartRef = ref<HTMLElement>()
-const rangeKey = ref('6m')
-const rangeOptions = [
-  { label: '6个月', value: '6m' },
-  { label: '1年', value: '1y' },
-  { label: '3年', value: '3y' },
-  { label: '自定义', value: 'custom' },
-]
+const rangeKey = ref<AnalysisPreset>('6m')
+const rangeOptions = analysisPresetOptions
 const holdingPeriod = ref('6m')
 const holdingOptions = [
   { label: '1个月', value: '1m' },
@@ -215,7 +212,7 @@ const holdingOptions = [
   { label: '6个月', value: '6m' },
   { label: '1年+', value: '1y' },
 ]
-const dateRange = ref<[string, string]>(buildRange('6m'))
+const dateRange = ref<[string, string]>(buildPresetRange('6m'))
 
 onMounted(refresh)
 
@@ -224,7 +221,7 @@ const tradabilityText = computed(() => {
   return `${detail.value.metric.tradability_score} ${detail.value.metric.tradability_level}`
 })
 
-const rangeLabel = computed(() => `${dateRange.value[0]} 至 ${dateRange.value[1]}`)
+const rangeLabel = computed(() => `${presetLabel(rangeKey.value)}：${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 const holdingPeriodText = computed(() => {
   const item = holdingOptions.find((option) => option.value === holdingPeriod.value)
   return item?.label || holdingPeriod.value
@@ -302,24 +299,8 @@ async function syncCurrentEtf() {
 
 function applyRange() {
   if (rangeKey.value === 'custom') return
-  dateRange.value = buildRange(rangeKey.value)
+  dateRange.value = buildPresetRange(rangeKey.value)
   void refresh()
-}
-
-function buildRange(key: string): [string, string] {
-  const end = new Date()
-  const start = new Date(end)
-  if (key === '3y') start.setFullYear(start.getFullYear() - 3)
-  else if (key === '1y') start.setFullYear(start.getFullYear() - 1)
-  else start.setMonth(start.getMonth() - 6)
-  return [formatDate(start), formatDate(end)]
-}
-
-function formatDate(value: Date) {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function renderChart() {

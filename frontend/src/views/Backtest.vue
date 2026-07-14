@@ -15,8 +15,12 @@
         <el-form-item label="回测名称">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="日期范围">
-          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
+        <el-form-item label="分析周期">
+          <el-segmented v-model="datePreset" :options="analysisPresetOptions" @change="applyPreset" />
+          <span class="form-note">{{ rangeLabel }}</span>
+        </el-form-item>
+        <el-form-item v-if="datePreset === 'custom'" label="日期范围">
+          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
         </el-form-item>
         <el-form-item label="ETF 代码">
           <el-input v-model="symbolsText" placeholder="多个代码用逗号分隔，留空使用默认样本" />
@@ -71,10 +75,11 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { fetchBacktestCurve, fetchBacktestMetrics, fetchBacktestRuns, fetchBacktestTrades, runBacktest, type BacktestCurvePoint, type BacktestMetric, type BacktestRun, type BacktestTrade } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const runs = ref<BacktestRun[]>([])
 const curve = ref<BacktestCurvePoint[]>([])
@@ -83,10 +88,10 @@ const trades = ref<BacktestTrade[]>([])
 const loading = ref(true)
 const actionLoading = ref(false)
 const chartRef = ref<HTMLElement>()
-const today = new Date().toISOString().slice(0, 10)
-const start = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const dateRange = ref<[string, string]>([start, today])
+const datePreset = ref<AnalysisPreset>('1y')
+const dateRange = ref<[string, string]>(buildPresetRange(datePreset.value))
 const symbolsText = ref('510300,159915')
+const rangeLabel = computed(() => `${presetLabel(datePreset.value)}：${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 const form = ref({
   strategy_code: 'core_etf_rotation_monthly',
   name: '策略月度调仓回测',
@@ -150,5 +155,11 @@ async function runBacktestFlow() {
 
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
+}
+
+function applyPreset() {
+  if (datePreset.value !== 'custom') {
+    dateRange.value = buildPresetRange(datePreset.value)
+  }
 }
 </script>

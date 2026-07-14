@@ -6,8 +6,12 @@
         <el-button type="primary" :loading="actionLoading" @click="runFactorCalculation">计算因子</el-button>
       </div>
       <el-form class="action-form" label-width="92px">
-        <el-form-item label="日期范围">
-          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
+        <el-form-item label="分析周期">
+          <el-segmented v-model="datePreset" :options="analysisPresetOptions" @change="applyPreset" />
+          <span class="form-note">{{ rangeLabel }}</span>
+        </el-form-item>
+        <el-form-item v-if="datePreset === 'custom'" label="日期范围">
+          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
         </el-form-item>
         <el-form-item label="ETF 代码">
           <el-input v-model="symbolsText" placeholder="留空代表全部启用 ETF，多个代码用逗号分隔" />
@@ -42,18 +46,19 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { calculateFactors, fetchFactorRanking, scoreEtfTradability, type EtfCompareMetric, type Factor } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const factors = ref<Factor[]>([])
 const tradabilityMetrics = ref<Record<string, EtfCompareMetric>>({})
 const loading = ref(true)
 const actionLoading = ref(false)
-const today = new Date().toISOString().slice(0, 10)
-const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const dateRange = ref<[string, string]>([lastYear, today])
+const datePreset = ref<AnalysisPreset>('1y')
+const dateRange = ref<[string, string]>(buildPresetRange(datePreset.value))
 const symbolsText = ref('')
+const rangeLabel = computed(() => `${presetLabel(datePreset.value)}：${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 
 onMounted(refresh)
 
@@ -91,6 +96,12 @@ async function runFactorCalculation() {
     ElMessage.error(error instanceof Error ? error.message : '因子计算失败')
   } finally {
     actionLoading.value = false
+  }
+}
+
+function applyPreset() {
+  if (datePreset.value !== 'custom') {
+    dateRange.value = buildPresetRange(datePreset.value)
   }
 }
 

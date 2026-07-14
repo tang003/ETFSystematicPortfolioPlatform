@@ -6,8 +6,12 @@
         <el-button type="primary" :loading="actionLoading" @click="runResearch">运行研究</el-button>
       </div>
       <el-form class="action-form" label-width="100px">
-        <el-form-item label="日期范围">
-          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
+        <el-form-item label="分析周期">
+          <el-segmented v-model="datePreset" :options="analysisPresetOptions" @change="applyPreset" />
+          <span class="form-note">{{ rangeLabel }}</span>
+        </el-form-item>
+        <el-form-item v-if="datePreset === 'custom'" label="日期范围">
+          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
         </el-form-item>
         <el-form-item label="前瞻天数">
           <el-input-number v-model="forwardDays" :min="1" :max="250" />
@@ -70,15 +74,16 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { researchFactors, type FactorResearchResult } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const loading = ref(false)
 const actionLoading = ref(false)
-const today = new Date().toISOString().slice(0, 10)
-const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const dateRange = ref<[string, string]>([lastYear, today])
+const datePreset = ref<AnalysisPreset>('1y')
+const dateRange = ref<[string, string]>(buildPresetRange(datePreset.value))
 const forwardDays = ref(20)
 const quantiles = ref(3)
 const result = ref<FactorResearchResult>()
+const rangeLabel = computed(() => `${presetLabel(datePreset.value)}：${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 
 const effectiveCount = computed(() => result.value?.ic_metrics.filter((item) => item.effective).length ?? 0)
 const correlationRows = computed(() => {
@@ -105,6 +110,12 @@ async function runResearch() {
   } finally {
     actionLoading.value = false
     loading.value = false
+  }
+}
+
+function applyPreset() {
+  if (datePreset.value !== 'custom') {
+    dateRange.value = buildPresetRange(datePreset.value)
   }
 }
 </script>

@@ -10,12 +10,15 @@
         </div>
         <div class="header-actions">
           <el-input v-model="symbol" placeholder="ETF 代码" class="symbol-input" />
+          <el-segmented v-model="datePreset" :options="analysisPresetOptions" @change="applyPreset" />
           <el-date-picker
+            v-if="datePreset === 'custom'"
             v-model="dateRange"
             type="daterange"
             value-format="YYYY-MM-DD"
             start-placeholder="开始日期"
             end-placeholder="结束日期"
+            :clearable="false"
           />
           <el-switch v-model="autoSync" active-text="自动补全数据" />
           <el-switch v-model="useLlm" active-text="DeepSeek 总结" />
@@ -113,11 +116,11 @@ import {
   type EtfAgentAnalysisLog,
   type EtfAgentAnalysisResponse,
 } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, type AnalysisPreset } from '../datePresets'
 
-const today = new Date().toISOString().slice(0, 10)
-const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 const symbol = ref('510300')
-const dateRange = ref<[string, string]>([lastYear, today])
+const datePreset = ref<AnalysisPreset>('1y')
+const dateRange = ref<[string, string]>(buildPresetRange(datePreset.value))
 const useLlm = ref(true)
 const autoSync = ref(true)
 const loading = ref(false)
@@ -161,7 +164,14 @@ async function loadHistory() {
 function useHistory(row: EtfAgentAnalysisLog) {
   analysis.value = row
   symbol.value = row.symbol
+  datePreset.value = 'custom'
   dateRange.value = [row.start_date, row.end_date]
+}
+
+function applyPreset() {
+  if (datePreset.value !== 'custom') {
+    dateRange.value = buildPresetRange(datePreset.value)
+  }
 }
 
 function scoreTag(score: number) {

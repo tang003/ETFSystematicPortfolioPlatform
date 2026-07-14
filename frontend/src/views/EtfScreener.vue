@@ -23,15 +23,12 @@
         <el-form-item v-if="form.scope === 'custom'" label="ETF 代码">
           <el-input v-model="symbolsText" placeholder="多个代码用逗号或空格分隔" />
         </el-form-item>
-        <el-form-item label="日期范围">
-          <el-select v-model="rangeKey" @change="applyRange">
-            <el-option label="最近 6 个月" value="6m" />
-            <el-option label="最近 1 年" value="1y" />
-            <el-option label="最近 3 年" value="3y" />
-            <el-option label="最近 5 年" value="5y" />
-            <el-option label="最近 10 年" value="10y" />
-          </el-select>
-          <span class="form-note">{{ form.start_date }} 至 {{ form.end_date }}</span>
+        <el-form-item label="分析周期">
+          <el-segmented v-model="rangeKey" :options="analysisPresetOptions" @change="applyRange" />
+          <span class="form-note">{{ rangeLabel }}</span>
+        </el-form-item>
+        <el-form-item v-if="rangeKey === 'custom'" label="日期范围">
+          <el-date-picker v-model="customDateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" @change="applyCustomRange" />
         </el-form-item>
         <el-form-item label="最低样本">
           <el-input-number v-model="form.min_bars" :min="20" :max="2500" :step="20" />
@@ -115,11 +112,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { screenEtfs, type EtfCompareMetric, type EtfScreenerResponse } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const loading = ref(false)
 const result = ref<EtfScreenerResponse | null>(null)
 const symbolsText = ref('')
-const rangeKey = ref('6m')
+const rangeKey = ref<AnalysisPreset>('6m')
+const customDateRange = ref<[string, string]>(buildPresetRange('1y'))
 
 const form = reactive({
   scope: 'enabled',
@@ -140,6 +139,7 @@ onMounted(() => {
 })
 
 const topMetric = computed<EtfCompareMetric | null>(() => result.value?.metrics[0] || null)
+const rangeLabel = computed(() => `${presetLabel(rangeKey.value)}：${form.start_date} 至 ${form.end_date}`)
 const scopeLabel = computed(() => {
   const labels: Record<string, string> = {
     enabled: '启用池',
@@ -154,12 +154,18 @@ const scopeLabel = computed(() => {
 })
 
 function applyRange() {
-  const end = new Date()
-  const start = new Date(end)
-  const months: Record<string, number> = { '6m': 6, '1y': 12, '3y': 36, '5y': 60, '10y': 120 }
-  start.setMonth(start.getMonth() - (months[rangeKey.value] || 36))
-  form.start_date = formatDate(start)
-  form.end_date = formatDate(end)
+  if (rangeKey.value === 'custom') {
+    applyCustomRange()
+    return
+  }
+  const [start, end] = buildPresetRange(rangeKey.value)
+  form.start_date = start
+  form.end_date = end
+}
+
+function applyCustomRange() {
+  form.start_date = customDateRange.value[0]
+  form.end_date = customDateRange.value[1]
 }
 
 async function runScreen() {
@@ -187,13 +193,6 @@ async function runScreen() {
 
 function splitSymbols() {
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
-}
-
-function formatDate(value: Date) {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function percent(value: string | null) {

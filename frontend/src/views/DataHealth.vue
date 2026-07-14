@@ -6,24 +6,11 @@
         <el-button type="primary" :loading="actionLoading" @click="runFullDataFlow">一键更新并检查</el-button>
       </div>
       <el-form class="action-form" label-width="92px">
-        <el-form-item label="日期模式">
-          <el-radio-group v-model="dateMode" @change="applyPresetRange">
-            <el-radio-button label="preset">快捷范围</el-radio-button>
-            <el-radio-button label="custom">自定义日期</el-radio-button>
-          </el-radio-group>
-          <span class="form-note">当前：{{ dateRangeLabel }}</span>
+        <el-form-item label="分析周期">
+          <el-segmented v-model="presetRange" :options="dataPresetOptions" @change="applyPresetRange" />
+          <span class="form-note">{{ dateRangeLabel }}</span>
         </el-form-item>
-        <el-form-item v-if="dateMode === 'preset'" label="快捷范围">
-          <el-select v-model="presetRange" @change="applyPresetRange">
-            <el-option label="最近 1 个月（日常刷新）" value="1m" />
-            <el-option label="最近 3 个月" value="3m" />
-            <el-option label="最近 1 年（常用检查）" value="1y" />
-            <el-option label="最近 3 年（策略观察）" value="3y" />
-            <el-option label="最近 5 年（中长期回测）" value="5y" />
-            <el-option label="最近 10 年（历史初始化）" value="10y" />
-          </el-select>
-        </el-form-item>
-        <el-form-item v-else label="日期范围">
+        <el-form-item v-if="presetRange === 'custom'" label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
         </el-form-item>
         <el-form-item label="同步范围">
@@ -132,15 +119,14 @@ import {
   type DataQualityStatus,
   type MarketSyncPlan,
 } from '../api/client'
+import { buildPresetRange, dataPresetOptions, type DataPreset } from '../datePresets'
 
 const status = ref<DataQualityStatus>()
 const logs = ref<DataQualityLog[]>([])
 const syncPlan = ref<MarketSyncPlan>()
 const loading = ref(true)
 const actionLoading = ref(false)
-const today = formatDate(new Date())
-const dateMode = ref<'preset' | 'custom'>('preset')
-const presetRange = ref('1m')
+const presetRange = ref<DataPreset>('1m')
 const dateRange = ref<[string, string]>(buildPresetRange(presetRange.value))
 const symbolsText = ref('')
 const syncScope = ref('core')
@@ -153,7 +139,7 @@ const incrementalSync = ref(true)
 onMounted(refresh)
 
 function applyPresetRange() {
-  if (dateMode.value === 'preset') {
+  if (presetRange.value !== 'custom') {
     dateRange.value = buildPresetRange(presetRange.value)
   }
 }
@@ -293,28 +279,6 @@ const syncScopeLabel = computed(() => {
 
 const dateRangeLabel = computed(() => `${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 const latestBatchText = computed(() => (status.value?.latest_created_at ? `最近检查 ${status.value.latest_created_at}` : '暂无检查记录'))
-
-function buildPresetRange(value: string): [string, string] {
-  const end = new Date()
-  const start = new Date(end)
-  const monthMap: Record<string, number> = {
-    '1m': 1,
-    '3m': 3,
-    '1y': 12,
-    '3y': 36,
-    '5y': 60,
-    '10y': 120,
-  }
-  start.setMonth(start.getMonth() - (monthMap[value] || 1))
-  return [formatDate(start), formatDate(end)]
-}
-
-function formatDate(value: Date) {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 const sourceHintTitle = computed(() => {
   return 'Tushare-only 建议'

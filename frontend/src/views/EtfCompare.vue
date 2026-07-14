@@ -12,13 +12,11 @@
         <el-form-item label="ETF 代码">
           <el-input v-model="symbolsText" placeholder="多个代码用逗号或空格分隔，建议 2-5 只" />
         </el-form-item>
-        <el-form-item label="日期范围">
-          <el-select v-model="rangeKey" @change="applyRange">
-            <el-option label="最近 6 个月" value="6m" />
-            <el-option label="最近 1 年" value="1y" />
-            <el-option label="最近 3 年" value="3y" />
-            <el-option label="自定义" value="custom" />
-          </el-select>
+        <el-form-item label="分析周期">
+          <el-segmented v-model="rangeKey" :options="analysisPresetOptions" @change="applyRange" />
+          <span class="form-note">{{ rangeLabel }}</span>
+        </el-form-item>
+        <el-form-item v-if="rangeKey === 'custom'" label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
         </el-form-item>
         <el-form-item label="自动补数">
@@ -125,13 +123,14 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { compareEtfs, type EtfCompareResponse } from '../api/client'
+import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const loading = ref(false)
 const actionLoading = ref(false)
 const chartRef = ref<HTMLElement>()
 const result = ref<EtfCompareResponse | null>(null)
-const rangeKey = ref('6m')
-const dateRange = ref<[string, string]>(buildRange(rangeKey.value))
+const rangeKey = ref<AnalysisPreset>('6m')
+const dateRange = ref<[string, string]>(buildPresetRange(rangeKey.value))
 const symbolsText = ref('510300,159915,513050')
 const autoSyncMissing = ref(false)
 const maxAutoSyncSymbols = ref(5)
@@ -142,6 +141,7 @@ onMounted(() => {
 })
 
 const comparedSymbols = computed(() => result.value?.metrics.map((item) => item.symbol) || [])
+const rangeLabel = computed(() => `${presetLabel(rangeKey.value)}：${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 const correlationRows = computed(() =>
   comparedSymbols.value.map((symbol) => {
     const row: Record<string, string> = { symbol }
@@ -209,23 +209,8 @@ function splitSymbols() {
 
 function applyRange() {
   if (rangeKey.value !== 'custom') {
-    dateRange.value = buildRange(rangeKey.value)
+    dateRange.value = buildPresetRange(rangeKey.value)
   }
-}
-
-function buildRange(value: string): [string, string] {
-  const end = new Date()
-  const start = new Date(end)
-  const months: Record<string, number> = { '6m': 6, '1y': 12, '3y': 36 }
-  start.setMonth(start.getMonth() - (months[value] || 6))
-  return [formatDate(start), formatDate(end)]
-}
-
-function formatDate(value: Date) {
-  const year = value.getFullYear()
-  const month = String(value.getMonth() + 1).padStart(2, '0')
-  const day = String(value.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
 }
 
 function percent(value: string | null) {
