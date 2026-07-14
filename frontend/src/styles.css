@@ -224,6 +224,63 @@ body {
   line-height: 1.4;
 }
 
+.profile-score-cell {
+  display: grid;
+  gap: 3px;
+  align-items: start;
+}
+
+.profile-score-cell small {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.profile-popover {
+  display: grid;
+  gap: 10px;
+}
+
+.profile-popover strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.profile-popover p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.profile-group-row {
+  display: grid;
+  grid-template-columns: 68px 1fr 42px;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.profile-group-row em {
+  color: #0f172a;
+  font-style: normal;
+  text-align: right;
+}
+
+.profile-missing {
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.profile-missing span {
+  display: block;
+  margin-bottom: 4px;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .source-hint {
   width: 100%;
   padding: 12px 14px;

@@ -18,7 +18,7 @@
         <div class="metric">ETF 总数<strong>{{ assets.length }}</strong></div>
         <div class="metric">启用研究<strong>{{ enabledAssets.length }}</strong></div>
         <div class="metric">跨境 ETF<strong>{{ crossBorderCount }}</strong></div>
-        <div class="metric">资料较完整<strong>{{ completeProfileCount }}</strong></div>
+        <div class="metric">基础档案可用<strong>{{ usableProfileCount }}</strong></div>
         <div class="metric">交易性偏弱<strong>{{ weakTradabilityCount }}</strong></div>
       </div>
 
@@ -119,11 +119,13 @@
             <el-option v-for="item in assetRegionOptions" :key="item" :label="regionText(item)" :value="item" />
           </el-select>
         </el-form-item>
-        <el-form-item label="资料完整">
+        <el-form-item label="资料状态">
           <el-select v-model="profileFilter">
             <el-option label="全部" value="all" />
-            <el-option label="较完整" value="complete" />
-            <el-option label="待补充" value="missing" />
+            <el-option label="基础可用" value="usable" />
+            <el-option label="待补规模/净值" value="missing_scale" />
+            <el-option label="待补跟踪指标" value="missing_tracking" />
+            <el-option label="资料待补充" value="missing" />
           </el-select>
         </el-form-item>
         <el-form-item label="风险上限">
@@ -137,11 +139,31 @@
       <el-table :data="displayedAssets" height="650" empty-text="暂无 ETF，先导入示例池或同步 ETF 基础池">
         <el-table-column prop="symbol" label="代码" width="100" fixed />
         <el-table-column prop="name" label="名称" min-width="150" fixed />
-        <el-table-column label="资料" width="95">
+        <el-table-column label="资料完整度" width="132">
           <template #default="{ row }">
-            <el-tag :type="profileScore(row) >= 70 ? 'success' : profileScore(row) >= 40 ? 'warning' : 'danger'" size="small">
-              {{ profileScore(row) }}%
-            </el-tag>
+            <el-popover placement="right" width="320" trigger="hover">
+              <template #reference>
+                <div class="profile-score-cell">
+                  <el-tag :type="profileScore(row) >= 70 ? 'success' : profileScore(row) >= 40 ? 'warning' : 'danger'" size="small">
+                    {{ profileScore(row) }}%
+                  </el-tag>
+                  <small>{{ profileStatusText(row) }}</small>
+                </div>
+              </template>
+              <div class="profile-popover">
+                <strong>{{ row.symbol }} {{ row.name }}</strong>
+                <p>总分只是字段完整度，不等于投资质量。Tushare 基础档案补齐后通常为 70%，剩余多为规模、折溢价率和跟踪误差。</p>
+                <div v-for="group in profileGroups(row)" :key="group.key" class="profile-group-row">
+                  <span>{{ group.label }}</span>
+                  <el-progress :percentage="group.score" :stroke-width="8" :show-text="false" />
+                  <em>{{ group.score }}%</em>
+                </div>
+                <div class="profile-missing">
+                  <span>缺失字段</span>
+                  <p>{{ missingProfileText(row) }}</p>
+                </div>
+              </div>
+            </el-popover>
           </template>
         </el-table-column>
         <el-table-column label="跟踪指数" min-width="150">
@@ -257,7 +279,7 @@ const keyword = ref('')
 const enabledFilter = ref<'all' | 'enabled' | 'disabled'>('all')
 const assetClassFilter = ref('all')
 const assetRegionFilter = ref('all')
-const profileFilter = ref<'all' | 'complete' | 'missing'>('all')
+const profileFilter = ref<'all' | 'usable' | 'missing_scale' | 'missing_tracking' | 'missing'>('all')
 const riskLevelMax = ref(5)
 const tradabilityScoreMin = ref(0)
 const togglingSymbol = ref('')
@@ -488,7 +510,7 @@ function parseImportText(value: string): AssetUpsertItem[] {
 
 const enabledAssets = computed(() => assets.value.filter((item) => item.enabled))
 const crossBorderCount = computed(() => assets.value.filter((item) => item.is_cross_border).length)
-const completeProfileCount = computed(() => assets.value.filter((item) => profileScore(item) >= 70).length)
+const usableProfileCount = computed(() => assets.value.filter((item) => profileScore(item) >= 70).length)
 const weakTradabilityCount = computed(() => assets.value.filter((item) => {
   const score = tradabilityScore(item.symbol)
   return score !== null && score < 60
@@ -508,7 +530,12 @@ const filteredAssets = computed(() =>
     const score = tradabilityScore(item.symbol)
     const matchesTradability = score === null ? tradabilityScoreMin.value === 0 : score >= tradabilityScoreMin.value
     const pScore = profileScore(item)
-    const matchesProfile = profileFilter.value === 'all' || (profileFilter.value === 'complete' && pScore >= 70) || (profileFilter.value === 'missing' && pScore < 70)
+    const matchesProfile =
+      profileFilter.value === 'all'
+      || (profileFilter.value === 'usable' && pScore >= 70)
+      || (profileFilter.value === 'missing_scale' && profileGroupScore(item, ['fund_size', 'latest_premium_rate']) < 100)
+      || (profileFilter.value === 'missing_tracking' && !hasValue(item.tracking_error))
+      || (profileFilter.value === 'missing' && pScore < 70)
     return matchesKeyword && matchesEnabled && matchesClass && matchesRegion && matchesRisk && matchesTradability && matchesProfile
   }),
 )
@@ -529,6 +556,70 @@ function profileScore(asset: Asset) {
     asset.description,
   ]
   return Math.round((fields.filter((value) => value !== null && value !== undefined && value !== '').length / fields.length) * 100)
+}
+
+function profileGroups(asset: Asset) {
+  return [
+    {
+      key: 'basic',
+      label: '基础档案',
+      score: profileGroupScore(asset, ['fund_company', 'tracking_index', 'listing_date', 'description']),
+    },
+    {
+      key: 'fee',
+      label: '费率资料',
+      score: profileGroupScore(asset, ['management_fee', 'custody_fee', 'expense_ratio']),
+    },
+    {
+      key: 'scale',
+      label: '规模净值',
+      score: profileGroupScore(asset, ['fund_size', 'latest_premium_rate']),
+    },
+    {
+      key: 'tracking',
+      label: '跟踪质量',
+      score: profileGroupScore(asset, ['tracking_error']),
+    },
+  ]
+}
+
+function profileGroupScore(asset: Asset, fields: Array<keyof Asset>) {
+  const filled = fields.filter((field) => hasValue(asset[field])).length
+  return Math.round((filled / fields.length) * 100)
+}
+
+function profileStatusText(asset: Asset) {
+  if (profileScore(asset) < 40) return '待建档'
+  if (profileScore(asset) < 70) return '待补档案'
+  const missing = missingProfileLabels(asset)
+  if (!missing.length) return '完整'
+  if (missing.every((item) => ['规模', '溢价率', '跟踪误差'].includes(item))) return '基础可用'
+  return '部分缺失'
+}
+
+function missingProfileLabels(asset: Asset) {
+  const fieldLabels: Array<[keyof Asset, string]> = [
+    ['fund_company', '基金公司'],
+    ['tracking_index', '跟踪指数'],
+    ['listing_date', '上市日期'],
+    ['fund_size', '规模'],
+    ['management_fee', '管理费'],
+    ['custody_fee', '托管费'],
+    ['expense_ratio', '综合费率'],
+    ['tracking_error', '跟踪误差'],
+    ['latest_premium_rate', '溢价率'],
+    ['description', '说明'],
+  ]
+  return fieldLabels.filter(([field]) => !hasValue(asset[field])).map(([, label]) => label)
+}
+
+function missingProfileText(asset: Asset) {
+  const missing = missingProfileLabels(asset)
+  return missing.length ? missing.join('、') : '暂无缺失'
+}
+
+function hasValue(value: unknown) {
+  return value !== null && value !== undefined && value !== ''
 }
 
 function assetClassText(value: string | null) {
