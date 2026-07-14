@@ -238,6 +238,12 @@
 
 数据质量概览。
 
+说明：
+
+- `total_logs`、`error_logs`、`warning_logs` 表示最近一次检查批次的统计，适合页面判断当前状态。
+- `history_total_logs`、`history_error_logs`、`history_warning_logs` 表示历史累计日志，只用于排查长期数据问题。
+- 每次对同一 ETF、同一区间重新检查前，会清理旧的同区间质量日志，避免重复检查导致告警数无限累加。
+
 ### GET /api/data-quality/logs
 
 最近数据质量日志。

@@ -35,3 +35,6 @@ class DataQualityStatus(BaseModel):
     warning_logs: int
     latest_created_at: datetime | None
     status: str
+    history_total_logs: int = 0
+    history_error_logs: int = 0
+    history_warning_logs: int = 0

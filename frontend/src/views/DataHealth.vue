@@ -78,10 +78,10 @@
         </el-form-item>
       </el-form>
     </section>
-    <section class="panel span-3"><div class="metric">整体状态<strong>{{ status?.status ?? '-' }}</strong></div></section>
-    <section class="panel span-3"><div class="metric">错误数<strong>{{ status?.error_logs ?? 0 }}</strong></div></section>
-    <section class="panel span-3"><div class="metric">警告数<strong>{{ status?.warning_logs ?? 0 }}</strong></div></section>
-    <section class="panel span-3"><div class="metric">日志总数<strong>{{ status?.total_logs ?? 0 }}</strong></div></section>
+    <section class="panel span-3"><div class="metric">最近状态<strong>{{ status?.status ?? '-' }}</strong><span>{{ latestBatchText }}</span></div></section>
+    <section class="panel span-3"><div class="metric">最近错误<strong>{{ status?.error_logs ?? 0 }}</strong><span>历史累计 {{ status?.history_error_logs ?? 0 }}</span></div></section>
+    <section class="panel span-3"><div class="metric">最近警告<strong>{{ status?.warning_logs ?? 0 }}</strong><span>历史累计 {{ status?.history_warning_logs ?? 0 }}</span></div></section>
+    <section class="panel span-3"><div class="metric">最近日志<strong>{{ status?.total_logs ?? 0 }}</strong><span>历史累计 {{ status?.history_total_logs ?? 0 }}</span></div></section>
     <section class="panel span-12">
       <div class="panel-header">
         <h2>本次行情同步计划</h2>
@@ -296,6 +296,7 @@ const syncScopeLabel = computed(() => {
 })
 
 const dateRangeLabel = computed(() => `${dateRange.value[0]} 至 ${dateRange.value[1]}`)
+const latestBatchText = computed(() => (status.value?.latest_created_at ? `最近检查 ${status.value.latest_created_at}` : '暂无检查记录'))
 
 function buildPresetRange(value: string): [string, string] {
   const end = new Date()

@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models.data_quality import DataQualityLog
@@ -31,6 +31,7 @@ def add_quality_log(
 
 
 def check_clean_bars(db: Session, symbol: str, start_date: date, end_date: date) -> int:
+    clear_existing_quality_logs(db, symbol=symbol, start_date=start_date, end_date=end_date)
     bars = list(
         db.scalars(
             select(MarketDataClean)
@@ -116,6 +117,24 @@ def check_clean_bars(db: Session, symbol: str, start_date: date, end_date: date)
     return log_count + 1
 
 
+def clear_existing_quality_logs(db: Session, *, symbol: str, start_date: date, end_date: date) -> None:
+    db.execute(
+        delete(DataQualityLog).where(
+            DataQualityLog.symbol == symbol,
+            DataQualityLog.trade_date.is_not(None),
+            DataQualityLog.trade_date >= start_date,
+            DataQualityLog.trade_date <= end_date,
+        )
+    )
+    db.execute(
+        delete(DataQualityLog).where(
+            DataQualityLog.symbol == symbol,
+            DataQualityLog.trade_date.is_(None),
+            DataQualityLog.check_type == "missing_data",
+        )
+    )
+
+
 def list_expected_trade_dates(db: Session, start_date: date, end_date: date) -> list[date]:
     return list(
         db.scalars(
@@ -136,12 +155,37 @@ def list_quality_logs(db: Session, limit: int = 100, symbol: str | None = None) 
 
 
 def get_quality_status(db: Session) -> dict:
-    total_logs = db.scalar(select(func.count()).select_from(DataQualityLog)) or 0
-    error_logs = db.scalar(select(func.count()).select_from(DataQualityLog).where(DataQualityLog.severity == "error")) or 0
-    warning_logs = (
+    history_total_logs = db.scalar(select(func.count()).select_from(DataQualityLog)) or 0
+    history_error_logs = db.scalar(select(func.count()).select_from(DataQualityLog).where(DataQualityLog.severity == "error")) or 0
+    history_warning_logs = (
         db.scalar(select(func.count()).select_from(DataQualityLog).where(DataQualityLog.severity == "warning")) or 0
     )
     latest_created_at = db.scalar(select(func.max(DataQualityLog.created_at)))
+    if latest_created_at is None:
+        total_logs = 0
+        error_logs = 0
+        warning_logs = 0
+    else:
+        total_logs = (
+            db.scalar(select(func.count()).select_from(DataQualityLog).where(DataQualityLog.created_at == latest_created_at))
+            or 0
+        )
+        error_logs = (
+            db.scalar(
+                select(func.count())
+                .select_from(DataQualityLog)
+                .where(DataQualityLog.created_at == latest_created_at, DataQualityLog.severity == "error")
+            )
+            or 0
+        )
+        warning_logs = (
+            db.scalar(
+                select(func.count())
+                .select_from(DataQualityLog)
+                .where(DataQualityLog.created_at == latest_created_at, DataQualityLog.severity == "warning")
+            )
+            or 0
+        )
     status = "error" if error_logs else "warning" if warning_logs else "ok"
     return {
         "total_logs": total_logs,
@@ -149,4 +193,7 @@ def get_quality_status(db: Session) -> dict:
         "warning_logs": warning_logs,
         "latest_created_at": latest_created_at,
         "status": status,
+        "history_total_logs": history_total_logs,
+        "history_error_logs": history_error_logs,
+        "history_warning_logs": history_warning_logs,
     }

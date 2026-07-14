@@ -271,6 +271,9 @@ export interface DataQualityStatus {
   warning_logs: number
   latest_created_at: string | null
   status: string
+  history_total_logs?: number
+  history_error_logs?: number
+  history_warning_logs?: number
 }
 
 export interface DataQualityLog {
