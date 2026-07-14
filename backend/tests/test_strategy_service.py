@@ -1,6 +1,14 @@
 from decimal import Decimal
 
-from app.services.strategy_service import construct_target_weights, construct_target_weights_with_tradability, score_confidence
+import pytest
+
+from app.services.strategy_service import (
+    construct_target_weights,
+    construct_target_weights_with_tradability,
+    normalize_strategy_config,
+    score_confidence,
+)
+from app.strategies.registry import get_strategy_engine, list_strategy_engines
 
 
 class Asset:
@@ -88,3 +96,13 @@ def test_score_confidence_is_bounded() -> None:
     assert score_confidence(Decimal("10")) == Decimal("0.3000")
     assert score_confidence(Decimal("120")) == Decimal("0.9500")
     assert score_confidence(Decimal("72.3456")) == Decimal("0.7235")
+
+
+def test_strategy_registry_exposes_factor_rotation_engine() -> None:
+    assert "factor_rotation" in list_strategy_engines()
+    assert get_strategy_engine("factor_rotation").engine_code == "factor_rotation"
+
+
+def test_normalize_strategy_config_rejects_unknown_engine() -> None:
+    with pytest.raises(ValueError, match="Unsupported strategy engine"):
+        normalize_strategy_config({"engine": "unknown_engine"})
