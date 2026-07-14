@@ -493,6 +493,30 @@ export interface StrategyConfig {
   rebalance_frequency: string
   config: Record<string, unknown>
   enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface DataSourceProvider {
+  provider_code: string
+  provider_name: string
+  enabled: boolean
+  configured: boolean
+  base_url: string | null
+  token_masked: string | null
+  request_interval_seconds: number | null
+  max_requests_per_minute: number | null
+  status: string
+  used_by: string[]
+  notes: string[]
+}
+
+export interface DataSourceSettings {
+  default_calendar_source: string
+  default_market_source: string
+  default_profile_source: string
+  default_ai_provider: string
+  providers: DataSourceProvider[]
 }
 
 export interface BacktestCurvePoint {
@@ -698,8 +722,24 @@ export const calculateFactors = async (payload: { symbols?: string[]; start_date
 export const researchFactors = async (payload: { start_date?: string; end_date?: string; forward_days: number; quantiles: number }) =>
   (await api.post<FactorResearchResult>('/api/factors/research', payload)).data
 export const fetchStrategies = async () => (await api.get<StrategyConfig[]>('/api/strategies')).data
+export const createStrategy = async (payload: {
+  strategy_code: string
+  strategy_name: string
+  version?: string
+  rebalance_frequency?: string
+  config?: Record<string, unknown>
+  enabled?: boolean
+}) => (await api.post<StrategyConfig>('/api/strategies', payload)).data
+export const updateStrategy = async (strategyCode: string, payload: {
+  strategy_name?: string
+  version?: string
+  rebalance_frequency?: string
+  config?: Record<string, unknown>
+  enabled?: boolean
+}) => (await api.patch<StrategyConfig>(`/api/strategies/${strategyCode}`, payload)).data
 export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
+export const fetchDataSourceSettings = async () => (await api.get<DataSourceSettings>('/api/settings/data-sources')).data
 export const checkRisk = async (payload: { run_id: number }) =>
   (await api.post<RunSummary>('/api/risk/check', payload)).data
 export const generateRebalanceOrders = async (payload: { run_id: number; portfolio_value?: number }) =>

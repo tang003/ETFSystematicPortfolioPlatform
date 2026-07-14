@@ -1,9 +1,22 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.schemas.strategy_schema import AlphaSignalRead, StrategyConfigRead, StrategyRunRequest, StrategyRunResponse
-from app.services.strategy_service import latest_signals, list_strategy_configs, run_strategy
+from app.schemas.strategy_schema import (
+    AlphaSignalRead,
+    StrategyConfigCreate,
+    StrategyConfigRead,
+    StrategyConfigUpdate,
+    StrategyRunRequest,
+    StrategyRunResponse,
+)
+from app.services.strategy_service import (
+    create_strategy_config,
+    latest_signals,
+    list_strategy_configs,
+    run_strategy,
+    update_strategy_config,
+)
 
 router = APIRouter(prefix="/strategies", tags=["strategies"])
 
@@ -11,6 +24,26 @@ router = APIRouter(prefix="/strategies", tags=["strategies"])
 @router.get("", response_model=list[StrategyConfigRead])
 def get_strategies(db: Session = Depends(get_db)) -> list[StrategyConfigRead]:
     return list_strategy_configs(db)
+
+
+@router.post("", response_model=StrategyConfigRead)
+def create_strategy_endpoint(request: StrategyConfigCreate, db: Session = Depends(get_db)) -> StrategyConfigRead:
+    try:
+        return create_strategy_config(db, request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.patch("/{strategy_code}", response_model=StrategyConfigRead)
+def update_strategy_endpoint(
+    strategy_code: str,
+    request: StrategyConfigUpdate,
+    db: Session = Depends(get_db),
+) -> StrategyConfigRead:
+    try:
+        return update_strategy_config(db, strategy_code, request.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=404 if "not found" in str(exc).lower() else 400, detail=str(exc)) from exc
 
 
 @router.post("/run", response_model=StrategyRunResponse)

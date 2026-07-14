@@ -17,6 +17,23 @@ class StrategyConfigRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StrategyConfigCreate(BaseModel):
+    strategy_code: str = Field(min_length=3, max_length=100)
+    strategy_name: str = Field(min_length=2, max_length=100)
+    version: str = Field(default="0.1.0", max_length=30)
+    rebalance_frequency: str = Field(default="monthly", max_length=30)
+    config: dict = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class StrategyConfigUpdate(BaseModel):
+    strategy_name: str | None = Field(default=None, min_length=2, max_length=100)
+    version: str | None = Field(default=None, max_length=30)
+    rebalance_frequency: str | None = Field(default=None, max_length=30)
+    config: dict | None = None
+    enabled: bool | None = None
+
+
 class StrategyRunRequest(BaseModel):
     strategy_code: str = Field(default="core_etf_rotation")
     run_date: date | None = None

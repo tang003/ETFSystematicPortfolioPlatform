@@ -11,7 +11,14 @@
       </div>
       <el-form class="action-form" label-width="92px">
         <el-form-item label="策略代码">
-          <el-input v-model="strategyCode" />
+          <el-select v-model="strategyCode" placeholder="选择启用策略">
+            <el-option
+              v-for="item in enabledStrategies"
+              :key="item.strategy_code"
+              :label="`${item.strategy_name} (${item.strategy_code})`"
+              :value="item.strategy_code"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="运行日期">
           <el-date-picker v-model="runDate" type="date" value-format="YYYY-MM-DD" placeholder="默认今天" />
@@ -30,10 +37,10 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { fetchTargetPortfolio, runStrategy, type TargetPortfolio } from '../api/client'
+import { fetchStrategies, fetchTargetPortfolio, runStrategy, type StrategyConfig, type TargetPortfolio } from '../api/client'
 
 const targets = ref<TargetPortfolio[]>([])
 const loading = ref(true)
@@ -41,13 +48,20 @@ const actionLoading = ref(false)
 const chartRef = ref<HTMLElement>()
 const strategyCode = ref('core_etf_rotation')
 const runDate = ref(new Date().toISOString().slice(0, 10))
+const strategies = ref<StrategyConfig[]>([])
+const enabledStrategies = computed(() => strategies.value.filter((item) => item.enabled))
 
 onMounted(refresh)
 
 async function refresh() {
   loading.value = true
   try {
-    targets.value = await fetchTargetPortfolio()
+    const [targetRows, strategyRows] = await Promise.all([fetchTargetPortfolio(), fetchStrategies()])
+    targets.value = targetRows
+    strategies.value = strategyRows
+    if (!enabledStrategies.value.some((item) => item.strategy_code === strategyCode.value)) {
+      strategyCode.value = enabledStrategies.value[0]?.strategy_code || 'core_etf_rotation'
+    }
     await nextTick()
     renderChart()
   } finally {

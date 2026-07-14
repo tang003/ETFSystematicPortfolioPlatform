@@ -13,11 +13,13 @@
         <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon><span>总览</span></el-menu-item>
         <el-menu-item index="/portfolio-workbench"><el-icon><Monitor /></el-icon><span>组合工作台</span></el-menu-item>
         <el-menu-item index="/workflow"><el-icon><Operation /></el-icon><span>全流程</span></el-menu-item>
+        <el-menu-item index="/strategy-management"><el-icon><TrendCharts /></el-icon><span>策略管理</span></el-menu-item>
         <el-menu-item index="/assets"><el-icon><Grid /></el-icon><span>ETF 池</span></el-menu-item>
         <el-menu-item index="/etf-screener"><el-icon><Filter /></el-icon><span>ETF 筛选</span></el-menu-item>
         <el-menu-item index="/etf-compare"><el-icon><DataLine /></el-icon><span>ETF 对比</span></el-menu-item>
         <el-menu-item index="/agent-analysis"><el-icon><MagicStick /></el-icon><span>AI 投研</span></el-menu-item>
         <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
+        <el-menu-item index="/data-sources"><el-icon><Setting /></el-icon><span>数据源管理</span></el-menu-item>
         <el-menu-item index="/system-status"><el-icon><Setting /></el-icon><span>系统状态</span></el-menu-item>
         <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
         <el-menu-item index="/factor-research"><el-icon><DataAnalysis /></el-icon><span>因子研究</span></el-menu-item>

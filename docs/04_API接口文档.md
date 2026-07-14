@@ -378,6 +378,70 @@
 }
 ```
 
+### GET /api/strategies
+
+查询策略配置列表。系统会自动补齐内置策略配置。
+
+返回字段：
+
+- `strategy_code`
+- `strategy_name`
+- `version`
+- `rebalance_frequency`
+- `config`
+- `enabled`
+
+### POST /api/strategies
+
+新增策略配置。
+
+请求：
+
+```json
+{
+  "strategy_code": "low_volatility_rotation",
+  "strategy_name": "低波动 ETF 轮动策略",
+  "version": "0.1.0",
+  "rebalance_frequency": "monthly",
+  "enabled": true,
+  "config": {
+    "engine": "factor_rotation",
+    "risk_profile": "defensive",
+    "target_weights": {
+      "equity_primary": 0.3,
+      "equity_secondary": 0.2,
+      "defense": 0.35,
+      "cash": 0.15
+    }
+  }
+}
+```
+
+### PATCH /api/strategies/{strategy_code}
+
+更新策略配置、启用状态或参数。
+
+请求：
+
+```json
+{
+  "enabled": false
+}
+```
+
+### GET /api/settings/data-sources
+
+查询数据源配置状态。该接口只返回脱敏信息，不返回 Token 明文。
+
+返回内容包括：
+
+- 默认日历源。
+- 默认行情源。
+- 默认 ETF 资料源。
+- 默认 AI 源。
+- Tushare 配置状态、API 地址、脱敏 Token、请求间隔。
+- DeepSeek 配置状态、API 地址、脱敏 Token、模型说明。
+
 ### GET /api/portfolio/target
 
 查询最新目标组合。
