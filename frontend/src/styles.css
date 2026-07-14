@@ -168,6 +168,18 @@ body {
   gap: 8px;
 }
 
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.control-group span {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
@@ -374,7 +386,7 @@ body {
 
 .decision-grid {
   display: grid;
-  grid-template-columns: minmax(260px, 1.5fr) minmax(160px, 0.7fr) repeat(2, minmax(220px, 1fr));
+  grid-template-columns: minmax(260px, 1.4fr) minmax(150px, 0.7fr) repeat(3, minmax(190px, 1fr));
   gap: 12px;
   margin: 8px 0 14px;
 }
@@ -566,6 +578,11 @@ body {
 
   .decision-grid {
     grid-template-columns: 1fr;
+  }
+
+  .control-group {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .assets-filter-form .el-slider {

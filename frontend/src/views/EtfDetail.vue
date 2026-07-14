@@ -3,13 +3,21 @@
     <section class="panel span-12 decision-panel">
       <div class="panel-header">
         <div>
-          <h2>{{ detail?.asset?.name || symbol }} 买入决策</h2>
+          <h2>{{ detail?.asset?.name || symbol }} ETF 详情 / 买入评估</h2>
           <p class="section-note">
-            {{ symbol }} · {{ assetClassText(detail?.asset?.asset_class) }} · {{ regionText(detail?.asset?.asset_region) }}
+            {{ symbol }} · {{ assetClassText(detail?.asset?.asset_class) }} · {{ regionText(detail?.asset?.asset_region) }}；
+            分析周期是历史回看窗口，不等于计划持有周期。
           </p>
         </div>
         <div class="header-actions">
-          <el-segmented v-model="rangeKey" :options="rangeOptions" @change="applyRange" />
+          <div class="control-group">
+            <span>分析周期</span>
+            <el-segmented v-model="rangeKey" :options="rangeOptions" @change="applyRange" />
+          </div>
+          <div class="control-group">
+            <span>计划持有</span>
+            <el-segmented v-model="holdingPeriod" :options="holdingOptions" />
+          </div>
           <el-date-picker
             v-model="dateRange"
             type="daterange"
@@ -41,6 +49,10 @@
           <p>{{ detail?.decision.entry_plan || '-' }}</p>
         </div>
         <div class="decision-card">
+          <span>计划持有：{{ holdingPeriodText }}</span>
+          <p>{{ holdingPlanText }}</p>
+        </div>
+        <div class="decision-card">
           <span>风险阈值</span>
           <p>{{ detail?.decision.stop_loss_hint || '-' }}</p>
         </div>
@@ -48,9 +60,10 @@
 
       <div class="summary-grid">
         <div class="metric">最新价格<strong>{{ detail?.metric.latest_close || '-' }}</strong><span>{{ detail?.metric.latest_trade_date || '-' }}</span></div>
-        <div class="metric">区间收益<strong :class="profitClass(detail?.metric.total_return)">{{ percent(detail?.metric.total_return) }}</strong><span>{{ rangeLabel }}</span></div>
+        <div class="metric">分析周期收益<strong :class="profitClass(detail?.metric.total_return)">{{ percent(detail?.metric.total_return) }}</strong><span>{{ rangeLabel }}</span></div>
+        <div class="metric">年化收益<strong :class="profitClass(detail?.metric.annualized_return)">{{ percent(detail?.metric.annualized_return) }}</strong><span>用于和波动、回撤一起看</span></div>
         <div class="metric">最大回撤<strong class="profit-down">{{ percent(detail?.metric.max_drawdown) }}</strong><span>回撤越深，仓位越要保守</span></div>
-        <div class="metric">可交易性<strong>{{ tradabilityText }}</strong><span>{{ detail?.decision.data_quality || '-' }}</span></div>
+        <div class="metric">夏普比率<strong>{{ numberText(detail?.metric.sharpe_ratio) }}</strong><span>风险调整后收益，越高越好</span></div>
       </div>
     </section>
 
@@ -103,10 +116,16 @@
     </section>
 
     <section class="panel span-7">
-      <h2>最新因子</h2>
-      <el-table :data="factorRows" height="320">
-        <el-table-column prop="name" label="指标" min-width="120" />
-        <el-table-column prop="value" label="数值" min-width="120" />
+      <div class="panel-header">
+        <div>
+          <h2>量化体检</h2>
+          <p class="section-note">把收益、风险、交易性和数据质量放在一起看；单个指标不能单独决定买卖。</p>
+        </div>
+      </div>
+      <el-table :data="quantRows" height="320">
+        <el-table-column prop="name" label="维度" width="130" />
+        <el-table-column prop="value" label="当前值" width="130" />
+        <el-table-column prop="explain" label="说明" min-width="220" />
       </el-table>
     </section>
 
@@ -150,7 +169,12 @@
     </section>
 
     <section class="panel span-12">
-      <h2>最近行情</h2>
+      <div class="panel-header">
+        <div>
+          <h2>原始行情抽样</h2>
+          <p class="section-note">主要用于排查数据是否同步和清洗正常；普通买入决策优先看上方结论、量化体检和同指数替代。</p>
+        </div>
+      </div>
       <el-table :data="detail?.recent_bars || []" height="300">
         <el-table-column prop="trade_date" label="日期" width="120" />
         <el-table-column prop="open" label="开盘" width="100" />
@@ -184,6 +208,13 @@ const rangeOptions = [
   { label: '3年', value: '3y' },
   { label: '自定义', value: 'custom' },
 ]
+const holdingPeriod = ref('6m')
+const holdingOptions = [
+  { label: '1个月', value: '1m' },
+  { label: '3个月', value: '3m' },
+  { label: '6个月', value: '6m' },
+  { label: '1年+', value: '1y' },
+]
 const dateRange = ref<[string, string]>(buildRange('6m'))
 
 onMounted(refresh)
@@ -194,6 +225,10 @@ const tradabilityText = computed(() => {
 })
 
 const rangeLabel = computed(() => `${dateRange.value[0]} 至 ${dateRange.value[1]}`)
+const holdingPeriodText = computed(() => {
+  const item = holdingOptions.find((option) => option.value === holdingPeriod.value)
+  return item?.label || holdingPeriod.value
+})
 
 const totalFee = computed(() => {
   const asset = detail.value?.asset
@@ -203,16 +238,27 @@ const totalFee = computed(() => {
   return management || custody ? management + custody : null
 })
 
-const factorRows = computed(() => {
+const holdingPlanText = computed(() => {
+  const score = detail.value?.decision.score ?? 0
+  if (holdingPeriod.value === '1m') return '1 个月更偏交易观察，当前系统只给 ETF 投研建议，不适合据此频繁短炒。'
+  if (holdingPeriod.value === '3m') return score >= 60 ? '3 个月可小额分批验证趋势，若回撤扩大应暂停加仓。' : '3 个月窗口较短，评分不足时建议只观察不建仓。'
+  if (holdingPeriod.value === '6m') return score >= 60 ? '6 个月适合按月分批，重点跟踪回撤、成交额和同指数替代。' : '6 个月持有也需要先等评分或数据质量改善。'
+  return score >= 60 ? '1 年以上更适合配置思路，建议纳入目标组合并控制单 ETF 权重。' : '长期持有前需要先确认指数逻辑、费率、规模和数据完整性。'
+})
+
+const quantRows = computed(() => {
+  const metric = detail.value?.metric
   const factor = detail.value?.latest_factor
-  if (!factor) return []
+  if (!metric) return []
   return [
-    { name: 'Alpha', value: factor.alpha_score || '-' },
-    { name: '趋势', value: factor.trend_score || '-' },
-    { name: '动量', value: factor.momentum_score || '-' },
-    { name: '波动', value: factor.volatility_score || '-' },
-    { name: '回撤', value: factor.drawdown_score || '-' },
-    { name: '流动性', value: factor.liquidity_score || '-' },
+    { name: '收益', value: percent(metric.total_return), explain: `分析周期 ${rangeLabel.value} 的累计收益。` },
+    { name: '年化收益', value: percent(metric.annualized_return), explain: '把当前区间收益折算成年化，样本越长越有参考意义。' },
+    { name: '波动', value: percent(metric.annualized_volatility), explain: '年化波动越高，持有过程越容易出现大幅浮亏。' },
+    { name: '最大回撤', value: percent(metric.max_drawdown), explain: '历史最差从高点回落幅度，是仓位控制的重要参考。' },
+    { name: '夏普', value: numberText(metric.sharpe_ratio), explain: '风险调整后收益，通常要和同类 ETF 横向比较。' },
+    { name: '交易性', value: `${metric.tradability_score} ${metric.tradability_level}`, explain: metric.tradability_notes.join('；') || '成交额和样本质量可用。' },
+    { name: '数据质量', value: `${metric.bars} 条`, explain: detail.value?.decision.data_quality || '暂无数据质量说明。' },
+    { name: 'Alpha', value: factor?.alpha_score || '-', explain: '本地因子综合分，用于排序参考，不单独构成买入理由。' },
   ]
 })
 
@@ -298,6 +344,11 @@ function renderChart() {
 function percent(value: string | number | null | undefined) {
   if (value == null) return '-'
   return `${(Number(value) * 100).toFixed(2)}%`
+}
+
+function numberText(value: string | number | null | undefined) {
+  if (value == null) return '-'
+  return Number(value).toFixed(2)
 }
 
 function feeText(value: string | number | null | undefined) {
