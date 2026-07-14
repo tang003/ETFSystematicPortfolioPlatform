@@ -8,13 +8,13 @@
 
 - 支持 ETF 主数据维护。
 - 支持全市场 ETF 基础池同步。
-- ETF 基础池同步已支持 AKShare 重试和东方财富备用源。
+- ETF 基础池同步当前采用 Tushare-only；AKShare 和东方财富备用源代码保留但入口停用。
 - 支持启用/停用研究对象。
 - 支持风险等级、跨境、资产类别等字段。
 
 ### 行情和数据质量
 
-- 支持 AKShare、Eastmoney、Tushare 路径。
+- 当前正式同步只启用 Tushare 路径，避免公开源字段口径污染。
 - 支持分层同步：`core`、`positions`、`target`、`plans`、`enabled`、`all`。
 - 支持数据质量日志。
 

@@ -101,42 +101,7 @@ def test_write_asset_sync_log_marks_partial_status() -> None:
     assert db.rows[0].updated == 2
 
 
-def test_fetch_etf_universe_falls_back_to_eastmoney(monkeypatch) -> None:
-    monkeypatch.setattr(asset_service, "fetch_akshare_etf_universe", lambda limit=None: (_ for _ in ()).throw(RuntimeError("boom")))
-    monkeypatch.setattr(
-        asset_service,
-        "fetch_eastmoney_etf_rows",
-        lambda limit=None: [{"代码": "510300", "名称": "沪深300ETF"}],
-    )
-
-    items, source = asset_service.fetch_etf_universe(source="auto")
-
-    assert source == "eastmoney"
-    assert items[0].symbol == "510300"
-
-
-def test_fetch_etf_universe_auto_prefers_eastmoney(monkeypatch) -> None:
-    called = {"akshare": False}
-
-    def fail_akshare(limit=None):
-        called["akshare"] = True
-        raise RuntimeError("should not call akshare first")
-
-    monkeypatch.setattr(asset_service, "fetch_akshare_etf_universe", fail_akshare)
-    monkeypatch.setattr(
-        asset_service,
-        "fetch_eastmoney_etf_rows",
-        lambda limit=None: [{"代码": "510300", "名称": "沪深300ETF"}],
-    )
-
-    items, source = asset_service.fetch_etf_universe(source="auto")
-
-    assert source == "eastmoney"
-    assert items[0].symbol == "510300"
-    assert called["akshare"] is False
-
-
-def test_fetch_etf_universe_falls_back_to_tushare_before_akshare(monkeypatch) -> None:
+def test_fetch_etf_universe_auto_uses_tushare_only(monkeypatch) -> None:
     called = {"akshare": False}
 
     class Frame:
@@ -144,7 +109,6 @@ def test_fetch_etf_universe_falls_back_to_tushare_before_akshare(monkeypatch) ->
             assert orient == "records"
             return [{"ts_code": "510300.SH", "name": "沪深300ETF", "management": "华泰柏瑞基金"}]
 
-    monkeypatch.setattr(asset_service, "fetch_eastmoney_etf_universe", lambda limit=None: (_ for _ in ()).throw(RuntimeError("eastmoney down")))
     monkeypatch.setattr(asset_service, "fetch_fund_basic", lambda market="E", status="L": Frame())
     monkeypatch.setattr(asset_service, "fetch_akshare_etf_universe", lambda limit=None: called.__setitem__("akshare", True))
 
@@ -153,6 +117,15 @@ def test_fetch_etf_universe_falls_back_to_tushare_before_akshare(monkeypatch) ->
     assert source == "tushare"
     assert items[0].symbol == "510300"
     assert called["akshare"] is False
+
+
+def test_fetch_etf_universe_rejects_disabled_sources() -> None:
+    try:
+        asset_service.fetch_etf_universe(source="eastmoney")
+    except ValueError as exc:
+        assert "Tushare-only" in str(exc)
+    else:
+        raise AssertionError("eastmoney source should be disabled")
 
 
 def test_build_asset_item_from_tushare_row_maps_fees_and_profile() -> None:
@@ -197,6 +170,17 @@ def test_tushare_fee_boundary_half_basis_percent_is_converted() -> None:
     assert item["management_fee"] == Decimal("0.0015")
     assert item["custody_fee"] == Decimal("0.0005")
     assert item["expense_ratio"] == Decimal("0.0020")
+
+
+def test_sanitize_fee_ratios_rejects_unrealistic_etf_fee() -> None:
+    management, custody, expense = asset_service.sanitize_fee_ratios(
+        Decimal("0.05"),
+        Decimal("0.001"),
+    )
+
+    assert management is None
+    assert custody == Decimal("0.001")
+    assert expense == Decimal("0.001")
 
 
 def test_build_nav_share_patch_calculates_fund_size_from_ten_thousand_shares() -> None:

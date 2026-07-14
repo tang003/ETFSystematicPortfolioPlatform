@@ -16,7 +16,7 @@ def sync_trading_calendar(
     start_date: date,
     end_date: date,
     market: str = "CN",
-    source: str = "akshare",
+    source: str = "tushare",
     incremental: bool = False,
 ) -> dict[str, Any]:
     if start_date > end_date:
@@ -89,26 +89,19 @@ def resolve_calendar_sync_window(
     return effective_start, end_date, False
 
 
-def fetch_calendar_rows(start_date: date, end_date: date, source: str = "akshare") -> tuple[list[date], str]:
+def fetch_calendar_rows(start_date: date, end_date: date, source: str = "tushare") -> tuple[list[date], str]:
     if source == "tushare":
         frame = fetch_trade_calendar(start_date, end_date)
         dates = parse_tushare_calendar(frame, start_date, end_date)
         return dates, "tushare_trade_cal"
 
     if source == "akshare":
-        try:
-            frame = ak.tool_trade_date_hist_sina()
-            dates = parse_akshare_calendar(frame, start_date, end_date)
-            if dates:
-                return dates, "akshare_sina"
-        except Exception:  # noqa: BLE001 - weekday fallback keeps local development usable.
-            pass
-        return weekday_calendar(start_date, end_date), "weekday_fallback"
+        raise ValueError("交易日历同步已切换为 Tushare-only，AKShare 暂时停用")
 
     if source == "weekday":
-        return weekday_calendar(start_date, end_date), "weekday_fallback"
+        raise ValueError("交易日历同步已切换为 Tushare-only，weekday fallback 暂时停用")
 
-    raise ValueError("source must be one of: akshare, tushare, weekday")
+    raise ValueError("source must be tushare")
 
 
 def parse_akshare_calendar(frame: pd.DataFrame, start_date: date, end_date: date) -> list[date]:

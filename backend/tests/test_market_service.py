@@ -75,20 +75,12 @@ def test_normalize_market_bars_from_english_columns() -> None:
     assert rows[0]["amount"] == Decimal("4820926453")
 
 
-def test_fetch_etf_daily_bars_falls_back_to_eastmoney(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fail_akshare(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
-        raise RuntimeError("akshare down")
+def test_fetch_etf_daily_bars_rejects_disabled_sources() -> None:
+    with pytest.raises(ValueError, match="Tushare-only"):
+        market_service.fetch_etf_daily_bars("510300", date(2026, 7, 1), date(2026, 7, 2), source="akshare")
 
-    def ok_eastmoney(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
-        return pd.DataFrame([{"date": "2026-07-01", "open": "1", "high": "1", "low": "1", "close": "1"}])
-
-    monkeypatch.setattr(market_service, "fetch_akshare_daily_bars", fail_akshare)
-    monkeypatch.setattr(market_service, "fetch_eastmoney_daily_bars", ok_eastmoney)
-
-    frame, source = market_service.fetch_etf_daily_bars("510300", date(2026, 7, 1), date(2026, 7, 2))
-
-    assert source == "eastmoney"
-    assert len(frame) == 1
+    with pytest.raises(ValueError, match="Tushare-only"):
+        market_service.fetch_etf_daily_bars("510300", date(2026, 7, 1), date(2026, 7, 2), source="eastmoney")
 
 
 def test_resolve_market_sync_window_uses_incremental_gap(monkeypatch: pytest.MonkeyPatch) -> None:

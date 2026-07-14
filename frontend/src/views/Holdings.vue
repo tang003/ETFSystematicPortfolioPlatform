@@ -353,7 +353,7 @@ async function resolveRows() {
   }
   actionLoading.value = true
   try {
-    const details = await resolvePositionSymbols(symbols, { auto_sync: true, source: 'akshare' })
+    const details = await resolvePositionSymbols(symbols, { auto_sync: true, source: 'tushare' })
     const detailMap = new Map(details.map((item) => [item.symbol, item]))
     draftRows.value = draftRows.value.map((row) => applyResolveDetail(row, detailMap.get(row.symbol.trim())))
     const unresolvedCount = details.filter((item) => !item.resolved).length
@@ -386,7 +386,7 @@ async function resolveDialogSymbol() {
   }
   actionLoading.value = true
   try {
-    const [detail] = await resolvePositionSymbols([symbol], { auto_sync: true, source: 'akshare' })
+    const [detail] = await resolvePositionSymbols([symbol], { auto_sync: true, source: 'tushare' })
     if (!detail) return
     positionForm.symbol = detail.symbol
     positionForm.position_name = detail.position_name || positionForm.position_name

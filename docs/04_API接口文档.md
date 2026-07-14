@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.60.0-index-tracking-error`
+当前版本：`v0.61.0-tushare-only-data-mode`
 
 默认 API 前缀：`/api`
 
@@ -91,9 +91,9 @@
 
 说明：
 
-- 支持 `auto`、`eastmoney`、`tushare`、`akshare`。
-- `auto` 会先尝试东方财富分页源，失败后切换 Tushare `fund_basic`，最后再尝试 AKShare。
-- Tushare 兜底只同步 ETF 档案基础信息，不同步历史行情，通常只消耗一次基础资料查询。
+- 当前正式模式只支持 `auto`、`tushare`，且 `auto` 等同 Tushare。
+- AKShare/东方财富入口已暂时停用，避免公开源字段口径污染 ETF 主数据。
+- Tushare `fund_basic` 只同步 ETF 档案基础信息，不同步历史行情。
 - 同步进来的 ETF 默认不启用研究。
 - 该接口只同步 ETF 档案列表，不同步历史行情。
 - 外部源失败时不会清空本地已有 ETF 池。
@@ -117,7 +117,7 @@
 
 ```json
 {
-  "source": "akshare",
+  "source": "tushare",
   "total": 2,
   "updated": 2,
   "skipped": 0,
@@ -135,12 +135,13 @@
 
 说明：
 
-- 支持 `auto`、`tushare`、`akshare`。
-- `auto` 会优先使用 Tushare `fund_basic` 补基金公司、上市日期、管理费、托管费、业绩基准/跟踪指数，再使用 Tushare `fund_nav`、`fund_share` 补日频单位净值、基金份额和估算基金规模，最后叠加 AKShare/Eastmoney 能拿到的补充字段。
+- 当前正式模式只支持 `auto`、`tushare`，且 `auto` 等同 Tushare。
+- `auto` 会优先使用 Tushare `fund_basic` 补基金公司、上市日期、管理费、托管费、业绩基准/跟踪指数，再使用 Tushare `fund_nav`、`fund_share` 补日频单位净值、基金份额和估算基金规模。
 - 基金规模估算口径：`单位净值 × 基金份额 × 10000`，其中 Tushare `fund_share.fd_share` 为万份口径。
 - 如果库里已有对应 ETF 的收盘行情，系统会用 `收盘价 / 单位净值 - 1` 计算日频折溢价率，并写入 `etf_nav_premium`。
 - 如果 ETF 已有跟踪指数且能匹配到指数代码，系统会用 Tushare `index_daily` 补指数日线，并按 `ETF 日收益 - 指数日收益` 的年化标准差计算跟踪误差。
 - 指数行情复用 `market_data_clean`，代码使用 `IDX:` 前缀，例如 `IDX:000300.SH`。
+- 费率保护：单项管理费/托管费超过 2%、综合费率超过 3% 的字段不会写入，避免异常口径导致 5% 这类不合理 ETF 费率。
 - `preserve_existing=true` 时只补空字段，不覆盖手工维护的数据。
 - 不传 `symbols` 时按 ETF 池顺序补全，受 `limit` 限制。
 
@@ -217,7 +218,7 @@
   "sync_scope": "core",
   "start_date": "2025-07-13",
   "end_date": "2026-07-13",
-  "source": "akshare",
+  "source": "tushare",
   "incremental": true,
   "clean_after_sync": true,
   "max_symbols": 30,

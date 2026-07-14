@@ -9,8 +9,8 @@ class WorkflowRunRequest(BaseModel):
     start_date: date
     end_date: date
     max_symbols: int | None = Field(default=10, ge=1)
-    calendar_source: str = Field(default="akshare")
-    market_source: str = Field(default="akshare")
+    calendar_source: str = Field(default="tushare")
+    market_source: str = Field(default="tushare")
     incremental_sync: bool = Field(default=True)
     request_interval_seconds: float = Field(default=0, ge=0, le=10)
     strict_data_validation: bool = Field(default=True)

@@ -146,24 +146,14 @@ def fetch_etf_daily_bars(
     symbol: str,
     start_date: date,
     end_date: date,
-    source: str = "akshare",
+    source: str = "tushare",
     exchange: str | None = None,
 ) -> tuple[pd.DataFrame, str]:
-    if source == "eastmoney":
-        return fetch_eastmoney_daily_bars(symbol, start_date, end_date), "eastmoney"
+    if source in {"akshare", "eastmoney"}:
+        raise ValueError("ETF 行情同步已切换为 Tushare-only，AKShare/东方财富暂时停用")
     if source == "tushare":
         return fetch_tushare_daily_bars(symbol, start_date, end_date, exchange), "tushare"
-    if source == "akshare":
-        try:
-            return fetch_akshare_daily_bars(symbol, start_date, end_date), "akshare"
-        except Exception as akshare_error:  # noqa: BLE001 - fallback source is intentional.
-            try:
-                return fetch_eastmoney_daily_bars(symbol, start_date, end_date), "eastmoney"
-            except Exception as eastmoney_error:  # noqa: BLE001 - keep both source failures visible.
-                raise RuntimeError(
-                    f"akshare failed: {akshare_error}; eastmoney fallback failed: {eastmoney_error}"
-                ) from eastmoney_error
-    raise ValueError("source must be one of: akshare, eastmoney, tushare")
+    raise ValueError("source must be tushare")
 
 
 def fetch_akshare_daily_bars(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
@@ -293,7 +283,7 @@ def sync_market_data(
     symbols: list[str] | None,
     start_date: date | None,
     end_date: date | None,
-    source: str = "akshare",
+    source: str = "tushare",
     sync_scope: str = "enabled",
     incremental: bool = False,
     clean_after_sync: bool = True,

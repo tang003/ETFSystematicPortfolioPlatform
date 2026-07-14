@@ -79,7 +79,7 @@ class AssetUniverseSyncResponse(BaseModel):
 
 
 class AssetProfileSyncRequest(BaseModel):
-    source: str = Field(default="akshare")
+    source: str = Field(default="tushare")
     symbols: list[str] | None = None
     limit: int | None = Field(default=100, ge=1, le=1000)
     preserve_existing: bool = True

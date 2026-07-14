@@ -40,6 +40,9 @@ UPSERT_FIELDS = [
     "description",
 ]
 
+MAX_SINGLE_FEE_RATIO = Decimal("0.02")
+MAX_TOTAL_FEE_RATIO = Decimal("0.03")
+
 MARKET_SYNC_PRESERVE_FIELDS = {
     "enabled": AssetMaster.enabled,
     "fund_company": AssetMaster.fund_company,
@@ -181,8 +184,8 @@ def seed_curated_etf_pool(db: Session) -> dict[str, int]:
 
 
 def sync_etf_universe(db: Session, *, source: str = "auto", limit: int | None = None) -> dict[str, int | str]:
-    if source not in {"auto", "akshare", "eastmoney", "tushare"}:
-        raise ValueError("ETF 基础池同步当前支持 source=auto、eastmoney、tushare、akshare")
+    if source not in {"auto", "tushare"}:
+        raise ValueError("ETF 基础池同步已切换为 Tushare-only，当前仅支持 source=auto 或 source=tushare")
     try:
         items, actual_source = fetch_etf_universe(source=source, limit=limit)
         inserted = upsert_market_assets_preserve_enabled(db, items)
@@ -211,14 +214,14 @@ def sync_etf_universe(db: Session, *, source: str = "auto", limit: int | None = 
 def sync_etf_profiles(
     db: Session,
     *,
-    source: str = "akshare",
+    source: str = "tushare",
     symbols: list[str] | None = None,
     limit: int | None = 100,
     preserve_existing: bool = True,
 ) -> dict[str, Any]:
-    normalized_source = (source or "akshare").strip().lower()
-    if normalized_source not in {"akshare", "tushare", "auto"}:
-        raise ValueError("ETF 资料补全仅支持 source=akshare、tushare 或 auto")
+    normalized_source = (source or "tushare").strip().lower()
+    if normalized_source not in {"tushare", "auto"}:
+        raise ValueError("ETF 资料补全已切换为 Tushare-only，当前仅支持 source=tushare 或 auto")
     normalized_symbols = [symbol for symbol in (normalize_symbol(item) for item in symbols or []) if symbol]
     assets = resolve_profile_assets(db, normalized_symbols, limit=limit)
     if not assets:
@@ -226,7 +229,6 @@ def sync_etf_profiles(
         safe_write_asset_sync_log(db, sync_type="profile", result=result, message="没有匹配到需要补全的 ETF")
         return result
 
-    market_rows = fetch_akshare_etf_spot_rows() if normalized_source in {"akshare", "auto"} else {}
     tushare_rows = fetch_tushare_fund_basic_rows() if normalized_source in {"tushare", "auto"} else {}
     results: list[dict[str, Any]] = []
     updated_count = 0
@@ -252,12 +254,6 @@ def sync_etf_profiles(
                     if tracking_profile:
                         profile.update(tracking_profile)
                         profile_source = "tushare_index_daily" if profile_source == normalized_source else f"{profile_source}+index_daily"
-            if normalized_source in {"akshare", "auto"}:
-                row = market_rows.get(asset.symbol, {})
-                akshare_profile = build_profile_patch(asset.symbol, asset.name, row)
-                profile.update({key: value for key, value in akshare_profile.items() if value not in (None, "")})
-                if row:
-                    profile_source = "akshare" if normalized_source == "akshare" else f"{profile_source}+akshare"
             updated_fields = apply_profile_patch(asset, profile, preserve_existing=preserve_existing)
             if updated_fields:
                 updated_count += 1
@@ -314,9 +310,7 @@ def build_tushare_profile_patch(symbol: str, name: str, row: dict[str, Any]) -> 
     effective_name = market_name or name
     management_fee = to_tushare_fee_decimal(first_value(row, "m_fee"))
     custody_fee = to_tushare_fee_decimal(first_value(row, "c_fee"))
-    expense_ratio = None
-    if management_fee is not None or custody_fee is not None:
-        expense_ratio = (management_fee or Decimal("0")) + (custody_fee or Decimal("0"))
+    management_fee, custody_fee, expense_ratio = sanitize_fee_ratios(management_fee, custody_fee)
     return {
         "name": effective_name,
         "exchange": infer_exchange(symbol),
@@ -464,13 +458,6 @@ def safe_write_asset_sync_log(db: Session, *, sync_type: str, result: dict[str, 
 
 def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tuple[list[AssetUpsertItem], str]:
     errors: list[Exception] = []
-    if source in {"auto", "eastmoney"}:
-        try:
-            return fetch_eastmoney_etf_universe(limit=limit), "eastmoney"
-        except Exception as exc:  # noqa: BLE001 - fallback source is intentionally attempted.
-            errors.append(exc)
-            if source == "eastmoney":
-                raise
     if source in {"auto", "tushare"}:
         try:
             return fetch_tushare_etf_universe(limit=limit), "tushare"
@@ -478,16 +465,9 @@ def fetch_etf_universe(*, source: str = "auto", limit: int | None = None) -> tup
             errors.append(exc)
             if source == "tushare":
                 raise
-    if source in {"auto", "akshare"}:
-        try:
-            return fetch_akshare_etf_universe(limit=limit), "akshare"
-        except Exception as exc:  # noqa: BLE001 - fallback source is intentionally attempted.
-            errors.append(exc)
-            if source == "akshare":
-                raise
     if errors:
         raise RuntimeError("；".join(friendly_external_error(error) for error in errors))
-    raise ValueError("没有可用 ETF 基础池数据源")
+    raise ValueError("ETF 基础池同步已切换为 Tushare-only，未启用 AKShare/东方财富备用源")
 
 
 def fetch_tushare_etf_universe(limit: int | None = None) -> list[AssetUpsertItem]:
@@ -639,7 +619,7 @@ def friendly_external_error(error: Exception) -> str:
     if "Read timed out" in text or "timeout" in text.lower():
         return "外部 ETF 列表接口响应超时；本地已有 ETF 池已保留，请稍后重试"
     if "8000" in text and "积分" in text:
-        return "当前 Tushare 权限不足，ETF 基础信息接口通常需要更高积分；请改用 auto/akshare/eastmoney"
+        return "当前 Tushare 权限不足，ETF 基础信息接口通常需要更高积分；当前已停用 AKShare/东方财富备用源"
     return f"外部 ETF 列表接口暂不可用：{text}"
 
 
@@ -672,8 +652,7 @@ def build_profile_patch(symbol: str, name: str, row: dict[str, Any] | None = Non
     management_fee = to_ratio_decimal(first_value(row, "管理费率", "管理费", "management_fee"))
     custody_fee = to_ratio_decimal(first_value(row, "托管费率", "托管费", "custody_fee"))
     expense_ratio = to_ratio_decimal(first_value(row, "综合费率", "费率", "expense_ratio"))
-    if expense_ratio is None and (management_fee is not None or custody_fee is not None):
-        expense_ratio = (management_fee or Decimal("0")) + (custody_fee or Decimal("0"))
+    management_fee, custody_fee, expense_ratio = sanitize_fee_ratios(management_fee, custody_fee, expense_ratio)
     return {
         "name": effective_name,
         "exchange": infer_exchange(symbol),
@@ -731,9 +710,7 @@ def build_asset_item_from_tushare_row(row: dict[str, Any]) -> AssetUpsertItem | 
         return None
     management_fee = to_tushare_fee_decimal(first_value(row, "m_fee"))
     custody_fee = to_tushare_fee_decimal(first_value(row, "c_fee"))
-    expense_ratio = None
-    if management_fee is not None or custody_fee is not None:
-        expense_ratio = (management_fee or Decimal("0")) + (custody_fee or Decimal("0"))
+    management_fee, custody_fee, expense_ratio = sanitize_fee_ratios(management_fee, custody_fee)
     meta = classify_etf_asset(symbol, name)
     return AssetUpsertItem(
         symbol=symbol,
@@ -876,6 +853,20 @@ def to_tushare_fee_decimal(value: Any) -> Decimal | None:
     if ratio is None:
         return None
     return ratio / Decimal("100") if abs(ratio) >= Decimal("0.05") else ratio
+
+
+def sanitize_fee_ratios(
+    management_fee: Decimal | None,
+    custody_fee: Decimal | None,
+    expense_ratio: Decimal | None = None,
+) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+    safe_management = management_fee if management_fee is not None and Decimal("0") <= management_fee <= MAX_SINGLE_FEE_RATIO else None
+    safe_custody = custody_fee if custody_fee is not None and Decimal("0") <= custody_fee <= MAX_SINGLE_FEE_RATIO else None
+    safe_expense = expense_ratio if expense_ratio is not None and Decimal("0") <= expense_ratio <= MAX_TOTAL_FEE_RATIO else None
+    if safe_expense is None and (safe_management is not None or safe_custody is not None):
+        calculated = (safe_management or Decimal("0")) + (safe_custody or Decimal("0"))
+        safe_expense = calculated if calculated <= MAX_TOTAL_FEE_RATIO else None
+    return safe_management, safe_custody, safe_expense
 
 
 def normalize_symbol(value: Any) -> str | None:

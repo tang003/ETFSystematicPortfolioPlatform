@@ -112,7 +112,7 @@ def resolve_position_details(
     symbols: list[str],
     *,
     auto_sync: bool = False,
-    source: str = "akshare",
+    source: str = "tushare",
 ) -> list[PositionResolveRead]:
     seen: set[str] = set()
     resolved = []
@@ -159,12 +159,12 @@ def resolve_position_detail(db: Session, symbol: str) -> PositionResolveRead:
     )
 
 
-def ensure_position_market_data(db: Session, symbol: str, *, source: str = "akshare") -> None:
+def ensure_position_market_data(db: Session, symbol: str, *, source: str = "tushare") -> None:
     ensure_position_asset(db, symbol, enabled=True)
     if latest_clean_bar(db, symbol) is not None:
         return
 
-    from app.services.market_service import sync_eastmoney_spot_quote, sync_market_data
+    from app.services.market_service import sync_market_data
 
     end_date = date.today()
     start_date = end_date - timedelta(days=45)
@@ -180,12 +180,6 @@ def ensure_position_market_data(db: Session, symbol: str, *, source: str = "aksh
         max_symbols=1,
         request_interval_seconds=0,
     )
-    if latest_clean_bar(db, symbol) is None:
-        try:
-            quote = sync_eastmoney_spot_quote(db, symbol)
-            update_asset_from_quote(db, symbol, quote.get("name"))
-        except Exception:
-            return
 
 
 def ensure_position_asset_and_market(db: Session, symbol: str, *, source: str = "tushare") -> PositionResolveRead:

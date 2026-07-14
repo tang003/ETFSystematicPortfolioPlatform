@@ -42,15 +42,11 @@
         <el-form-item label="日历源">
           <el-select v-model="calendarSource">
             <el-option label="Tushare trade_cal" value="tushare" />
-            <el-option label="AKShare" value="akshare" />
-            <el-option label="Weekday fallback" value="weekday" />
           </el-select>
         </el-form-item>
         <el-form-item label="行情源">
           <el-select v-model="marketSource">
             <el-option label="Tushare fund_daily" value="tushare" />
-            <el-option label="AKShare + Eastmoney fallback" value="akshare" />
-            <el-option label="Eastmoney only" value="eastmoney" />
           </el-select>
         </el-form-item>
         <el-form-item label="同步数量">
@@ -59,7 +55,7 @@
         </el-form-item>
         <el-form-item label="请求间隔">
           <el-input-number v-model="requestIntervalSeconds" :min="0" :max="10" :step="0.5" />
-          <span class="form-note">共享 Tushare 建议 1.5 秒或更高；AKShare 可设为 0。</span>
+          <span class="form-note">当前已切换为 Tushare-only，建议共享 token 设置 1.5 秒或更高。</span>
         </el-form-item>
         <el-form-item label="增量同步">
           <el-switch v-model="incrementalSync" />
@@ -321,20 +317,12 @@ function formatDate(value: Date) {
 }
 
 const sourceHintTitle = computed(() => {
-  if (marketSource.value === 'tushare') return '共享 Tushare 建议'
-  if (marketSource.value === 'akshare') return '开发与补数建议'
-  return '备用源建议'
+  return 'Tushare-only 建议'
 })
 
 const sourceHintText = computed(() => {
-  if (marketSource.value === 'tushare') {
-    return incrementalSync.value
-      ? '已开启增量同步，系统会优先只补最新缺口。先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上。'
-      : '当前是全量模式。先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上，避免共享账号短时间请求过多。'
-  }
-  if (marketSource.value === 'akshare') {
-    return '适合日常开发和大多数补数场景。若 AKShare 上游波动，系统会自动尝试 Eastmoney 备用源。'
-  }
-  return 'Eastmoney 适合作为备用数据源排障，不建议长期当作唯一正式来源。'
+  return incrementalSync.value
+    ? '已开启增量同步，系统只使用 Tushare 补最新缺口。先用较短日期范围和 1 到 5 只 ETF 验证，间隔建议保持在 1.5 秒以上。'
+    : '当前是全量模式。系统只使用 Tushare，建议缩短日期范围并保留 1.5 秒以上请求间隔。'
 })
 </script>

@@ -9,7 +9,7 @@ class MarketSyncRequest(BaseModel):
     sync_scope: str = Field(default="enabled", description="enabled, core, positions, target, plans, or all")
     start_date: date | None = Field(default=None, description="Start date; default is one year before end_date")
     end_date: date | None = Field(default=None, description="End date; default is today")
-    source: str = Field(default="akshare", description="akshare falls back to eastmoney when possible")
+    source: str = Field(default="tushare", description="Tushare-only ETF daily bars")
     incremental: bool = Field(default=False, description="Only fetch missing dates after the latest stored bar")
     clean_after_sync: bool = Field(default=True, description="Whether to write clean bars after raw sync")
     max_symbols: int | None = Field(default=None, ge=1, description="Maximum symbols to sync in this request")

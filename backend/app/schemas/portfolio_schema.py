@@ -38,7 +38,7 @@ class PortfolioSnapshotRequest(BaseModel):
 class PositionResolveRequest(BaseModel):
     symbols: list[str]
     auto_sync: bool = False
-    source: str = "akshare"
+    source: str = "tushare"
 
 
 class PositionResolveRead(BaseModel):

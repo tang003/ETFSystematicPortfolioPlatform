@@ -7,7 +7,7 @@ class CalendarSyncRequest(BaseModel):
     start_date: date
     end_date: date
     market: str = Field(default="CN")
-    source: str = Field(default="akshare")
+    source: str = Field(default="tushare")
     incremental: bool = Field(default=False)
 
 

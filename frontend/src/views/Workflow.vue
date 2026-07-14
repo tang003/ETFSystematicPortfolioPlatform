@@ -18,15 +18,11 @@
         <el-form-item label="日历源">
           <el-select v-model="calendarSource">
             <el-option label="Tushare trade_cal" value="tushare" />
-            <el-option label="AKShare" value="akshare" />
-            <el-option label="Weekday fallback" value="weekday" />
           </el-select>
         </el-form-item>
         <el-form-item label="行情源">
           <el-select v-model="marketSource">
             <el-option label="Tushare fund_daily" value="tushare" />
-            <el-option label="AKShare + Eastmoney fallback" value="akshare" />
-            <el-option label="Eastmoney only" value="eastmoney" />
           </el-select>
         </el-form-item>
         <el-form-item label="请求间隔">
@@ -189,21 +185,13 @@ const runId = computed(() => Number(task.value?.result_payload?.run_id || 0) || 
 const canCancel = computed(() => task.value && ['pending', 'running'].includes(task.value.status))
 const canRetry = computed(() => task.value?.status === 'failed' && task.value.steps.some((step) => step.status === 'failed'))
 const workflowHintTitle = computed(() => {
-  if (marketSource.value === 'tushare') return '低频真实数据模式'
-  if (marketSource.value === 'akshare') return '快速开发模式'
-  return '备用行情模式'
+  return 'Tushare-only 真实数据模式'
 })
 
 const workflowHintText = computed(() => {
-  if (marketSource.value === 'tushare') {
-    return incrementalSync.value
-      ? '适合正式真实数据。已开启增量同步和数据门禁；任一 ETF 数据不完整时不会继续生成投资建议。'
-      : '适合正式跑小批量真实数据。当前是全量模式，建议缩短日期范围，并保留 1.5 秒以上的请求间隔。'
-  }
-  if (marketSource.value === 'akshare') {
-    return '适合快速迭代和日常开发。若上游波动，系统会自动尝试 Eastmoney 备用源。'
-  }
-  return '只用 Eastmoney 作为排障和补位来源，建议先在小范围内验证结果。'
+  return incrementalSync.value
+    ? '系统只使用 Tushare。已开启增量同步和数据门禁；任一 ETF 数据不完整时不会继续生成投资建议。'
+    : '系统只使用 Tushare。当前是全量模式，建议缩短日期范围，并保留 1.5 秒以上的请求间隔。'
 })
 
 const logs = computed(() => {

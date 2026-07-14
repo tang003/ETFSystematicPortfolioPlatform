@@ -355,7 +355,7 @@ async function importPresetAssets() {
 async function syncUniverse() {
   actionLoading.value = true
   try {
-    const result = await syncAssetUniverse({ source: 'auto' })
+    const result = await syncAssetUniverse({ source: 'tushare' })
     ElMessage.success(`已通过 ${result.source} 同步 ${result.inserted_or_updated} 只 ETF 到基础池，默认不启用研究`)
     await refresh()
   } catch (error) {
@@ -374,7 +374,7 @@ async function syncProfiles() {
   actionLoading.value = true
   try {
     const result = await syncAssetProfiles({
-      source: 'auto',
+      source: 'tushare',
       symbols,
       limit: symbols.length,
       preserve_existing: true,
