@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import Base, SessionLocal, engine
+from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean, TradingCalendar
 from app.models.workflow import WorkflowTask, WorkflowTaskStep
 from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest
@@ -223,6 +224,7 @@ def run_workflow_task(task_id: int) -> None:
         mark_task_running(db, task)
         results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
         workflow_symbols = resolve_workflow_symbols(db, request.symbols, request.max_symbols, request.sync_scope)
+        start_date, end_date = resolve_workflow_dates(db, request, workflow_symbols)
 
         run_id = existing_run_id(task)
         for step_key, _ in WORKFLOW_STEPS:
@@ -236,8 +238,8 @@ def run_workflow_task(task_id: int) -> None:
                     step_key,
                     lambda: sync_trading_calendar(
                         db,
-                        request.start_date,
-                        request.end_date,
+                        start_date,
+                        end_date,
                         "CN",
                         request.calendar_source,
                         request.incremental_sync,
@@ -252,8 +254,8 @@ def run_workflow_task(task_id: int) -> None:
                     lambda: run_market_step(
                         db,
                         symbols=workflow_symbols,
-                        start_date=request.start_date,
-                        end_date=request.end_date,
+                        start_date=start_date,
+                        end_date=end_date,
                         source=request.market_source,
                         incremental=request.incremental_sync,
                         request_interval_seconds=request.request_interval_seconds,
@@ -264,7 +266,7 @@ def run_workflow_task(task_id: int) -> None:
                 )
             elif step_key == "quality":
                 if workflow_symbols:
-                    execute_step(db, task, step_key, lambda: run_quality_checks(db, workflow_symbols, request.start_date, request.end_date), results)
+                    execute_step(db, task, step_key, lambda: run_quality_checks(db, workflow_symbols, start_date, end_date), results)
                 else:
                     raise ValueError("研究范围中没有可用的 ETF，请先在 ETF 池中启用研究对象。")
             elif step_key == "factors":
@@ -275,8 +277,8 @@ def run_workflow_task(task_id: int) -> None:
                     lambda: run_factor_step(
                         db,
                         symbols=workflow_symbols,
-                        start_date=request.start_date,
-                        end_date=request.end_date,
+                        start_date=start_date,
+                        end_date=end_date,
                         strict=request.strict_data_validation,
                     ),
                     results,
@@ -286,7 +288,7 @@ def run_workflow_task(task_id: int) -> None:
                     db,
                     task,
                     step_key,
-                    lambda: run_strategy(db, strategy_code=request.strategy_code, run_date=request.end_date, run_type="workflow"),
+                    lambda: run_strategy(db, strategy_code=request.strategy_code, run_date=end_date, run_type="workflow"),
                     results,
                 )
                 run_id = int(strategy_result["run_id"])
@@ -301,13 +303,13 @@ def run_workflow_task(task_id: int) -> None:
             elif step_key == "report":
                 run_id = require_run_id(run_id)
                 if request.generate_report:
-                    execute_step(db, task, step_key, lambda: generate_monthly_report(db, run_id=run_id, report_date=request.end_date), results)
+                    execute_step(db, task, step_key, lambda: generate_monthly_report(db, run_id=run_id, report_date=end_date), results)
                 else:
                     skip_step(db, task, step_key, "本次任务未选择生成报告。")
 
         task.status = final_status_for_steps(db, task.id)
         task.current_step = None
-        task.result_payload = json_ready({"run_id": run_id, "steps": results})
+        task.result_payload = json_ready({"run_id": run_id, "start_date": start_date, "end_date": end_date, "steps": results})
         task.finished_at = datetime.utcnow()
         db.commit()
     except WorkflowCancelled:
@@ -481,6 +483,66 @@ def resolve_workflow_symbols(
     if not resolved:
         raise ValueError("研究范围中没有可用的 ETF，请先在 ETF 池中启用研究对象。")
     return resolved
+
+
+def resolve_workflow_dates(db: Session, request: WorkflowRunRequest, symbols: list[str]) -> tuple[date, date]:
+    end_date = request.end_date or default_workflow_end_date(db)
+    preset = (request.date_preset or "1y").strip().lower()
+    if preset == "custom":
+        if request.start_date is None:
+            raise ValueError("自定义日期范围需要填写开始日期。")
+        start_date = request.start_date
+    elif preset == "6m":
+        start_date = end_date - timedelta(days=183)
+    elif preset == "1y":
+        start_date = end_date - timedelta(days=365)
+    elif preset == "3y":
+        start_date = end_date - timedelta(days=365 * 3)
+    elif preset == "5y":
+        start_date = end_date - timedelta(days=365 * 5)
+    elif preset == "inception":
+        start_date = earliest_asset_start_date(db, symbols) or (end_date - timedelta(days=365 * 10))
+    else:
+        raise ValueError("date_preset must be one of: 6m, 1y, 3y, 5y, inception, custom")
+    if start_date > end_date:
+        raise ValueError("开始日期不能晚于结束日期。")
+    return start_date, end_date
+
+
+def default_workflow_end_date(db: Session) -> date:
+    today = date.today()
+    latest_completed_trade_date = db.scalar(
+        select(func.max(TradingCalendar.trade_date)).where(
+            TradingCalendar.market == "CN",
+            TradingCalendar.is_open.is_(True),
+            TradingCalendar.trade_date < today,
+        )
+    )
+    if latest_completed_trade_date is not None:
+        return latest_completed_trade_date
+    latest_market_date = db.scalar(select(func.max(MarketDataClean.trade_date)).where(MarketDataClean.close.is_not(None)))
+    if latest_market_date is not None:
+        return latest_market_date
+    return today - timedelta(days=1)
+
+
+def earliest_asset_start_date(db: Session, symbols: list[str]) -> date | None:
+    if not symbols:
+        return None
+    listing_date = db.scalar(
+        select(func.min(AssetMaster.listing_date)).where(
+            AssetMaster.symbol.in_(symbols),
+            AssetMaster.listing_date.is_not(None),
+        )
+    )
+    if listing_date is not None:
+        return listing_date
+    return db.scalar(
+        select(func.min(MarketDataClean.trade_date)).where(
+            MarketDataClean.symbol.in_(symbols),
+            MarketDataClean.close.is_not(None),
+        )
+    )
 
 
 def run_market_step(

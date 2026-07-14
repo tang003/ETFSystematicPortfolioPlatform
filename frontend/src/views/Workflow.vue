@@ -6,7 +6,10 @@
         <el-tag :type="running ? 'warning' : taskStatusType">{{ taskStatusText }}</el-tag>
       </div>
       <el-form label-width="92px">
-        <el-form-item label="日期范围">
+        <el-form-item label="分析周期">
+          <el-segmented v-model="datePreset" :options="datePresetOptions" />
+        </el-form-item>
+        <el-form-item v-if="datePreset === 'custom'" label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
         </el-form-item>
         <el-form-item label="研究范围">
@@ -143,6 +146,7 @@ const stepDescriptions: Record<string, string> = {
 
 const today = new Date().toISOString().slice(0, 10)
 const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+const datePreset = ref<'6m' | '1y' | '3y' | '5y' | 'inception' | 'custom'>('1y')
 const dateRange = ref<[string, string]>([lastYear, today])
 const syncScope = ref<'core' | 'positions' | 'target' | 'plans' | 'enabled' | 'all' | 'custom'>('core')
 const symbolsText = ref('')
@@ -160,6 +164,15 @@ const task = ref<WorkflowTask>()
 const tasks = ref<WorkflowTask[]>([])
 const running = ref(false)
 let timer: number | undefined
+
+const datePresetOptions = [
+  { label: '半年', value: '6m' },
+  { label: '1 年', value: '1y' },
+  { label: '3 年', value: '3y' },
+  { label: '5 年', value: '5y' },
+  { label: '成立以来', value: 'inception' },
+  { label: '自定义', value: 'custom' },
+]
 
 onMounted(loadTasks)
 
@@ -203,9 +216,10 @@ const workflowHintTitle = computed(() => {
 
 const workflowHintText = computed(() => {
   const scopeText = syncScope.value === 'custom' ? `自定义代码 ${splitSymbols()?.join('、') || '未填写'}` : scopeLabel(syncScope.value)
+  const dateText = datePreset.value === 'custom' ? `${dateRange.value[0]} 至 ${dateRange.value[1]}` : datePresetLabel(datePreset.value)
   return incrementalSync.value
-    ? `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，最多处理 ${maxSymbols.value} 只；已开启增量同步和数据门禁。`
-    : `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，最多处理 ${maxSymbols.value} 只；全量模式建议缩短日期范围。`
+    ? `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；已开启增量同步和数据门禁。`
+    : `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，分析周期为“${dateText}”，最多处理 ${maxSymbols.value} 只；全量模式建议缩短周期。`
 })
 
 const logs = computed(() => {
@@ -227,8 +241,9 @@ async function startWorkflow() {
     const response = await startWorkflowTask({
       symbols: splitSymbols(),
       sync_scope: syncScope.value,
-      start_date: dateRange.value[0],
-      end_date: dateRange.value[1],
+      date_preset: datePreset.value,
+      start_date: datePreset.value === 'custom' ? dateRange.value[0] : undefined,
+      end_date: datePreset.value === 'custom' ? dateRange.value[1] : undefined,
       max_symbols: maxSymbols.value,
       calendar_source: calendarSource.value,
       market_source: marketSource.value,
@@ -377,6 +392,18 @@ function scopeLabel(value: string) {
     enabled: '启用 ETF',
     all: '全市场基础池',
     custom: '自定义代码',
+  }
+  return map[value] || value
+}
+
+function datePresetLabel(value: string) {
+  const map: Record<string, string> = {
+    '6m': '最近半年',
+    '1y': '最近 1 年',
+    '3y': '最近 3 年',
+    '5y': '最近 5 年',
+    inception: '成立以来',
+    custom: '自定义日期',
   }
   return map[value] || value
 }

@@ -7,8 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class WorkflowRunRequest(BaseModel):
     symbols: list[str] | None = None
     sync_scope: str = Field(default="core", description="enabled, core, positions, target, plans, all, or custom")
-    start_date: date
-    end_date: date
+    date_preset: str = Field(default="1y", description="6m, 1y, 3y, 5y, inception, or custom")
+    start_date: date | None = None
+    end_date: date | None = None
     max_symbols: int | None = Field(default=10, ge=1)
     calendar_source: str = Field(default="tushare")
     market_source: str = Field(default="tushare")

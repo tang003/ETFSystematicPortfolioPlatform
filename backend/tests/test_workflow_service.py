@@ -3,16 +3,18 @@ from decimal import Decimal
 
 import pytest
 
-from app.schemas.workflow_schema import HistoricalMarketInitRequest
+from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest
 from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.workflow_service import (
     HISTORICAL_MARKET_INIT_STEPS,
     WORKFLOW_STEPS,
     WorkflowStepValidationError,
+    default_workflow_end_date,
     historical_init_dates,
     json_ready,
     require_run_id,
     resolve_historical_init_symbols,
+    resolve_workflow_dates,
     resolve_workflow_symbols,
     summarize_result,
     validate_batch_result,
@@ -91,6 +93,40 @@ def test_resolve_workflow_symbols_prefers_custom_symbols(monkeypatch: pytest.Mon
 
     assert resolve_workflow_symbols(None, ["513500", "513100"], 10, "custom") == ["513500", "513100"]
     assert captured == {"symbols": ["513500", "513100"], "sync_scope": "enabled"}
+
+
+def test_resolve_workflow_dates_uses_fixed_preset() -> None:
+    request = WorkflowRunRequest(date_preset="6m", end_date=date(2026, 7, 13))
+
+    start_date, end_date = resolve_workflow_dates(None, request, ["510300"])
+
+    assert start_date == date(2026, 1, 11)
+    assert end_date == date(2026, 7, 13)
+
+
+def test_resolve_workflow_dates_requires_custom_start_date() -> None:
+    request = WorkflowRunRequest(date_preset="custom", end_date=date(2026, 7, 13))
+
+    with pytest.raises(ValueError, match="开始日期"):
+        resolve_workflow_dates(None, request, ["510300"])
+
+
+def test_resolve_workflow_dates_uses_inception_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.workflow_service.earliest_asset_start_date", lambda db, symbols: date(2012, 5, 28))
+    request = WorkflowRunRequest(date_preset="inception", end_date=date(2026, 7, 13))
+
+    start_date, end_date = resolve_workflow_dates(None, request, ["510300"])
+
+    assert start_date == date(2012, 5, 28)
+    assert end_date == date(2026, 7, 13)
+
+
+def test_default_workflow_end_date_prefers_completed_trade_date() -> None:
+    class FakeDb:
+        def scalar(self, statement):
+            return date(2026, 7, 13)
+
+    assert default_workflow_end_date(FakeDb()) == date(2026, 7, 13)
 
 
 def test_require_run_id_rejects_missing_value() -> None:

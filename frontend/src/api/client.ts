@@ -710,8 +710,9 @@ export const generateMonthlyReport = async (payload: { run_id?: number; report_d
 export const startWorkflowTask = async (payload: {
   symbols?: string[]
   sync_scope?: string
-  start_date: string
-  end_date: string
+  date_preset?: string
+  start_date?: string
+  end_date?: string
   max_symbols?: number
   calendar_source?: string
   market_source?: string
