@@ -15,6 +15,7 @@ from app.models.asset_sync_log import AssetSyncLog
 from app.models.market_data import EtfNavPremium, MarketDataClean
 from app.schemas.asset_schema import AssetUpdateRequest, AssetUpsertItem
 from app.services.tushare_service import fetch_fund_basic, fetch_fund_nav, fetch_fund_share, to_tushare_code
+from app.services.tracking_service import build_tracking_quality_patch, should_fetch_tracking_error
 
 UPSERT_FIELDS = [
     "name",
@@ -245,6 +246,12 @@ def sync_etf_profiles(
                     if nav_profile:
                         profile.update(nav_profile)
                         profile_source = "tushare_nav_share" if profile_source == normalized_source else f"{profile_source}+nav_share"
+                tracking_index = str(profile.get("tracking_index") or asset.tracking_index or "")
+                if tracking_index and should_fetch_tracking_error(asset, preserve_existing=preserve_existing):
+                    tracking_profile = build_tracking_quality_patch(db, asset, tracking_index=tracking_index)
+                    if tracking_profile:
+                        profile.update(tracking_profile)
+                        profile_source = "tushare_index_daily" if profile_source == normalized_source else f"{profile_source}+index_daily"
             if normalized_source in {"akshare", "auto"}:
                 row = market_rows.get(asset.symbol, {})
                 akshare_profile = build_profile_patch(asset.symbol, asset.name, row)

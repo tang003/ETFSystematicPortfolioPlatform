@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.59.0-tushare-nav-share-profile`
+当前版本：`v0.60.0-index-tracking-error`
 
 默认 API 前缀：`/api`
 
@@ -139,7 +139,8 @@
 - `auto` 会优先使用 Tushare `fund_basic` 补基金公司、上市日期、管理费、托管费、业绩基准/跟踪指数，再使用 Tushare `fund_nav`、`fund_share` 补日频单位净值、基金份额和估算基金规模，最后叠加 AKShare/Eastmoney 能拿到的补充字段。
 - 基金规模估算口径：`单位净值 × 基金份额 × 10000`，其中 Tushare `fund_share.fd_share` 为万份口径。
 - 如果库里已有对应 ETF 的收盘行情，系统会用 `收盘价 / 单位净值 - 1` 计算日频折溢价率，并写入 `etf_nav_premium`。
-- 跟踪误差仍需要后续接入跟踪指数行情后计算。
+- 如果 ETF 已有跟踪指数且能匹配到指数代码，系统会用 Tushare `index_daily` 补指数日线，并按 `ETF 日收益 - 指数日收益` 的年化标准差计算跟踪误差。
+- 指数行情复用 `market_data_clean`，代码使用 `IDX:` 前缀，例如 `IDX:000300.SH`。
 - `preserve_existing=true` 时只补空字段，不覆盖手工维护的数据。
 - 不传 `symbols` 时按 ETF 池顺序补全，受 `limit` 限制。
 

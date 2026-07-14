@@ -89,6 +89,18 @@ def fetch_fund_share(ts_code: str) -> pd.DataFrame:
     )
 
 
+def fetch_index_daily(ts_code: str, start_date: date, end_date: date) -> pd.DataFrame:
+    return tushare_query(
+        "index_daily",
+        params={
+            "ts_code": ts_code,
+            "start_date": start_date.strftime("%Y%m%d"),
+            "end_date": end_date.strftime("%Y%m%d"),
+        },
+        fields=["ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"],
+    )
+
+
 def fetch_fund_basic(*, market: str = "E", status: str = "L") -> pd.DataFrame:
     return tushare_query(
         "fund_basic",
