@@ -214,29 +214,42 @@ def sync_etf_profiles(
     limit: int | None = 100,
     preserve_existing: bool = True,
 ) -> dict[str, Any]:
-    if source != "akshare":
-        raise ValueError("ETF 资料补全当前仅支持 source=akshare")
+    normalized_source = (source or "akshare").strip().lower()
+    if normalized_source not in {"akshare", "tushare", "auto"}:
+        raise ValueError("ETF 资料补全仅支持 source=akshare、tushare 或 auto")
     normalized_symbols = [symbol for symbol in (normalize_symbol(item) for item in symbols or []) if symbol]
     assets = resolve_profile_assets(db, normalized_symbols, limit=limit)
     if not assets:
-        result = {"source": source, "total": 0, "updated": 0, "skipped": 0, "failed": 0, "results": []}
+        result = {"source": normalized_source, "total": 0, "updated": 0, "skipped": 0, "failed": 0, "results": []}
         safe_write_asset_sync_log(db, sync_type="profile", result=result, message="没有匹配到需要补全的 ETF")
         return result
 
-    market_rows = fetch_akshare_etf_spot_rows()
+    market_rows = fetch_akshare_etf_spot_rows() if normalized_source in {"akshare", "auto"} else {}
+    tushare_rows = fetch_tushare_fund_basic_rows() if normalized_source in {"tushare", "auto"} else {}
     results: list[dict[str, Any]] = []
     updated_count = 0
     skipped_count = 0
     failed_count = 0
     for asset in assets:
         try:
-            row = market_rows.get(asset.symbol, {})
-            profile = build_profile_patch(asset.symbol, asset.name, row)
+            profile: dict[str, Any] = {}
+            profile_source = normalized_source
+            if normalized_source in {"tushare", "auto"}:
+                tushare_row = tushare_rows.get(asset.symbol, {})
+                if tushare_row:
+                    profile.update(build_tushare_profile_patch(asset.symbol, asset.name, tushare_row))
+                    profile_source = "tushare"
+            if normalized_source in {"akshare", "auto"}:
+                row = market_rows.get(asset.symbol, {})
+                akshare_profile = build_profile_patch(asset.symbol, asset.name, row)
+                profile.update({key: value for key, value in akshare_profile.items() if value not in (None, "")})
+                if row:
+                    profile_source = "akshare" if normalized_source == "akshare" else f"{profile_source}+akshare"
             updated_fields = apply_profile_patch(asset, profile, preserve_existing=preserve_existing)
             if updated_fields:
                 updated_count += 1
                 status = "updated"
-                message = "已补全 ETF 主资料"
+                message = f"已通过 {profile_source} 补全 ETF 主资料"
             else:
                 skipped_count += 1
                 status = "skipped"
@@ -260,7 +273,7 @@ def sync_etf_profiles(
                 }
             )
     result = {
-        "source": source,
+        "source": normalized_source,
         "total": len(assets),
         "updated": updated_count,
         "skipped": skipped_count,
@@ -270,6 +283,39 @@ def sync_etf_profiles(
     db.commit()
     safe_write_asset_sync_log(db, sync_type="profile", result=result, message="ETF 主资料补全完成")
     return result
+
+
+def fetch_tushare_fund_basic_rows() -> dict[str, dict[str, Any]]:
+    frame = fetch_fund_basic(market="E", status="L")
+    rows: dict[str, dict[str, Any]] = {}
+    for row in frame.to_dict(orient="records"):
+        ts_code = str(first_value(row, "ts_code", "TS_CODE") or "").strip()
+        symbol = normalize_symbol(ts_code.split(".", 1)[0] if ts_code else None)
+        if symbol:
+            rows[symbol] = row
+    return rows
+
+
+def build_tushare_profile_patch(symbol: str, name: str, row: dict[str, Any]) -> dict[str, Any]:
+    market_name = truncate_text(first_value(row, "name", "fund_name"), 100)
+    effective_name = market_name or name
+    management_fee = to_tushare_fee_decimal(first_value(row, "m_fee"))
+    custody_fee = to_tushare_fee_decimal(first_value(row, "c_fee"))
+    expense_ratio = None
+    if management_fee is not None or custody_fee is not None:
+        expense_ratio = (management_fee or Decimal("0")) + (custody_fee or Decimal("0"))
+    return {
+        "name": effective_name,
+        "exchange": infer_exchange(symbol),
+        "fund_company": truncate_text(first_value(row, "management"), 100) or infer_fund_company(effective_name),
+        "tracking_index": normalize_tushare_benchmark(first_value(row, "benchmark")) or infer_tracking_index(effective_name),
+        "listing_date": to_date(first_value(row, "list_date", "found_date")),
+        "management_fee": management_fee,
+        "custody_fee": custody_fee,
+        "expense_ratio": expense_ratio,
+        "description": "ETF 主资料来自 Tushare fund_basic；规模、跟踪误差、实时折溢价率需由其他数据源继续补全。",
+        **classify_etf_asset(symbol, effective_name),
+    }
 
 
 def list_asset_sync_logs(db: Session, *, sync_type: str | None = None, limit: int = 20) -> list[AssetSyncLog]:
@@ -864,6 +910,21 @@ def infer_tracking_index(name: str) -> str | None:
         if keyword.upper() in compact_name:
             return index_name
     return None
+
+
+def normalize_tushare_benchmark(value: Any) -> str | None:
+    text = truncate_text(value, 100)
+    if not text:
+        return None
+    cleaned = (
+        text.replace("收益率", "")
+        .replace("指数", "")
+        .replace("×100%", "")
+        .replace("*100%", "")
+        .replace("人民币计价", "")
+        .strip(" -_，,；;")
+    )
+    return infer_tracking_index(cleaned) or cleaned or None
 
 
 def build_profile_description(symbol: str, name: str) -> str:

@@ -106,7 +106,7 @@
 
 ```json
 {
-  "source": "akshare",
+  "source": "auto",
   "symbols": ["510300", "159915"],
   "limit": 100,
   "preserve_existing": true
@@ -135,7 +135,9 @@
 
 说明：
 
-- 当前只支持 `akshare`，不消耗 Tushare token。
+- 支持 `auto`、`tushare`、`akshare`。
+- `auto` 会优先使用 Tushare `fund_basic` 补基金公司、上市日期、管理费、托管费、业绩基准/跟踪指数，再叠加 AKShare/Eastmoney 能拿到的规模、折溢价等字段。
+- Tushare `fund_basic` 通常不提供 ETF 实时规模、跟踪误差和实时折溢价率，这些字段需要其他数据源或后续净值/规模接口继续补。
 - `preserve_existing=true` 时只补空字段，不覆盖手工维护的数据。
 - 不传 `symbols` 时按 ETF 池顺序补全，受 `limit` 限制。
 

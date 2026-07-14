@@ -352,7 +352,7 @@ async function syncProfiles() {
   actionLoading.value = true
   try {
     const result = await syncAssetProfiles({
-      source: 'akshare',
+      source: 'auto',
       symbols,
       limit: symbols.length,
       preserve_existing: true,
