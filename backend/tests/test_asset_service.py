@@ -205,7 +205,7 @@ def test_build_nav_share_patch_calculates_fund_size_from_ten_thousand_shares() -
         {"trade_date": "20260714", "fd_share": "1888108.6664"},
     )
 
-    assert patch["fund_size"] == Decimal("23557411633.71280000")
+    assert patch["fund_size"] == Decimal("23557931830.67280000")
     assert patch["_latest_nav"] == Decimal("1.2477")
     assert patch["_latest_nav_date"].isoformat() == "2026-07-13"
 
