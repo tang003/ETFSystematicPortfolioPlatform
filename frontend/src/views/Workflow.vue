@@ -9,11 +9,23 @@
         <el-form-item label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" />
         </el-form-item>
-        <el-form-item label="ETF 代码">
-          <el-input v-model="symbolsText" placeholder="多个代码用逗号分隔；留空表示全部启用 ETF" />
+        <el-form-item label="研究范围">
+          <el-select v-model="syncScope">
+            <el-option label="核心池：持仓 + 目标组合 + 定投 + 启用 ETF" value="core" />
+            <el-option label="当前持仓" value="positions" />
+            <el-option label="目标组合" value="target" />
+            <el-option label="定投计划" value="plans" />
+            <el-option label="启用 ETF" value="enabled" />
+            <el-option label="全市场基础池" value="all" />
+            <el-option label="自定义代码" value="custom" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="syncScope === 'custom'" label="ETF 代码">
+          <el-input v-model="symbolsText" placeholder="多个代码用逗号或空格分隔，例如 510300, 513500" />
         </el-form-item>
         <el-form-item label="同步数量">
           <el-input-number v-model="maxSymbols" :min="1" :max="50" />
+          <span class="form-note">控制本次最多处理多少只 ETF，避免一次任务过大。</span>
         </el-form-item>
         <el-form-item label="日历源">
           <el-select v-model="calendarSource">
@@ -132,8 +144,9 @@ const stepDescriptions: Record<string, string> = {
 const today = new Date().toISOString().slice(0, 10)
 const lastYear = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 const dateRange = ref<[string, string]>([lastYear, today])
-const symbolsText = ref('510300,159915')
-const maxSymbols = ref(10)
+const syncScope = ref<'core' | 'positions' | 'target' | 'plans' | 'enabled' | 'all' | 'custom'>('core')
+const symbolsText = ref('')
+const maxSymbols = ref(20)
 const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
@@ -189,9 +202,10 @@ const workflowHintTitle = computed(() => {
 })
 
 const workflowHintText = computed(() => {
+  const scopeText = syncScope.value === 'custom' ? `自定义代码 ${splitSymbols()?.join('、') || '未填写'}` : scopeLabel(syncScope.value)
   return incrementalSync.value
-    ? '系统只使用 Tushare。已开启增量同步和数据门禁；任一 ETF 数据不完整时不会继续生成投资建议。'
-    : '系统只使用 Tushare。当前是全量模式，建议缩短日期范围，并保留 1.5 秒以上的请求间隔。'
+    ? `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，最多处理 ${maxSymbols.value} 只；已开启增量同步和数据门禁。`
+    : `系统只使用 Tushare。本次将按“${scopeText}”自动选择 ETF，最多处理 ${maxSymbols.value} 只；全量模式建议缩短日期范围。`
 })
 
 const logs = computed(() => {
@@ -212,6 +226,7 @@ async function startWorkflow() {
   try {
     const response = await startWorkflowTask({
       symbols: splitSymbols(),
+      sync_scope: syncScope.value,
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
       max_symbols: maxSymbols.value,
@@ -349,7 +364,21 @@ function summarizePayload(step: WorkflowTaskStep) {
 }
 
 function splitSymbols() {
+  if (syncScope.value !== 'custom') return undefined
   return symbolsText.value.split(/[,，\s]+/).map((item) => item.trim()).filter(Boolean)
+}
+
+function scopeLabel(value: string) {
+  const map: Record<string, string> = {
+    core: '核心池',
+    positions: '当前持仓',
+    target: '目标组合',
+    plans: '定投计划',
+    enabled: '启用 ETF',
+    all: '全市场基础池',
+    custom: '自定义代码',
+  }
+  return map[value] || value
 }
 
 onBeforeUnmount(stopPolling)

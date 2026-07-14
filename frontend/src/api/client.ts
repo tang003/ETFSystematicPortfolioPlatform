@@ -709,6 +709,7 @@ export const generateMonthlyReport = async (payload: { run_id?: number; report_d
   (await api.post<RunSummary>('/api/reports/monthly', payload)).data
 export const startWorkflowTask = async (payload: {
   symbols?: string[]
+  sync_scope?: string
   start_date: string
   end_date: string
   max_symbols?: number

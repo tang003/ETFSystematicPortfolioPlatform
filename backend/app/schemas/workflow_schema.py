@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class WorkflowRunRequest(BaseModel):
     symbols: list[str] | None = None
+    sync_scope: str = Field(default="core", description="enabled, core, positions, target, plans, all, or custom")
     start_date: date
     end_date: date
     max_symbols: int | None = Field(default=10, ge=1)

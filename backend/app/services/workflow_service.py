@@ -222,7 +222,7 @@ def run_workflow_task(task_id: int) -> None:
         request = WorkflowRunRequest.model_validate(task.request_payload)
         mark_task_running(db, task)
         results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
-        workflow_symbols = resolve_workflow_symbols(db, request.symbols, request.max_symbols)
+        workflow_symbols = resolve_workflow_symbols(db, request.symbols, request.max_symbols, request.sync_scope)
 
         run_id = existing_run_id(task)
         for step_key, _ in WORKFLOW_STEPS:
@@ -470,8 +470,14 @@ class WorkflowStepValidationError(ValueError):
         self.result = result
 
 
-def resolve_workflow_symbols(db: Session, symbols: list[str] | None, max_symbols: int | None) -> list[str]:
-    resolved, _ = limit_symbols(resolve_symbols(db, symbols), max_symbols)
+def resolve_workflow_symbols(
+    db: Session,
+    symbols: list[str] | None,
+    max_symbols: int | None,
+    sync_scope: str = "core",
+) -> list[str]:
+    resolved_scope = "enabled" if (sync_scope or "core") == "custom" else sync_scope
+    resolved, _ = limit_symbols(resolve_symbols(db, symbols, sync_scope=resolved_scope), max_symbols)
     if not resolved:
         raise ValueError("研究范围中没有可用的 ETF，请先在 ETF 池中启用研究对象。")
     return resolved

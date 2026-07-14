@@ -13,6 +13,7 @@ from app.services.workflow_service import (
     json_ready,
     require_run_id,
     resolve_historical_init_symbols,
+    resolve_workflow_symbols,
     summarize_result,
     validate_batch_result,
 )
@@ -70,6 +71,26 @@ def test_resolve_historical_init_symbols_uses_curated_pool() -> None:
     request = HistoricalMarketInitRequest(scope="curated", max_symbols=3)
 
     assert resolve_historical_init_symbols(None, request) == CURATED_ETF_SYMBOLS[:3]
+
+
+def test_resolve_workflow_symbols_uses_scope_when_symbols_are_blank(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("app.services.workflow_service.resolve_symbols", lambda db, symbols, sync_scope="enabled": ["510300", "159915", "513500"])
+
+    assert resolve_workflow_symbols(None, None, 2, "core") == ["510300", "159915"]
+
+
+def test_resolve_workflow_symbols_prefers_custom_symbols(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = {}
+
+    def fake_resolve_symbols(db, symbols, sync_scope="enabled"):
+        captured["symbols"] = symbols
+        captured["sync_scope"] = sync_scope
+        return symbols
+
+    monkeypatch.setattr("app.services.workflow_service.resolve_symbols", fake_resolve_symbols)
+
+    assert resolve_workflow_symbols(None, ["513500", "513100"], 10, "custom") == ["513500", "513100"]
+    assert captured == {"symbols": ["513500", "513100"], "sync_scope": "enabled"}
 
 
 def test_require_run_id_rejects_missing_value() -> None:
