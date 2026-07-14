@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.48.0-historical-market-init`
+当前版本：`v0.59.0-tushare-nav-share-profile`
 
 默认 API 前缀：`/api`
 
@@ -136,8 +136,10 @@
 说明：
 
 - 支持 `auto`、`tushare`、`akshare`。
-- `auto` 会优先使用 Tushare `fund_basic` 补基金公司、上市日期、管理费、托管费、业绩基准/跟踪指数，再叠加 AKShare/Eastmoney 能拿到的规模、折溢价等字段。
-- Tushare `fund_basic` 通常不提供 ETF 实时规模、跟踪误差和实时折溢价率，这些字段需要其他数据源或后续净值/规模接口继续补。
+- `auto` 会优先使用 Tushare `fund_basic` 补基金公司、上市日期、管理费、托管费、业绩基准/跟踪指数，再使用 Tushare `fund_nav`、`fund_share` 补日频单位净值、基金份额和估算基金规模，最后叠加 AKShare/Eastmoney 能拿到的补充字段。
+- 基金规模估算口径：`单位净值 × 基金份额 × 10000`，其中 Tushare `fund_share.fd_share` 为万份口径。
+- 如果库里已有对应 ETF 的收盘行情，系统会用 `收盘价 / 单位净值 - 1` 计算日频折溢价率，并写入 `etf_nav_premium`。
+- 跟踪误差仍需要后续接入跟踪指数行情后计算。
 - `preserve_existing=true` 时只补空字段，不覆盖手工维护的数据。
 - 不传 `symbols` 时按 ETF 池顺序补全，受 `limit` 限制。
 

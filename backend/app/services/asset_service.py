@@ -5,15 +5,16 @@ from typing import Any
 
 import akshare as ak
 import requests
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.asset import AssetMaster
 from app.models.asset_sync_log import AssetSyncLog
+from app.models.market_data import EtfNavPremium, MarketDataClean
 from app.schemas.asset_schema import AssetUpdateRequest, AssetUpsertItem
-from app.services.tushare_service import fetch_fund_basic
+from app.services.tushare_service import fetch_fund_basic, fetch_fund_nav, fetch_fund_share, to_tushare_code
 
 UPSERT_FIELDS = [
     "name",
@@ -239,6 +240,11 @@ def sync_etf_profiles(
                 if tushare_row:
                     profile.update(build_tushare_profile_patch(asset.symbol, asset.name, tushare_row))
                     profile_source = "tushare"
+                if should_fetch_nav_share(asset, preserve_existing=preserve_existing):
+                    nav_profile = build_tushare_nav_share_profile_patch(db, asset)
+                    if nav_profile:
+                        profile.update(nav_profile)
+                        profile_source = "tushare_nav_share" if profile_source == normalized_source else f"{profile_source}+nav_share"
             if normalized_source in {"akshare", "auto"}:
                 row = market_rows.get(asset.symbol, {})
                 akshare_profile = build_profile_patch(asset.symbol, asset.name, row)
@@ -313,9 +319,106 @@ def build_tushare_profile_patch(symbol: str, name: str, row: dict[str, Any]) -> 
         "management_fee": management_fee,
         "custody_fee": custody_fee,
         "expense_ratio": expense_ratio,
-        "description": "ETF 主资料来自 Tushare fund_basic；规模、跟踪误差、实时折溢价率需由其他数据源继续补全。",
+        "description": "ETF 主资料来自 Tushare fund_basic；规模可由 fund_nav/fund_share 补充，跟踪误差需指数行情计算。",
         **classify_etf_asset(symbol, effective_name),
     }
+
+
+def build_tushare_nav_share_profile_patch(db: Session, asset: AssetMaster) -> dict[str, Any]:
+    ts_code = to_tushare_code(asset.symbol, asset.exchange)
+    nav_frame = fetch_fund_nav(ts_code)
+    share_frame = fetch_fund_share(ts_code)
+    nav_row = latest_tushare_nav_row(nav_frame.to_dict(orient="records"))
+    share_row = latest_tushare_share_row(share_frame.to_dict(orient="records"))
+    patch = build_nav_share_patch(nav_row, share_row)
+    nav = patch.pop("_latest_nav", None)
+    nav_date = patch.pop("_latest_nav_date", None)
+    if nav is not None and nav_date is not None:
+        market_price = latest_clean_close(db, asset.symbol, nav_date)
+        if market_price is not None and nav:
+            premium_rate = (market_price - nav) / nav
+            patch["latest_premium_rate"] = premium_rate
+            upsert_nav_premium(db, asset.symbol, nav_date, nav, market_price, premium_rate, source="tushare_fund_nav")
+    return patch
+
+
+def should_fetch_nav_share(asset: AssetMaster, *, preserve_existing: bool) -> bool:
+    if not preserve_existing:
+        return True
+    return asset.fund_size is None or asset.latest_premium_rate is None
+
+
+def latest_tushare_nav_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    dated_rows = [row for row in rows if to_date(first_value(row, "ann_date", "end_date")) is not None]
+    if not dated_rows:
+        return {}
+    return max(dated_rows, key=lambda row: to_date(first_value(row, "ann_date", "end_date")) or date.min)
+
+
+def latest_tushare_share_row(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    dated_rows = [row for row in rows if to_date(first_value(row, "trade_date", "ann_date", "end_date")) is not None]
+    if not dated_rows:
+        return {}
+    return max(dated_rows, key=lambda row: to_date(first_value(row, "trade_date", "ann_date", "end_date")) or date.min)
+
+
+def build_nav_share_patch(nav_row: dict[str, Any], share_row: dict[str, Any]) -> dict[str, Any]:
+    unit_nav = to_decimal(first_value(nav_row, "unit_nav", "adj_nav"))
+    nav_date = to_date(first_value(nav_row, "ann_date", "end_date"))
+    total_netasset = to_money_decimal(first_value(nav_row, "total_netasset", "net_asset"))
+    fd_share = to_decimal(first_value(share_row, "fd_share"))
+    fund_size = total_netasset
+    if fund_size is None and unit_nav is not None and fd_share is not None:
+        fund_size = unit_nav * fd_share * Decimal("10000")
+    patch: dict[str, Any] = {}
+    if fund_size is not None:
+        patch["fund_size"] = fund_size
+    if unit_nav is not None and nav_date is not None:
+        patch["_latest_nav"] = unit_nav
+        patch["_latest_nav_date"] = nav_date
+    return patch
+
+
+def latest_clean_close(db: Session, symbol: str, trade_date: date) -> Decimal | None:
+    return db.scalar(
+        select(MarketDataClean.close)
+        .where(MarketDataClean.symbol == symbol)
+        .where(MarketDataClean.trade_date <= trade_date)
+        .where(MarketDataClean.close.is_not(None))
+        .order_by(desc(MarketDataClean.trade_date))
+        .limit(1)
+    )
+
+
+def upsert_nav_premium(
+    db: Session,
+    symbol: str,
+    trade_date: date,
+    nav: Decimal,
+    market_price: Decimal,
+    premium_rate: Decimal,
+    *,
+    source: str,
+) -> None:
+    statement = insert(EtfNavPremium).values(
+        symbol=symbol,
+        trade_date=trade_date,
+        nav=nav,
+        market_price=market_price,
+        premium_rate=premium_rate,
+        source=source,
+    )
+    db.execute(
+        statement.on_conflict_do_update(
+            index_elements=["symbol", "trade_date"],
+            set_={
+                "nav": statement.excluded.nav,
+                "market_price": statement.excluded.market_price,
+                "premium_rate": statement.excluded.premium_rate,
+                "source": statement.excluded.source,
+            },
+        )
+    )
 
 
 def list_asset_sync_logs(db: Session, *, sync_type: str | None = None, limit: int = 20) -> list[AssetSyncLog]:

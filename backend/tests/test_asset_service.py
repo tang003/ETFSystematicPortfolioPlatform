@@ -199,6 +199,44 @@ def test_tushare_fee_boundary_half_basis_percent_is_converted() -> None:
     assert item["expense_ratio"] == Decimal("0.0020")
 
 
+def test_build_nav_share_patch_calculates_fund_size_from_ten_thousand_shares() -> None:
+    patch = asset_service.build_nav_share_patch(
+        {"ann_date": "20260713", "unit_nav": "1.2477"},
+        {"trade_date": "20260714", "fd_share": "1888108.6664"},
+    )
+
+    assert patch["fund_size"] == Decimal("23557411633.71280000")
+    assert patch["_latest_nav"] == Decimal("1.2477")
+    assert patch["_latest_nav_date"].isoformat() == "2026-07-13"
+
+
+def test_latest_tushare_rows_choose_latest_available_dates() -> None:
+    nav = asset_service.latest_tushare_nav_row(
+        [
+            {"ann_date": "20260710", "unit_nav": "1.28"},
+            {"ann_date": "20260713", "unit_nav": "1.2477"},
+        ]
+    )
+    share = asset_service.latest_tushare_share_row(
+        [
+            {"trade_date": "20260710", "fd_share": "100"},
+            {"trade_date": "20260714", "fd_share": "120"},
+        ]
+    )
+
+    assert nav["unit_nav"] == "1.2477"
+    assert share["fd_share"] == "120"
+
+
+def test_should_fetch_nav_share_skips_when_profile_already_has_scale_fields() -> None:
+    class Asset:
+        fund_size = Decimal("100")
+        latest_premium_rate = Decimal("0.001")
+
+    assert asset_service.should_fetch_nav_share(Asset(), preserve_existing=True) is False
+    assert asset_service.should_fetch_nav_share(Asset(), preserve_existing=False) is True
+
+
 def test_build_asset_item_from_tushare_row_truncates_long_profile_fields() -> None:
     item = asset_service.build_asset_item_from_tushare_row(
         {
