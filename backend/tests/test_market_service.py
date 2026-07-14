@@ -113,3 +113,27 @@ def test_resolve_market_sync_window_marks_up_to_date(monkeypatch: pytest.MonkeyP
     assert sync_start == date(2026, 7, 1)
     assert sync_end == date(2026, 7, 8)
     assert up_to_date is True
+
+
+def test_incremental_tushare_empty_gap_is_up_to_date(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(market_service, "latest_market_trade_date", lambda db, symbol: date(2026, 7, 13))
+
+    assert market_service.is_incremental_tushare_empty_gap(
+        db=None,
+        symbol="510300",
+        source="tushare",
+        incremental=True,
+        error=ValueError("510300 tushare returned no fund_daily rows"),
+    )
+
+
+def test_incremental_tushare_empty_gap_requires_existing_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(market_service, "latest_market_trade_date", lambda db, symbol: None)
+
+    assert not market_service.is_incremental_tushare_empty_gap(
+        db=None,
+        symbol="510300",
+        source="tushare",
+        incremental=True,
+        error=ValueError("510300 tushare returned no fund_daily rows"),
+    )

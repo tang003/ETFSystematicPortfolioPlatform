@@ -551,7 +551,6 @@ function profileScore(asset: Asset) {
     asset.management_fee,
     asset.custody_fee,
     asset.expense_ratio,
-    asset.tracking_error,
     asset.latest_premium_rate,
     asset.description,
   ]
@@ -593,6 +592,7 @@ function profileStatusText(asset: Asset) {
   if (profileScore(asset) < 70) return '待补档案'
   const missing = missingProfileLabels(asset)
   if (!missing.length) return '完整'
+  if (missing.every((item) => item === '跟踪误差')) return '核心完整'
   if (missing.every((item) => ['规模', '溢价率', '跟踪误差'].includes(item))) return '基础可用'
   return '部分缺失'
 }
@@ -615,7 +615,11 @@ function missingProfileLabels(asset: Asset) {
 
 function missingProfileText(asset: Asset) {
   const missing = missingProfileLabels(asset)
-  return missing.length ? missing.join('、') : '暂无缺失'
+  if (!missing.length) return '暂无缺失'
+  if (missing.every((item) => item === '跟踪误差')) {
+    return '仅缺跟踪误差：该项依赖跟踪指数行情映射，跨境、债券、黄金或细分主题 ETF 可能需要额外指数源。'
+  }
+  return missing.join('、')
 }
 
 function hasValue(value: unknown) {

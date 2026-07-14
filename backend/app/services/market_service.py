@@ -346,6 +346,25 @@ def sync_market_data(
             )
         except Exception as exc:  # noqa: BLE001 - API needs per-symbol failure details.
             db.rollback()
+            if is_incremental_tushare_empty_gap(
+                db,
+                symbol=symbol,
+                source=source,
+                incremental=incremental,
+                error=exc,
+            ):
+                up_to_date_symbols += 1
+                results.append(
+                    {
+                        "symbol": symbol,
+                        "raw_rows": 0,
+                        "clean_rows": 0,
+                        "quality_logs": 0,
+                        "status": "success",
+                        "message": "up_to_date_no_new_tushare_daily",
+                    }
+                )
+                continue
             add_quality_log(
                 db,
                 symbol=symbol,
@@ -477,6 +496,21 @@ def resolve_market_sync_window(
     if effective_start > end_date:
         return start_date, end_date, True
     return effective_start, end_date, False
+
+
+def is_incremental_tushare_empty_gap(
+    db: Session,
+    *,
+    symbol: str,
+    source: str,
+    incremental: bool,
+    error: Exception,
+) -> bool:
+    if not incremental or source != "tushare":
+        return False
+    if "tushare returned no fund_daily rows" not in str(error):
+        return False
+    return latest_market_trade_date(db, symbol) is not None
 
 
 def normalize_market_bars(symbol: str, frame: pd.DataFrame) -> list[dict[str, Any]]:
