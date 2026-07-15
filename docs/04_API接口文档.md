@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.61.0-tushare-only-data-mode`
+当前版本：`v0.64.7-tushare-doc-and-default-source-cleanup`
 
 默认 API 前缀：`/api`
 
@@ -567,7 +567,7 @@
 {
   "symbols": ["513050", "159928"],
   "auto_sync": true,
-  "source": "akshare"
+  "source": "tushare"
 }
 ```
 

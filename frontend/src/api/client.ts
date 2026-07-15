@@ -696,7 +696,7 @@ export const resolvePositionSymbols = async (symbols: string[], options?: { auto
   (await api.post<PositionResolveResult[]>('/api/portfolio/positions/resolve', {
     symbols,
     auto_sync: options?.auto_sync ?? false,
-    source: options?.source || 'akshare',
+    source: options?.source || 'tushare',
   })).data
 export const savePositionSnapshot = async (payload: {
   position_date: string
