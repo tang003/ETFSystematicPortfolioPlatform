@@ -5,8 +5,8 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.backtest import BacktestMetrics, BacktestRun
 from app.models.asset import AssetMaster
+from app.models.backtest import BacktestMetrics, BacktestRun
 from app.models.portfolio import InvestmentPlanSuggestion, PortfolioPosition, TargetPortfolio
 from app.models.rebalance import RebalanceOrder
 from app.models.report import ReportLog
@@ -206,39 +206,48 @@ def build_monthly_report_markdown(
     lines = [
         f"# ETF 月度调仓报告 (Monthly Rebalance Report) - {report_date}",
         "",
-        "## 策略运行概览 (Strategy Run)",
+        "## 一、策略运行概览 (Strategy Run)",
         "",
         f"- run_id: {strategy_run.id}",
         f"- strategy_code: {strategy_run.strategy_code}",
         f"- strategy_version: {strategy_run.strategy_version}",
         f"- run_date: {strategy_run.run_date}",
         f"- status: {strategy_run.status}",
-        f"- ETF 基础池 total: {asset_status['total']}",
+        f"- ETF 基础池总数 total: {asset_status['total']}",
         f"- 启用研究 enabled: {asset_status['enabled']}",
         f"- 跨境 ETF cross_border: {asset_status['cross_border']}",
         "",
-        "## Alpha 排名 (Alpha Ranking)",
+        "## 二、核心结论 (Executive Summary)",
+        "",
+        build_executive_summary(
+            targets=targets,
+            risk_results=risk_results,
+            rebalance_orders=rebalance_orders,
+            latest_positions=latest_positions,
+        ),
+        "",
+        "## 三、Alpha 排名 (Alpha Ranking)",
         "",
     ]
     lines.extend(markdown_table(["排名 Rank", "代码 Symbol", "Alpha 分数", "置信度 Confidence"], signal_rows(signals)))
-    lines.extend(["", "## 目标组合 (Target Portfolio)", ""])
+    lines.extend(["", "## 四、目标组合 (Target Portfolio)", ""])
     lines.extend(markdown_table(["代码 Symbol", "资产类别 Asset Class", "原始权重 Raw Weight", "最终权重 Final Weight", "说明 Reason"], target_rows(targets)))
-    lines.extend(["", "## 风控检查 (Risk Check)", ""])
+    lines.extend(["", "## 五、风控检查 (Risk Check)", ""])
     lines.extend(markdown_table(["规则 Rule", "状态 Status", "调整前 Before", "调整后 After", "说明 Message"], risk_rows(risk_results)))
-    lines.extend(["", "## 当前持仓快照 (Current Holdings)", ""])
+    lines.extend(["", "## 六、当前持仓快照 (Current Holdings)", ""])
     lines.extend(markdown_table(["代码 Symbol", "名称 Name", "市值 Market Value", "权重 Weight", "浮盈亏 PnL"], position_rows(latest_positions)))
-    lines.extend(["", "## 持仓替代观察 (Same-Index Alternatives)", ""])
+    lines.extend(["", "## 七、同指数替代观察 (Same-Index Alternatives)", ""])
     lines.extend(
         markdown_table(
             ["当前 ETF", "候选 ETF", "级别 Level", "综合分 Score", "原因 Reason"],
             alternative_observation_rows(alternative_observations),
         )
     )
-    lines.extend(["", "## 定投建议 (DCA Suggestions)", ""])
+    lines.extend(["", "## 八、定投建议 (DCA Suggestions)", ""])
     lines.extend(markdown_table(["代码 Symbol", "期数 Period", "建议金额 Amount", "权重缺口 Gap", "原因 Reason"], investment_rows(investment_suggestions)))
-    lines.extend(["", "## 调仓建议单 (Rebalance Orders)", ""])
+    lines.extend(["", "## 九、调仓建议单 (Rebalance Orders)", ""])
     lines.extend(markdown_table(["代码 Symbol", "方向 Action", "当前权重 Current", "目标权重 Target", "差异 Diff", "估算金额 Amount"], rebalance_rows(rebalance_orders)))
-    lines.extend(["", "## 回测摘要 (Backtest Snapshot)", ""])
+    lines.extend(["", "## 十、回测摘要 (Backtest Snapshot)", ""])
     if backtest:
         lines.extend([f"- backtest_id: {backtest.id}", f"- name: {backtest.name}", f"- period: {backtest.start_date} to {backtest.end_date}", ""])
         lines.extend(markdown_table(["指标 Metric", "数值 Value", "单位 Unit"], metric_rows(backtest_metrics)))
@@ -247,14 +256,43 @@ def build_monthly_report_markdown(
     lines.extend(
         [
             "",
-            "## 系统说明 (System Notes)",
+            "## 十一、系统说明 (System Notes)",
             "",
-            "- 本报告用于个人 ETF 投研和复盘 (personal ETF research and review)。",
+            "- 本报告用于个人 ETF 投研、组合复盘和调仓参考 (personal ETF research and review)。",
             "- 本报告不是投资建议 (not investment advice)，也不会触发真实交易。",
-            "- 调仓单为建议订单 (suggested rebalance orders)，执行前需要人工确认。",
+            "- 调仓建议单是系统生成的 suggested rebalance orders，执行前必须人工确认。",
+            "- 报告依赖本地数据库中的清洗行情、因子、策略运行结果、当前持仓和风控记录；如数据缺失，应先补齐行情再重新生成。",
         ]
     )
     return "\n".join(lines)
+
+
+def build_executive_summary(
+    *,
+    targets: list[TargetPortfolio],
+    risk_results: list[RiskCheckResult],
+    rebalance_orders: list[RebalanceOrder],
+    latest_positions: list[PortfolioPosition],
+) -> str:
+    target_count = len(targets)
+    order_count = len(rebalance_orders)
+    adjusted_rules = [item for item in risk_results if item.status == "adjusted"]
+    top_targets = sorted(
+        targets,
+        key=lambda item: Decimal(item.final_target_weight or item.raw_target_weight or 0),
+        reverse=True,
+    )[:3]
+    target_text = "、".join(
+        f"{item.symbol} {fmt_percent(item.final_target_weight or item.raw_target_weight)}" for item in top_targets
+    ) or "暂无目标组合"
+    position_text = f"当前持仓 {len(latest_positions)} 只 ETF" if latest_positions else "当前没有录入持仓快照"
+    risk_text = f"风控触发 {len(adjusted_rules)} 条调整规则" if adjusted_rules else "风控未触发强制调整"
+    return (
+        f"- 本次策略生成 {target_count} 个目标持仓，核心权重为：{target_text}。\n"
+        f"- {position_text}，系统生成 {order_count} 条调仓建议。\n"
+        f"- {risk_text}。\n"
+        "- 建议先核对数据日期、目标权重和当前持仓，再决定是否手动执行买入、卖出或继续观察。"
+    )
 
 
 def markdown_table(headers: list[str], rows: list[list[str]]) -> list[str]:
@@ -347,7 +385,7 @@ def alternative_observation_rows(rows: list[dict[str, Any]]) -> list[list[str]]:
             f"{item['alternative_symbol']} {item.get('alternative_name') or ''}".strip(),
             str(item["recommendation_level"]),
             str(item["recommendation_score"]),
-            str(item.get("reason") or "同指数 ETF，可作为备选观察"),
+            str(item.get("reason") or "同指数 ETF，可作为备选观察。"),
         ]
         for item in rows
     ]
