@@ -57,7 +57,7 @@
         <el-form-item>
           <el-button :loading="actionLoading" @click="runCalendarSync">同步交易日历</el-button>
           <el-button :loading="actionLoading" @click="runMarketSync">同步行情</el-button>
-          <el-button type="primary" plain :disabled="!repairSymbols.length" :loading="actionLoading" @click="runRepairMarketSync">补齐缺口</el-button>
+          <el-button type="primary" plain :disabled="!repairSymbols.length || !!repairTaskId" :loading="actionLoading" @click="runRepairMarketSync">补齐缺口</el-button>
           <el-button :loading="actionLoading" @click="runQualityCheck">检查缺失数据</el-button>
         </el-form-item>
       </el-form>
@@ -69,7 +69,10 @@
     <section class="panel span-12">
       <div class="panel-header">
         <h2>本次行情同步计划</h2>
-        <el-button :loading="loading" @click="refreshSyncPlan">刷新计划</el-button>
+        <div class="task-tags">
+          <el-tag v-if="repairTaskId" type="warning">补齐任务 task_id: {{ repairTaskId }}</el-tag>
+          <el-button :loading="loading" @click="refreshSyncPlan">刷新计划</el-button>
+        </div>
       </div>
       <div class="summary-grid">
         <div class="metric">同步范围<strong>{{ syncScopeLabel }}</strong></div>
@@ -119,13 +122,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   checkDataQuality,
   fetchDataQualityLogs,
   fetchDataQualityStatus,
   fetchMarketSyncPlan,
+  fetchWorkflowTask,
+  startMarketRepairTask,
   syncCalendar,
   syncMarket,
   type DataQualityLog,
@@ -148,6 +153,8 @@ const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
 const incrementalSync = ref(true)
+const repairTaskId = ref<number>()
+let repairTimer: number | undefined
 const minBars = computed(() => {
   const days = Math.max(1, (new Date(dateRange.value[1]).getTime() - new Date(dateRange.value[0]).getTime()) / 86400000)
   if (days <= 120) return 40
@@ -157,6 +164,7 @@ const minBars = computed(() => {
 })
 
 onMounted(refresh)
+onBeforeUnmount(() => stopRepairPolling())
 
 function applyPresetRange() {
   if (presetRange.value !== 'custom') {
@@ -217,19 +225,27 @@ async function runRepairMarketSync() {
     return
   }
   const symbols = repairSymbols.value.slice(0, maxSymbols.value)
-  await withAction(`已提交 ${symbols.length} 只 ETF 的缺口补齐`, () =>
-    syncMarket({
+  actionLoading.value = true
+  try {
+    const response = await startMarketRepairTask({
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
       symbols,
-      sync_scope: 'custom',
       source: marketSource.value,
-      incremental: incrementalSync.value,
-      max_symbols: maxSymbols.value,
+      calendar_source: calendarSource.value,
+      incremental_sync: incrementalSync.value,
       clean_after_sync: true,
+      max_symbols: maxSymbols.value,
       request_interval_seconds: requestIntervalSeconds.value,
-    }),
-  )
+    })
+    repairTaskId.value = response.task_id
+    ElMessage.success(`已创建补齐后台任务，task_id=${response.task_id}`)
+    startRepairPolling(response.task_id)
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '补齐任务创建失败')
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 async function runQualityCheck() {
@@ -295,6 +311,34 @@ function selectedQualitySymbols() {
   const manual = splitSymbols()
   if (manual.length) return manual
   return syncPlan.value?.symbols.map((item) => item.symbol) ?? []
+}
+
+function startRepairPolling(taskId: number) {
+  stopRepairPolling()
+  repairTimer = window.setInterval(async () => {
+    try {
+      const task = await fetchWorkflowTask(taskId)
+      if (['success', 'partial_success', 'failed', 'cancelled'].includes(task.status)) {
+        stopRepairPolling()
+        repairTaskId.value = undefined
+        if (task.status === 'success') ElMessage.success('补齐任务已完成')
+        if (task.status === 'partial_success') ElMessage.warning('补齐任务部分完成，请查看任务日志')
+        if (task.status === 'failed') ElMessage.error(task.error_message || '补齐任务失败')
+        if (task.status === 'cancelled') ElMessage.warning('补齐任务已取消')
+        await refresh()
+      }
+    } catch (error) {
+      stopRepairPolling()
+      ElMessage.error(error instanceof Error ? error.message : '查询补齐任务失败')
+    }
+  }, 2000)
+}
+
+function stopRepairPolling() {
+  if (repairTimer !== undefined) {
+    window.clearInterval(repairTimer)
+    repairTimer = undefined
+  }
 }
 
 function formatCategories(categories: string[]) {

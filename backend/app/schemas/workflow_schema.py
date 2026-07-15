@@ -36,6 +36,18 @@ class HistoricalMarketInitRequest(BaseModel):
     max_symbols: int | None = Field(default=None, ge=1)
 
 
+class MarketRepairRequest(BaseModel):
+    symbols: list[str]
+    start_date: date
+    end_date: date
+    source: str = Field(default="tushare")
+    calendar_source: str = Field(default="tushare")
+    incremental_sync: bool = True
+    clean_after_sync: bool = True
+    request_interval_seconds: float = Field(default=0, ge=0, le=10)
+    max_symbols: int | None = Field(default=None, ge=1)
+
+
 class WorkflowTaskCreateResponse(BaseModel):
     task_id: int
     status: str

@@ -12,7 +12,7 @@ from app.core.database import Base, SessionLocal, engine
 from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean, TradingCalendar
 from app.models.workflow import WorkflowTask, WorkflowTaskStep
-from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest
+from app.schemas.workflow_schema import HistoricalMarketInitRequest, MarketRepairRequest, WorkflowRunRequest
 from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.calendar_service import sync_trading_calendar
 from app.services.data_quality_service import check_clean_bars
@@ -38,6 +38,12 @@ HISTORICAL_MARKET_INIT_STEPS = [
     ("calendar", "同步 10 年交易日历"),
     ("market", "同步精选 ETF 历史行情"),
     ("quality", "检查历史行情完整性"),
+]
+
+MARKET_REPAIR_STEPS = [
+    ("calendar", "同步交易日历"),
+    ("market", "补齐 ETF 行情"),
+    ("quality", "检查补齐结果"),
 ]
 
 TERMINAL_STATUSES = {"success", "failed", "cancelled", "partial_success"}
@@ -92,6 +98,32 @@ def create_historical_market_init_task(db: Session, request: HistoricalMarketIni
                 status="pending",
             )
             for index, (step_key, step_name) in enumerate(HISTORICAL_MARKET_INIT_STEPS, start=1)
+        ]
+    )
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def create_market_repair_task(db: Session, request: MarketRepairRequest) -> WorkflowTask:
+    ensure_workflow_tables()
+    task = WorkflowTask(
+        task_type="market_repair",
+        status="pending",
+        request_payload=json_ready(request.model_dump()),
+    )
+    db.add(task)
+    db.flush()
+    db.add_all(
+        [
+            WorkflowTaskStep(
+                task_id=task.id,
+                step_key=step_key,
+                step_name=step_name,
+                sort_order=index,
+                status="pending",
+            )
+            for index, (step_key, step_name) in enumerate(MARKET_REPAIR_STEPS, start=1)
         ]
     )
     db.commit()
@@ -219,6 +251,9 @@ def run_workflow_task(task_id: int) -> None:
             return
         if task.task_type == "historical_market_init":
             run_historical_market_init_task(db, task)
+            return
+        if task.task_type == "market_repair":
+            run_market_repair_task(db, task)
             return
         request = WorkflowRunRequest.model_validate(task.request_payload)
         mark_task_running(db, task)
@@ -385,6 +420,68 @@ def run_historical_market_init_task(db: Session, task: WorkflowTask) -> None:
     db.commit()
 
 
+def run_market_repair_task(db: Session, task: WorkflowTask) -> None:
+    request = MarketRepairRequest.model_validate(task.request_payload)
+    symbols = resolve_market_repair_symbols(request)
+    results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
+    mark_task_running(db, task)
+
+    for step_key, _ in MARKET_REPAIR_STEPS:
+        if is_step_done(db, task.id, step_key):
+            continue
+        check_cancelled(db, task.id)
+        if step_key == "calendar":
+            execute_step(
+                db,
+                task,
+                step_key,
+                lambda: sync_trading_calendar(
+                    db,
+                    request.start_date,
+                    request.end_date,
+                    "CN",
+                    request.calendar_source,
+                    request.incremental_sync,
+                ),
+                results,
+            )
+        elif step_key == "market":
+            execute_step(
+                db,
+                task,
+                step_key,
+                lambda: sync_market_data(
+                    db,
+                    symbols=symbols,
+                    start_date=request.start_date,
+                    end_date=request.end_date,
+                    source=request.source,
+                    sync_scope="enabled",
+                    incremental=request.incremental_sync,
+                    clean_after_sync=request.clean_after_sync,
+                    max_symbols=None,
+                    request_interval_seconds=request.request_interval_seconds,
+                ),
+                results,
+            )
+        elif step_key == "quality":
+            execute_step(db, task, step_key, lambda: run_quality_checks(db, symbols, request.start_date, request.end_date), results)
+
+    task.status = final_status_for_steps(db, task.id)
+    task.current_step = None
+    task.result_payload = json_ready(
+        {
+            "symbols": symbols,
+            "symbol_count": len(symbols),
+            "start_date": request.start_date,
+            "end_date": request.end_date,
+            "steps": results,
+        }
+    )
+    task.finished_at = datetime.utcnow()
+    db.commit()
+
+
 def historical_init_dates(request: HistoricalMarketInitRequest) -> tuple[date, date]:
     end_date = request.end_date or date.today()
     start_date = request.start_date or (end_date - timedelta(days=365 * request.years + 10))
@@ -404,6 +501,13 @@ def resolve_historical_init_symbols(db: Session, request: HistoricalMarketInitRe
     resolved, _ = limit_symbols(symbols, request.max_symbols)
     if not resolved:
         raise ValueError("历史初始化范围中没有可同步的 ETF")
+    return resolved
+
+
+def resolve_market_repair_symbols(request: MarketRepairRequest) -> list[str]:
+    resolved, _ = limit_symbols(request.symbols, request.max_symbols)
+    if not resolved:
+        raise ValueError("补齐任务没有可同步的 ETF 代码。")
     return resolved
 
 

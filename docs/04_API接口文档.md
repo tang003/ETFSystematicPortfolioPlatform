@@ -789,6 +789,38 @@
 - 该接口同步的是日线历史行情，不包含分钟线、实时盘口和 Level-2。
 - 行情落库到 `market_data_raw` 和 `market_data_clean`，供数据健康、ETF 详情、因子、策略、回测、AI 投研使用。
 
+### POST /api/workflows/market-repair
+
+创建行情缺口补齐后台任务。数据健康页“补齐缺口”按钮使用该接口。
+
+请求示例：
+
+```json
+{
+  "symbols": ["511880", "513500"],
+  "start_date": "2026-01-01",
+  "end_date": "2026-07-15",
+  "source": "tushare",
+  "calendar_source": "tushare",
+  "incremental_sync": true,
+  "clean_after_sync": true,
+  "request_interval_seconds": 1.5,
+  "max_symbols": 10
+}
+```
+
+任务步骤：
+
+- 同步交易日历。
+- 补齐 ETF 行情。
+- 检查补齐结果。
+
+说明：
+
+- 该接口只处理传入的 `symbols`，通常来自 `/api/market/sync-plan` 的 `recommended_sync_symbols`。
+- 返回 `task_id` 后，前端轮询 `GET /api/workflows/{task_id}`；任务完成后刷新数据健康状态。
+- 生产环境由 worker 执行，避免长时间请求阻塞浏览器。
+
 ### GET /api/workflows/{task_id}
 
 查询任务详情。

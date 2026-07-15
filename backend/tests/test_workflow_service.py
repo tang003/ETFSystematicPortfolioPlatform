@@ -3,10 +3,11 @@ from decimal import Decimal
 
 import pytest
 
-from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest
+from app.schemas.workflow_schema import HistoricalMarketInitRequest, MarketRepairRequest, WorkflowRunRequest
 from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.workflow_service import (
     HISTORICAL_MARKET_INIT_STEPS,
+    MARKET_REPAIR_STEPS,
     WORKFLOW_STEPS,
     WorkflowStepValidationError,
     default_workflow_end_date,
@@ -14,6 +15,7 @@ from app.services.workflow_service import (
     json_ready,
     require_run_id,
     resolve_historical_init_symbols,
+    resolve_market_repair_symbols,
     resolve_workflow_dates,
     resolve_workflow_symbols,
     summarize_result,
@@ -60,6 +62,10 @@ def test_historical_market_init_steps_keep_expected_order() -> None:
     assert [step[0] for step in HISTORICAL_MARKET_INIT_STEPS] == ["calendar", "market", "quality"]
 
 
+def test_market_repair_steps_keep_expected_order() -> None:
+    assert [step[0] for step in MARKET_REPAIR_STEPS] == ["calendar", "market", "quality"]
+
+
 def test_historical_init_dates_defaults_to_requested_year_window() -> None:
     request = HistoricalMarketInitRequest(end_date=date(2026, 7, 13), years=10)
 
@@ -73,6 +79,17 @@ def test_resolve_historical_init_symbols_uses_curated_pool() -> None:
     request = HistoricalMarketInitRequest(scope="curated", max_symbols=3)
 
     assert resolve_historical_init_symbols(None, request) == CURATED_ETF_SYMBOLS[:3]
+
+
+def test_resolve_market_repair_symbols_respects_limit() -> None:
+    request = MarketRepairRequest(
+        symbols=["510300", "513500", "159915"],
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 7, 13),
+        max_symbols=2,
+    )
+
+    assert resolve_market_repair_symbols(request) == ["510300", "513500"]
 
 
 def test_resolve_workflow_symbols_uses_scope_when_symbols_are_blank(monkeypatch: pytest.MonkeyPatch) -> None:

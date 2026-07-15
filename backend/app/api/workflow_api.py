@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.config import get_settings
-from app.schemas.workflow_schema import HistoricalMarketInitRequest, WorkflowRunRequest, WorkflowTaskCreateResponse, WorkflowTaskRead
+from app.schemas.workflow_schema import HistoricalMarketInitRequest, MarketRepairRequest, WorkflowRunRequest, WorkflowTaskCreateResponse, WorkflowTaskRead
 from app.services.workflow_service import (
     cancel_workflow_task,
     create_historical_market_init_task,
+    create_market_repair_task,
     create_workflow_task,
     get_workflow_task,
     list_workflow_tasks,
@@ -36,6 +37,18 @@ def create_historical_market_init(
     db: Session = Depends(get_db),
 ) -> WorkflowTaskCreateResponse:
     task = create_historical_market_init_task(db, request)
+    if get_settings().workflow_execution_mode == "inline":
+        background_tasks.add_task(run_workflow_task, task.id)
+    return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)
+
+
+@router.post("/market-repair", response_model=WorkflowTaskCreateResponse)
+def create_market_repair(
+    request: MarketRepairRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> WorkflowTaskCreateResponse:
+    task = create_market_repair_task(db, request)
     if get_settings().workflow_execution_mode == "inline":
         background_tasks.add_task(run_workflow_task, task.id)
     return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)
