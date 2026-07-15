@@ -63,6 +63,58 @@
       </el-table>
     </section>
 
+    <section class="panel span-12">
+      <div class="panel-header">
+        <div>
+          <h2>近期调用统计</h2>
+          <p class="section-note">基于最近后台任务和同步日志估算，用于观察共享 Token 使用压力。</p>
+        </div>
+        <el-button text :loading="usageLoading" @click="loadUsageStats">刷新统计</el-button>
+      </div>
+      <div class="summary-grid">
+        <div class="metric">行情任务<strong>{{ marketUsage.totalTasks }}</strong><span>最近 {{ workflowTasks.length }} 个后台任务</span></div>
+        <div class="metric">处理 ETF<strong>{{ marketUsage.totalSymbols }}</strong><span>成功 {{ marketUsage.successCount }} / 失败 {{ marketUsage.failedCount }}</span></div>
+        <div class="metric">清洗行数<strong>{{ marketUsage.totalCleanRows }}</strong><span>Raw {{ marketUsage.totalRawRows }}</span></div>
+        <div class="metric">平均间隔<strong>{{ averageIntervalText }}</strong><span>按任务参数估算</span></div>
+      </div>
+      <el-table :data="marketUsageRows" height="260" empty-text="暂无行情同步任务">
+        <el-table-column prop="task_id" label="任务" width="90" />
+        <el-table-column prop="task_type_label" label="类型" width="120" />
+        <el-table-column prop="created_at" label="创建时间" width="170" />
+        <el-table-column prop="source" label="来源" width="100" />
+        <el-table-column prop="total_symbols" label="ETF" width="90" />
+        <el-table-column prop="success_count" label="成功" width="90" />
+        <el-table-column prop="failed_count" label="失败" width="90" />
+        <el-table-column prop="total_clean_rows" label="清洗行" width="100" />
+        <el-table-column prop="request_interval_seconds" label="间隔" width="90">
+          <template #default="{ row }">{{ row.request_interval_seconds == null ? '-' : `${row.request_interval_seconds}s` }}</template>
+        </el-table-column>
+        <el-table-column prop="message" label="摘要" min-width="220" />
+      </el-table>
+    </section>
+
+    <section class="panel span-12">
+      <div class="panel-header">
+        <h2>资料与基础池同步日志</h2>
+        <el-button text :loading="usageLoading" @click="loadUsageStats">刷新日志</el-button>
+      </div>
+      <el-table :data="assetSyncLogs" height="260" empty-text="暂无同步日志">
+        <el-table-column prop="created_at" label="时间" width="170" />
+        <el-table-column prop="sync_type" label="类型" width="110" />
+        <el-table-column prop="source" label="来源" width="100" />
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'success' ? 'success' : row.status === 'partial_success' ? 'warning' : 'danger'">{{ row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="total" label="总数" width="80" />
+        <el-table-column prop="updated" label="更新" width="80" />
+        <el-table-column prop="skipped" label="跳过" width="80" />
+        <el-table-column prop="failed" label="失败" width="80" />
+        <el-table-column prop="message" label="说明" min-width="240" />
+      </el-table>
+    </section>
+
     <section class="panel span-6" v-for="provider in settings?.providers || []" :key="provider.provider_code">
       <div class="panel-header">
         <h2>{{ provider.provider_name }}</h2>
@@ -166,13 +218,26 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { createDataSource, fetchDataSourceSettings, updateDataSource, type DataSourceProvider, type DataSourceSettings } from '../api/client'
+import {
+  createDataSource,
+  fetchAssetSyncLogs,
+  fetchDataSourceSettings,
+  fetchWorkflowTasks,
+  updateDataSource,
+  type AssetSyncLog,
+  type DataSourceProvider,
+  type DataSourceSettings,
+  type WorkflowTask,
+} from '../api/client'
 
 const settings = ref<DataSourceSettings | null>(null)
 const loading = ref(false)
+const usageLoading = ref(false)
 const saving = ref(false)
+const workflowTasks = ref<WorkflowTask[]>([])
+const assetSyncLogs = ref<AssetSyncLog[]>([])
 const dialogVisible = ref(false)
 const editingCode = ref('')
 const secretValue = ref('')
@@ -192,7 +257,53 @@ const form = reactive({
   adapter_status: 'metadata_only',
 })
 
-onMounted(loadSettings)
+onMounted(async () => {
+  await Promise.all([loadSettings(), loadUsageStats()])
+})
+
+const marketUsageRows = computed(() => {
+  return workflowTasks.value
+    .map((task) => {
+      const marketStep = task.steps.find((step) => step.step_key === 'market')
+      const result = marketStep?.result_payload || {}
+      if (!marketStep || result.total_symbols == null) return null
+      return {
+        task_id: task.id,
+        task_type_label: taskTypeText(task.task_type),
+        created_at: task.created_at,
+        source: String(result.source || task.request_payload.source || task.request_payload.market_source || '-'),
+        total_symbols: numberValue(result.total_symbols),
+        success_count: numberValue(result.success_count),
+        failed_count: numberValue(result.failed_count),
+        total_raw_rows: numberValue(result.total_raw_rows),
+        total_clean_rows: numberValue(result.total_clean_rows),
+        request_interval_seconds: optionalNumberValue(result.request_interval_seconds ?? task.request_payload.request_interval_seconds),
+        message: marketStep.message || '-',
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+})
+
+const marketUsage = computed(() => {
+  return marketUsageRows.value.reduce(
+    (summary, row) => ({
+      totalTasks: summary.totalTasks + 1,
+      totalSymbols: summary.totalSymbols + row.total_symbols,
+      successCount: summary.successCount + row.success_count,
+      failedCount: summary.failedCount + row.failed_count,
+      totalRawRows: summary.totalRawRows + row.total_raw_rows,
+      totalCleanRows: summary.totalCleanRows + row.total_clean_rows,
+      intervalSum: summary.intervalSum + (row.request_interval_seconds ?? 0),
+      intervalCount: summary.intervalCount + (row.request_interval_seconds == null ? 0 : 1),
+    }),
+    { totalTasks: 0, totalSymbols: 0, successCount: 0, failedCount: 0, totalRawRows: 0, totalCleanRows: 0, intervalSum: 0, intervalCount: 0 },
+  )
+})
+
+const averageIntervalText = computed(() => {
+  if (!marketUsage.value.intervalCount) return '-'
+  return `${(marketUsage.value.intervalSum / marketUsage.value.intervalCount).toFixed(1)}s`
+})
 
 async function loadSettings() {
   loading.value = true
@@ -202,6 +313,22 @@ async function loadSettings() {
     ElMessage.error(error instanceof Error ? error.message : '读取数据源配置失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadUsageStats() {
+  usageLoading.value = true
+  try {
+    const [tasks, logs] = await Promise.all([
+      fetchWorkflowTasks(),
+      fetchAssetSyncLogs({ limit: 20 }),
+    ])
+    workflowTasks.value = tasks
+    assetSyncLogs.value = logs
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '读取调用统计失败')
+  } finally {
+    usageLoading.value = false
   }
 }
 
@@ -234,6 +361,26 @@ function quotaText(row: DataSourceProvider) {
   const minute = row.quota_per_minute ? `${row.quota_per_minute}/分钟` : '-'
   const day = row.quota_per_day ? `${row.quota_per_day}/日` : '-'
   return `${minute} / ${day}`
+}
+
+function taskTypeText(type: string) {
+  const map: Record<string, string> = {
+    full_rebalance: '全流程',
+    historical_market_init: '历史初始化',
+    market_repair: '行情补齐',
+  }
+  return map[type] || type
+}
+
+function numberValue(value: unknown) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 0
+}
+
+function optionalNumberValue(value: unknown) {
+  if (value == null || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
 }
 
 function openCreate() {
