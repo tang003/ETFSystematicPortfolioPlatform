@@ -25,9 +25,9 @@
           <span>错误 {{ qualityStatus?.error_logs ?? 0 }} / 警告 {{ qualityStatus?.warning_logs ?? 0 }}</span>
         </div>
         <div class="metric">
-          最近任务
+          后台任务
           <strong>{{ activeTaskCount }}</strong>
-          <span>执行中或等待中，失败 {{ failedTaskCount }}</span>
+          <span>执行中或等待中，异常 {{ failedTaskCount }}</span>
         </div>
       </div>
     </section>
@@ -49,6 +49,45 @@
 
     <section class="panel span-7">
       <div class="panel-header">
+        <h2>每日自动维护</h2>
+        <el-tag :type="maintenanceTagType">{{ maintenanceStatusText }}</el-tag>
+      </div>
+      <div class="summary-grid task-summary">
+        <div class="metric">
+          执行时间
+          <strong>{{ maintenanceTime }}</strong>
+          <span>{{ maintenance?.timezone ?? 'Asia/Shanghai' }}</span>
+        </div>
+        <div class="metric">
+          同步范围
+          <strong>{{ maintenance?.scope ?? '-' }}</strong>
+          <span>最多 {{ maintenance?.max_symbols ?? '-' }} 只 ETF</span>
+        </div>
+        <div class="metric">
+          请求间隔
+          <strong>{{ maintenance?.request_interval_seconds ?? '-' }}s</strong>
+          <span>用于控制 Tushare 频率</span>
+        </div>
+        <div class="metric">
+          最近结果
+          <strong>{{ lastMaintenanceStatus }}</strong>
+          <span>{{ lastMaintenanceDetail }}</span>
+        </div>
+      </div>
+      <el-alert
+        v-if="maintenance?.lock_active"
+        type="warning"
+        show-icon
+        :closable="false"
+        title="每日维护正在执行中"
+      />
+      <p class="section-note">
+        自动维护只更新本地行情、因子、策略、风控、调仓建议和报告，不会连接券商，也不会自动下单。
+      </p>
+    </section>
+
+    <section class="panel span-12">
+      <div class="panel-header">
         <h2>任务中心</h2>
         <el-button text @click="refreshTasks">刷新任务</el-button>
       </div>
@@ -57,7 +96,7 @@
         <div class="metric">成功<strong>{{ successTaskCount }}</strong></div>
         <div class="metric">异常<strong>{{ failedTaskCount }}</strong></div>
       </div>
-      <el-table :data="tasks" height="360">
+      <el-table :data="tasks" height="420">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="task-detail">
@@ -138,11 +177,13 @@ import {
   fetchDataQualityStatus,
   fetchHealth,
   fetchLiveHealth,
+  fetchMaintenanceStatus,
   fetchReadyHealth,
   fetchWorkflowTasks,
   type DataQualityLog,
   type DataQualityStatus,
   type HealthStatus,
+  type MaintenanceStatus,
   type WorkflowTask,
 } from '../api/client'
 
@@ -161,6 +202,7 @@ const ready = ref<ProbeState>(emptyProbe())
 const qualityStatus = ref<DataQualityStatus>()
 const qualityLogs = ref<DataQualityLog[]>([])
 const tasks = ref<WorkflowTask[]>([])
+const maintenance = ref<MaintenanceStatus>()
 
 onMounted(refresh)
 
@@ -187,13 +229,51 @@ const overallStatus = computed<{ type: TagType; text: string }>(() => {
   return { type: 'success', text: '运行正常' }
 })
 
+const maintenanceTagType = computed<TagType>(() => {
+  if (!maintenance.value) return 'info'
+  if (maintenance.value.lock_active) return 'warning'
+  if (!maintenance.value.enabled) return 'info'
+  if (maintenance.value.last_run?.status === 'failed') return 'danger'
+  return 'success'
+})
+
+const maintenanceStatusText = computed(() => {
+  if (!maintenance.value) return '未加载'
+  if (maintenance.value.lock_active) return '执行中'
+  return maintenance.value.enabled ? '已开启' : '未开启'
+})
+
+const maintenanceTime = computed(() => {
+  if (!maintenance.value) return '-'
+  return `${pad2(maintenance.value.hour)}:${pad2(maintenance.value.minute)}`
+})
+
+const lastMaintenanceStatus = computed(() => {
+  const status = maintenance.value?.last_run?.status
+  if (!status) return '暂无'
+  if (status === 'success') return '成功'
+  if (status === 'failed') return '失败'
+  if (status === 'skipped') return '跳过'
+  return String(status)
+})
+
+const lastMaintenanceDetail = computed(() => {
+  const lastRun = maintenance.value?.last_run
+  if (!lastRun) return '尚未产生自动维护记录'
+  if (lastRun.error) return String(lastRun.error)
+  const runDate = lastRun.run_date ? `日期 ${lastRun.run_date}` : ''
+  const report = typeof lastRun.report === 'object' && lastRun.report ? `报告 ${(lastRun.report as Record<string, unknown>).id ?? '-'}` : ''
+  return [runDate, report].filter(Boolean).join(' / ') || '已记录'
+})
+
 async function refresh() {
   loading.value = true
   try {
-    const [healthResult, liveResult, readyResult, qualityResult, logsResult, tasksResult] = await Promise.allSettled([
+    const [healthResult, liveResult, readyResult, maintenanceResult, qualityResult, logsResult, tasksResult] = await Promise.allSettled([
       fetchHealth(),
       fetchLiveHealth(),
       fetchReadyHealth(),
+      fetchMaintenanceStatus(),
       fetchDataQualityStatus(),
       fetchDataQualityLogs(),
       fetchWorkflowTasks(),
@@ -201,6 +281,7 @@ async function refresh() {
     health.value = toProbeState(healthResult, '基础健康检查')
     live.value = toProbeState(liveResult, 'API 进程存活')
     ready.value = toProbeState(readyResult, '数据库与 worker 就绪')
+    if (maintenanceResult.status === 'fulfilled') maintenance.value = maintenanceResult.value
     if (qualityResult.status === 'fulfilled') qualityStatus.value = qualityResult.value
     if (logsResult.status === 'fulfilled') qualityLogs.value = logsResult.value
     if (tasksResult.status === 'fulfilled') tasks.value = tasksResult.value
@@ -274,7 +355,6 @@ function currentStepName(task: WorkflowTask) {
 function taskProgress(task: WorkflowTask) {
   if (!task.steps.length) return task.status === 'success' ? 100 : 0
   const done = task.steps.filter((step) => ['success', 'skipped'].includes(step.status)).length
-  if (task.status === 'failed' || task.status === 'cancelled') return Math.round((done / task.steps.length) * 100)
   if (task.status === 'success' || task.status === 'partial_success') return 100
   return Math.round((done / task.steps.length) * 100)
 }
@@ -319,7 +399,7 @@ function taskTargetSummary(task: WorkflowTask) {
 
 function taskHint(task: WorkflowTask) {
   if (task.error_message) return userFriendlyMessage(task.error_message)
-  if (task.status === 'pending') return '任务已创建，等待 worker 或后台执行。'
+  if (task.status === 'pending') return '任务已创建，等待 worker 执行。'
   if (task.status === 'running') return `正在执行：${currentStepName(task)}`
   if (task.status === 'success') return '任务已完成。'
   if (task.status === 'partial_success') return '任务部分完成，请展开查看跳过步骤。'
@@ -329,7 +409,7 @@ function taskHint(task: WorkflowTask) {
 
 function userFriendlyMessage(message?: string | null) {
   if (!message) return ''
-  if (message.includes('tushare returned no fund_daily rows')) return 'Tushare 未返回该 ETF 在目标区间的日线行情，可能代码、上市日期或数据权限不匹配。'
+  if (message.includes('tushare returned no fund_daily rows')) return 'Tushare 未返回该 ETF 在目标区间的日线行情。'
   if (message.includes('missing_trading_calendar')) return '交易日历缺失，请先同步交易日历。'
   if (message.includes('insufficient_history')) return '历史样本不足，请补齐更长周期行情或缩短分析周期。'
   if (message.includes('stale_market_data')) return '最新行情不够新，请补齐最近交易日行情。'
@@ -342,5 +422,9 @@ function summarizeStepPayload(payload?: Record<string, unknown> | null) {
   const keys = ['status', 'success_count', 'failed_count', 'total_clean_rows', 'total_factor_rows', 'total_logs', 'run_id', 'order_count']
   const parts = keys.filter((key) => payload[key] != null).map((key) => `${key}=${payload[key]}`)
   return parts.join('，') || '执行完成'
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, '0')
 }
 </script>

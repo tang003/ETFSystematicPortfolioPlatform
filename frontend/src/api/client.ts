@@ -539,6 +539,21 @@ export interface DataSourceSettings {
   providers: DataSourceProvider[]
 }
 
+export interface MaintenanceStatus {
+  enabled: boolean
+  timezone: string
+  hour: number
+  minute: number
+  scope: string
+  lookback_days: number
+  max_symbols: number
+  request_interval_seconds: number
+  strategy_code: string
+  generate_report: boolean
+  lock_active: boolean
+  last_run: Record<string, unknown> | null
+}
+
 export interface NewsArticle {
   id: number
   source: string
@@ -779,6 +794,7 @@ export const updateStrategy = async (strategyCode: string, payload: {
 export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
 export const fetchDataSourceSettings = async () => (await api.get<DataSourceSettings>('/api/settings/data-sources')).data
+export const fetchMaintenanceStatus = async () => (await api.get<MaintenanceStatus>('/api/settings/maintenance')).data
 export const createDataSource = async (payload: {
   provider_code: string
   provider_name: string

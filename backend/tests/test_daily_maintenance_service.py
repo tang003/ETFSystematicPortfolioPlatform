@@ -1,7 +1,28 @@
 import pytest
 
 from app.core.config import Settings
-from app.services.daily_maintenance_service import next_maintenance_preview, parse_daily_maintenance_time
+from app.services import daily_maintenance_service
+from app.services.daily_maintenance_service import (
+    DAILY_MAINTENANCE_LAST_RUN_KEY,
+    get_daily_maintenance_status,
+    next_maintenance_preview,
+    parse_daily_maintenance_time,
+    record_daily_maintenance_result,
+)
+
+
+class FakeRedis:
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    def set(self, key: str, value: str, ex: int | None = None, nx: bool = False) -> bool:
+        if nx and key in self.store:
+            return False
+        self.store[key] = value
+        return True
 
 
 def test_parse_daily_maintenance_time_accepts_hh_mm() -> None:
@@ -33,3 +54,16 @@ def test_next_maintenance_preview_masks_runtime_details() -> None:
     assert preview["hour"] == 19
     assert preview["minute"] == 15
     assert preview["strategy_code"] == "core_etf_rotation"
+
+
+def test_daily_maintenance_status_includes_last_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeRedis()
+    record_daily_maintenance_result(fake, {"status": "success", "run_date": "2026-07-14"})
+    assert fake.get(DAILY_MAINTENANCE_LAST_RUN_KEY)
+    monkeypatch.setattr(daily_maintenance_service.redis.Redis, "from_url", lambda *args, **kwargs: fake)
+
+    status = get_daily_maintenance_status(Settings(daily_maintenance_enabled=True))
+
+    assert status["enabled"] is True
+    assert status["lock_active"] is False
+    assert status["last_run"] == {"status": "success", "run_date": "2026-07-14"}

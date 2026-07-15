@@ -509,6 +509,38 @@
 - `deepseek` 的数据库配置会覆盖 `DEEPSEEK_API_KEY` 和 `DEEPSEEK_BASE_URL`。
 - 未适配的数据源应保持 `adapter_status=metadata_only` 或 `planned`。
 
+### GET /api/settings/maintenance
+
+查询每日自动维护配置和最近一次执行状态。
+
+返回示例：
+
+```json
+{
+  "enabled": true,
+  "timezone": "Asia/Shanghai",
+  "hour": 18,
+  "minute": 30,
+  "scope": "enabled",
+  "lookback_days": 10,
+  "max_symbols": 120,
+  "request_interval_seconds": 0.2,
+  "strategy_code": "core_etf_rotation",
+  "generate_report": true,
+  "lock_active": false,
+  "last_run": {
+    "status": "success",
+    "run_date": "2026-07-14"
+  }
+}
+```
+
+说明：
+
+- 该接口用于系统状态页展示每日维护是否开启、几点执行、同步范围和最近结果。
+- `last_run` 来自 Redis 中的最近一次维护摘要，默认保留 30 天。
+- 接口不会返回任何 Token、数据库密码或其他密钥明文。
+
 ## 新闻资讯
 
 ### POST /api/news/sync

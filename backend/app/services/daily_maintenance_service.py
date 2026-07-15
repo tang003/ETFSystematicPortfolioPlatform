@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -21,6 +22,7 @@ from app.services.risk_service import generate_rebalance_orders, run_risk_check
 from app.services.strategy_service import run_strategy
 
 DAILY_MAINTENANCE_LOCK_KEY = "daily_maintenance:lock"
+DAILY_MAINTENANCE_LAST_RUN_KEY = "daily_maintenance:last_run"
 
 
 def parse_daily_maintenance_time(value: str) -> tuple[int, int]:
@@ -43,7 +45,13 @@ def run_daily_maintenance_from_settings(settings: Settings, redis_client: redis.
 
     db = SessionLocal()
     try:
-        return run_daily_maintenance(db, settings=settings)
+        result = run_daily_maintenance(db, settings=settings)
+        record_daily_maintenance_result(client, result)
+        return result
+    except Exception as exc:
+        failed = {"status": "failed", "error": str(exc), "run_date": date.today().isoformat()}
+        record_daily_maintenance_result(client, failed)
+        raise
     finally:
         db.close()
         client.delete(DAILY_MAINTENANCE_LOCK_KEY)
@@ -115,6 +123,27 @@ def run_daily_maintenance(db: Session, *, settings: Settings) -> dict[str, Any]:
     }
     logger.info("daily maintenance completed: {}", summary)
     return summary
+
+
+def record_daily_maintenance_result(client: redis.Redis, result: dict[str, Any]) -> None:
+    client.set(DAILY_MAINTENANCE_LAST_RUN_KEY, json.dumps(result, default=str, ensure_ascii=False), ex=60 * 60 * 24 * 30)
+
+
+def get_daily_maintenance_status(settings: Settings) -> dict[str, Any]:
+    client = redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2)
+    last_run_raw = client.get(DAILY_MAINTENANCE_LAST_RUN_KEY)
+    lock_active = bool(client.get(DAILY_MAINTENANCE_LOCK_KEY))
+    last_run: dict[str, Any] | None = None
+    if last_run_raw:
+        try:
+            last_run = json.loads(last_run_raw)
+        except json.JSONDecodeError:
+            last_run = {"status": "unknown", "raw": last_run_raw}
+    return {
+        **next_maintenance_preview(settings),
+        "lock_active": lock_active,
+        "last_run": last_run,
+    }
 
 
 def latest_available_factor_date(db: Session) -> date | None:

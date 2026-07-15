@@ -30,6 +30,21 @@ class DataSourceSettingsRead(BaseModel):
     providers: list[DataSourceProviderRead]
 
 
+class MaintenanceStatusRead(BaseModel):
+    enabled: bool
+    timezone: str
+    hour: int
+    minute: int
+    scope: str
+    lookback_days: int
+    max_symbols: int
+    request_interval_seconds: float
+    strategy_code: str
+    generate_report: bool
+    lock_active: bool
+    last_run: dict | None = None
+
+
 class DataSourceConfigCreate(BaseModel):
     provider_code: str
     provider_name: str

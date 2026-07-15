@@ -2,12 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.schemas.settings_schema import (
     DataSourceConfigCreate,
     DataSourceConfigUpdate,
     DataSourceProviderRead,
     DataSourceSettingsRead,
+    MaintenanceStatusRead,
 )
+from app.services.daily_maintenance_service import get_daily_maintenance_status
 from app.services.settings_service import (
     build_provider_read,
     create_data_source_config,
@@ -21,6 +24,11 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 @router.get("/data-sources", response_model=DataSourceSettingsRead)
 def get_data_sources(db: Session = Depends(get_db)) -> DataSourceSettingsRead:
     return list_data_source_settings(db)
+
+
+@router.get("/maintenance", response_model=MaintenanceStatusRead)
+def get_maintenance_status() -> MaintenanceStatusRead:
+    return MaintenanceStatusRead.model_validate(get_daily_maintenance_status(get_settings()))
 
 
 @router.post("/data-sources", response_model=DataSourceProviderRead)
