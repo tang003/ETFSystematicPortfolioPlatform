@@ -3,7 +3,12 @@ from decimal import Decimal
 
 import pandas as pd
 
-from app.services.backtest_service import calculate_backtest_metrics, simulate_equal_weight_buy_and_hold, simulate_monthly_strategy_rotation
+from app.services.backtest_service import (
+    build_backtest_target_weights,
+    calculate_backtest_metrics,
+    simulate_equal_weight_buy_and_hold,
+    simulate_monthly_strategy_rotation,
+)
 
 
 class Asset:
@@ -11,6 +16,12 @@ class Asset:
         self.asset_class = asset_class
         self.risk_level = risk_level
         self.enabled = enabled
+
+
+class Factor:
+    def __init__(self, symbol: str, alpha_score: Decimal = Decimal("80")) -> None:
+        self.symbol = symbol
+        self.alpha_score = alpha_score
 
 
 def test_simulate_equal_weight_buy_and_hold_generates_curve_and_trades() -> None:
@@ -64,8 +75,8 @@ def test_simulate_monthly_strategy_rotation_rebalances_from_factor_ranking() -> 
             "511880": Asset("cash", risk_level=1),
         },
         ranking_by_date={
-            date(2026, 1, 2): ["510300", "510500", "511010", "511880"],
-            date(2026, 2, 2): ["510500", "510300", "511010", "511880"],
+            date(2026, 1, 2): [Factor("510300", Decimal("90")), Factor("510500", Decimal("80")), Factor("511010"), Factor("511880")],
+            date(2026, 2, 2): [Factor("510500", Decimal("90")), Factor("510300", Decimal("80")), Factor("511010"), Factor("511880")],
         },
     )
 
@@ -74,6 +85,29 @@ def test_simulate_monthly_strategy_rotation_rebalances_from_factor_ranking() -> 
     assert any(trade.trade_date == date(2026, 2, 2) for trade in trades)
     assert metrics["trade_count"] == Decimal(len(trades))
     assert curve[-1].total_equity > Decimal("10000")
+
+
+def test_build_backtest_target_weights_uses_registered_strategy_engine() -> None:
+    weights = build_backtest_target_weights(
+        backtest_id=1,
+        trade_date=date(2026, 1, 2),
+        ranking=[Factor("510300", Decimal("90")), Factor("510500", Decimal("80"))],
+        asset_map={
+            "510300": Asset("equity", 4),
+            "510500": Asset("equity", 4),
+            "511010": Asset("bond", 1),
+            "511880": Asset("cash", 1),
+        },
+        symbols=["510300", "510500", "511010", "511880"],
+        strategy_config={"engine": "factor_rotation"},
+    )
+
+    assert weights == {
+        "510300": Decimal("0.400000"),
+        "510500": Decimal("0.250000"),
+        "511010": Decimal("0.250000"),
+        "511880": Decimal("0.100000"),
+    }
 
 
 def test_calculate_backtest_metrics_uses_invested_capital_when_provided() -> None:

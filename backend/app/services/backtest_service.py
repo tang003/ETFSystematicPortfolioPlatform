@@ -10,9 +10,12 @@ from app.models.asset import AssetMaster
 from app.models.backtest import BacktestEquityCurve, BacktestMetrics, BacktestRun, BacktestTrade
 from app.models.factor import FactorDaily
 from app.models.market_data import MarketDataClean
-from app.services.strategy_service import construct_target_weights, load_asset_map
+from app.services.strategy_service import load_asset_map
+from app.strategies.base import StrategyRunContext
+from app.strategies.registry import get_strategy_engine
 
 MONTHLY_ROTATION_STRATEGY = "core_etf_rotation_monthly"
+DEFAULT_BACKTEST_STRATEGY_CONFIG = {"engine": "factor_rotation"}
 
 
 def run_backtest(
@@ -61,6 +64,7 @@ def run_backtest(
             slippage_rate=slippage_rate,
             asset_map=asset_map,
             ranking_by_date=ranking_by_date,
+            strategy_config=DEFAULT_BACKTEST_STRATEGY_CONFIG,
         )
     else:
         equity_rows, trade_rows, metrics = simulate_equal_weight_buy_and_hold(
@@ -130,7 +134,7 @@ def load_factor_rankings_by_date(
     symbols: list[str],
     start_date: date,
     end_date: date,
-) -> dict[date, list[str]]:
+) -> dict[date, list[FactorDaily]]:
     rows = db.scalars(
         select(FactorDaily)
         .where(FactorDaily.symbol.in_(symbols))
@@ -138,9 +142,9 @@ def load_factor_rankings_by_date(
         .where(FactorDaily.trade_date <= end_date)
         .order_by(FactorDaily.trade_date, FactorDaily.alpha_score.desc().nullslast())
     ).all()
-    rankings: dict[date, list[str]] = {}
+    rankings: dict[date, list[FactorDaily]] = {}
     for item in rows:
-        rankings.setdefault(item.trade_date, []).append(item.symbol)
+        rankings.setdefault(item.trade_date, []).append(item)
     return rankings
 
 
@@ -227,7 +231,8 @@ def simulate_monthly_strategy_rotation(
     fee_rate: Decimal,
     slippage_rate: Decimal,
     asset_map: dict[str, AssetMaster],
-    ranking_by_date: dict[date, list[str]],
+    ranking_by_date: dict[date, list[FactorDaily]],
+    strategy_config: dict[str, Any] | None = None,
 ) -> tuple[list[BacktestEquityCurve], list[BacktestTrade], dict[str, Decimal]]:
     symbols = list(price_frame.columns)
     positions = {symbol: Decimal("0") for symbol in symbols}
@@ -237,8 +242,9 @@ def simulate_monthly_strategy_rotation(
     previous_equity: Decimal | None = None
     high_watermark = Decimal("0")
     last_month: int | None = None
-    latest_ranking: list[str] = []
+    latest_ranking: list[FactorDaily] = []
     contribution_count = 0
+    resolved_strategy_config = strategy_config or DEFAULT_BACKTEST_STRATEGY_CONFIG
 
     for trade_date, row in price_frame.iterrows():
         date_ranking = ranking_by_date.get(trade_date)
@@ -250,11 +256,14 @@ def simulate_monthly_strategy_rotation(
             cash += monthly_contribution
             contribution_count += 1
         if is_rebalance_day and latest_ranking:
-            target_weights = {
-                symbol: weight
-                for symbol, weight in construct_target_weights(latest_ranking, asset_map).items()
-                if symbol in symbols
-            }
+            target_weights = build_backtest_target_weights(
+                backtest_id=backtest_id,
+                trade_date=trade_date,
+                ranking=latest_ranking,
+                asset_map=asset_map,
+                symbols=symbols,
+                strategy_config=resolved_strategy_config,
+            )
             cash_box = {"cash": cash}
             trades.extend(
                 rebalance_positions(
@@ -291,6 +300,34 @@ def simulate_monthly_strategy_rotation(
     invested_capital = initial_cash + monthly_contribution * contribution_count
     metrics = calculate_backtest_metrics(equity_rows, trades, initial_cash, invested_capital=invested_capital)
     return equity_rows, trades, metrics
+
+
+def build_backtest_target_weights(
+    *,
+    backtest_id: int,
+    trade_date: date,
+    ranking: list[FactorDaily],
+    asset_map: dict[str, AssetMaster],
+    symbols: list[str],
+    strategy_config: dict[str, Any],
+) -> dict[str, Decimal]:
+    engine = get_strategy_engine(strategy_config.get("engine"))
+    normalized_config = engine.normalize_config(strategy_config)
+    context = StrategyRunContext(
+        run_id=backtest_id,
+        run_date=trade_date,
+        ranking=ranking,
+        asset_map=asset_map,
+        tradability_map={},
+        config=normalized_config,
+    )
+    targets = engine.build_targets(context)
+    tradable_symbols = set(symbols)
+    return {
+        target.symbol: Decimal(target.final_target_weight or target.raw_target_weight or 0)
+        for target in targets
+        if target.symbol in tradable_symbols
+    }
 
 
 def portfolio_position_value(positions: dict[str, Decimal], prices: pd.Series) -> Decimal:
