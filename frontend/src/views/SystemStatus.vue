@@ -26,8 +26,8 @@
         </div>
         <div class="metric">
           最近任务
-          <strong>{{ failedTaskCount }}</strong>
-          <span>失败或取消任务</span>
+          <strong>{{ activeTaskCount }}</strong>
+          <span>执行中或等待中，失败 {{ failedTaskCount }}</span>
         </div>
       </div>
     </section>
@@ -49,19 +49,64 @@
 
     <section class="panel span-7">
       <div class="panel-header">
-        <h2>最近后台任务</h2>
+        <h2>任务中心</h2>
         <el-button text @click="refreshTasks">刷新任务</el-button>
       </div>
-      <el-table :data="tasks" height="300">
+      <div class="summary-grid task-summary">
+        <div class="metric">等待/执行<strong>{{ activeTaskCount }}</strong></div>
+        <div class="metric">成功<strong>{{ successTaskCount }}</strong></div>
+        <div class="metric">异常<strong>{{ failedTaskCount }}</strong></div>
+      </div>
+      <el-table :data="tasks" height="360">
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="task-detail">
+              <div class="task-detail-meta">
+                <span>任务类型：{{ taskTypeText(row.task_type) }}</span>
+                <span>耗时：{{ taskDuration(row) }}</span>
+                <span>处理对象：{{ taskTargetSummary(row) }}</span>
+              </div>
+              <el-table :data="row.steps" size="small">
+                <el-table-column prop="step_name" label="步骤" width="150" />
+                <el-table-column label="状态" width="100">
+                  <template #default="{ row: step }">
+                    <el-tag :type="taskTagType(step.status)">{{ taskStatusText(step.status) }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="耗时" width="110">
+                  <template #default="{ row: step }">{{ stepDuration(step) }}</template>
+                </el-table-column>
+                <el-table-column label="说明" min-width="260">
+                  <template #default="{ row: step }">{{ userFriendlyMessage(step.message) || summarizeStepPayload(step.result_payload) }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="类型" width="130">
+          <template #default="{ row }">{{ taskTypeText(row.task_type) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="110">
           <template #default="{ row }">
             <el-tag :type="taskTagType(row.status)">{{ taskStatusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="current_step" label="当前步骤" width="130" />
-        <el-table-column prop="created_at" label="创建时间" min-width="170" />
-        <el-table-column prop="error_message" label="错误" min-width="220" />
+        <el-table-column label="进度" width="150">
+          <template #default="{ row }">
+            <el-progress :percentage="taskProgress(row)" :status="progressStatus(row.status)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="当前步骤" width="130">
+          <template #default="{ row }">{{ currentStepName(row) }}</template>
+        </el-table-column>
+        <el-table-column label="耗时" width="110">
+          <template #default="{ row }">{{ taskDuration(row) }}</template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" width="170" />
+        <el-table-column label="提示" min-width="240">
+          <template #default="{ row }">{{ taskHint(row) }}</template>
+        </el-table-column>
       </el-table>
     </section>
 
@@ -126,6 +171,8 @@ const healthRows = computed(() => [
 ])
 
 const failedTaskCount = computed(() => tasks.value.filter((task) => ['failed', 'cancelled'].includes(task.status)).length)
+const activeTaskCount = computed(() => tasks.value.filter((task) => ['pending', 'running'].includes(task.status)).length)
+const successTaskCount = computed(() => tasks.value.filter((task) => ['success', 'partial_success'].includes(task.status)).length)
 
 const qualityTagType = computed<TagType>(() => {
   if (!qualityStatus.value) return 'info'
@@ -188,8 +235,10 @@ function taskStatusText(status: string) {
     pending: '待执行',
     running: '执行中',
     success: '成功',
+    partial_success: '部分完成',
     failed: '失败',
     cancelled: '已取消',
+    skipped: '已跳过',
   }
   return map[status] || status
 }
@@ -206,5 +255,92 @@ function severityTagType(severity: string): TagType {
   if (severity === 'warning') return 'warning'
   if (severity === 'info') return 'info'
   return 'success'
+}
+
+function taskTypeText(type: string) {
+  const map: Record<string, string> = {
+    full_rebalance: '全流程',
+    historical_market_init: '历史初始化',
+    market_repair: '行情补齐',
+  }
+  return map[type] || type
+}
+
+function currentStepName(task: WorkflowTask) {
+  if (!task.current_step) return '-'
+  return task.steps.find((step) => step.step_key === task.current_step)?.step_name || task.current_step
+}
+
+function taskProgress(task: WorkflowTask) {
+  if (!task.steps.length) return task.status === 'success' ? 100 : 0
+  const done = task.steps.filter((step) => ['success', 'skipped'].includes(step.status)).length
+  if (task.status === 'failed' || task.status === 'cancelled') return Math.round((done / task.steps.length) * 100)
+  if (task.status === 'success' || task.status === 'partial_success') return 100
+  return Math.round((done / task.steps.length) * 100)
+}
+
+function progressStatus(status: string) {
+  if (status === 'success' || status === 'partial_success') return 'success'
+  if (status === 'failed' || status === 'cancelled') return 'exception'
+  return undefined
+}
+
+function taskDuration(task: WorkflowTask) {
+  return durationText(task.started_at || task.created_at, task.finished_at)
+}
+
+function stepDuration(step: WorkflowTask['steps'][number]) {
+  return durationText(step.started_at, step.finished_at)
+}
+
+function durationText(start?: string | null, end?: string | null) {
+  if (!start) return '-'
+  const startMs = new Date(start).getTime()
+  const endMs = end ? new Date(end).getTime() : Date.now()
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) return '-'
+  const seconds = Math.max(0, Math.round((endMs - startMs) / 1000))
+  if (seconds < 60) return `${seconds} 秒`
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  if (minutes < 60) return `${minutes} 分 ${rest} 秒`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} 小时 ${minutes % 60} 分`
+}
+
+function taskTargetSummary(task: WorkflowTask) {
+  const payload = task.request_payload || {}
+  const result = task.result_payload || {}
+  const symbols = Array.isArray(payload.symbols) ? payload.symbols : Array.isArray(result.symbols) ? result.symbols : []
+  if (symbols.length) return `${symbols.slice(0, 4).join('、')}${symbols.length > 4 ? ` 等 ${symbols.length} 只` : ''}`
+  if (typeof payload.scope === 'string') return String(payload.scope)
+  if (typeof payload.sync_scope === 'string') return String(payload.sync_scope)
+  return '-'
+}
+
+function taskHint(task: WorkflowTask) {
+  if (task.error_message) return userFriendlyMessage(task.error_message)
+  if (task.status === 'pending') return '任务已创建，等待 worker 或后台执行。'
+  if (task.status === 'running') return `正在执行：${currentStepName(task)}`
+  if (task.status === 'success') return '任务已完成。'
+  if (task.status === 'partial_success') return '任务部分完成，请展开查看跳过步骤。'
+  if (task.status === 'cancelled') return '任务已取消。'
+  return '-'
+}
+
+function userFriendlyMessage(message?: string | null) {
+  if (!message) return ''
+  if (message.includes('tushare returned no fund_daily rows')) return 'Tushare 未返回该 ETF 在目标区间的日线行情，可能代码、上市日期或数据权限不匹配。'
+  if (message.includes('missing_trading_calendar')) return '交易日历缺失，请先同步交易日历。'
+  if (message.includes('insufficient_history')) return '历史样本不足，请补齐更长周期行情或缩短分析周期。'
+  if (message.includes('stale_market_data')) return '最新行情不够新，请补齐最近交易日行情。'
+  if (message.includes('RemoteDisconnected') || message.includes('Connection aborted')) return '外部数据源连接中断，建议稍后重试并适当提高请求间隔。'
+  return message
+}
+
+function summarizeStepPayload(payload?: Record<string, unknown> | null) {
+  if (!payload) return '-'
+  const keys = ['status', 'success_count', 'failed_count', 'total_clean_rows', 'total_factor_rows', 'total_logs', 'run_id', 'order_count']
+  const parts = keys.filter((key) => payload[key] != null).map((key) => `${key}=${payload[key]}`)
+  return parts.join('，') || '执行完成'
 }
 </script>
