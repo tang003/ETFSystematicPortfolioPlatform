@@ -10,6 +10,8 @@ from loguru import logger
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.core.logging import setup_logging
+from app.core.scheduler import create_scheduler
+from app.services.daily_maintenance_service import parse_daily_maintenance_time, run_daily_maintenance_from_settings
 from app.services.workflow_service import (
     claim_next_workflow_task,
     recover_interrupted_workflow_tasks,
@@ -37,6 +39,24 @@ def main() -> int:
     signal.signal(signal.SIGINT, request_shutdown)
 
     redis_client = redis.Redis.from_url(settings.redis_url, decode_responses=True)
+    scheduler = create_scheduler()
+    if settings.daily_maintenance_enabled:
+        hour, minute = parse_daily_maintenance_time(settings.daily_maintenance_time)
+        scheduler.add_job(
+            run_daily_maintenance_from_settings,
+            "cron",
+            hour=hour,
+            minute=minute,
+            args=[settings, redis_client],
+            id="daily_maintenance",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.start()
+        logger.info("daily maintenance scheduled at {:02d}:{:02d} Asia/Shanghai", hour, minute)
+    else:
+        logger.info("daily maintenance scheduler disabled")
     logger.info("workflow worker starting with poll interval {}s", settings.workflow_worker_poll_seconds)
 
     db = SessionLocal()
@@ -62,6 +82,8 @@ def main() -> int:
         logger.info("workflow worker claimed task {}", task.id)
         run_workflow_task(task.id)
 
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
     logger.info("workflow worker stopped")
     return 0
 

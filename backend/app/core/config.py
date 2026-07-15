@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     workflow_execution_mode: Literal["inline", "worker"] = "inline"
     workflow_worker_poll_seconds: float = Field(default=2.0, ge=0.5, le=60)
     workflow_worker_heartbeat_ttl_seconds: int = Field(default=30, ge=5, le=300)
+    daily_maintenance_enabled: bool = False
+    daily_maintenance_time: str = "18:30"
+    daily_maintenance_scope: Literal["core", "positions", "target", "plans", "enabled", "all"] = "enabled"
+    daily_maintenance_lookback_days: int = Field(default=10, ge=1, le=365)
+    daily_maintenance_max_symbols: int = Field(default=120, ge=1, le=5000)
+    daily_maintenance_request_interval_seconds: float = Field(default=1.5, ge=0, le=60)
+    daily_maintenance_strategy_code: str = "core_etf_rotation"
+    daily_maintenance_portfolio_value: int = Field(default=100000, gt=0)
+    daily_maintenance_generate_report: bool = True
 
     log_level: str = Field(default="INFO")
     tushare_token: str | None = None
