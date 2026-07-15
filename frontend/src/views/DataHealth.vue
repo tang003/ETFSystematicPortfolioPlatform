@@ -74,6 +74,9 @@
         <div class="metric">同步范围<strong>{{ syncScopeLabel }}</strong></div>
         <div class="metric">计划 ETF<strong>{{ syncPlan?.total_symbols ?? 0 }}</strong></div>
         <div class="metric">缺行情<strong>{{ syncPlan?.missing_price_count ?? 0 }}</strong></div>
+        <div class="metric">策略可用<strong>{{ syncPlan?.ready_count ?? 0 }}</strong><span>门槛 {{ syncPlan?.min_bars ?? 120 }} 根</span></div>
+        <div class="metric">样本不足<strong>{{ syncPlan?.insufficient_count ?? 0 }}</strong></div>
+        <div class="metric">空行情<strong>{{ syncPlan?.empty_count ?? 0 }}</strong></div>
       </div>
       <el-table :data="syncPlan?.symbols ?? []" height="260">
         <el-table-column prop="symbol" label="代码" width="110" />
@@ -82,13 +85,22 @@
           <template #default="{ row }">{{ formatCategories(row.categories) }}</template>
         </el-table-column>
         <el-table-column prop="latest_trade_date" label="最新行情日" width="130" />
+        <el-table-column label="区间样本" width="120">
+          <template #default="{ row }">
+            {{ row.range_bar_count }} / {{ row.expected_bar_count ?? '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="覆盖率" width="110">
+          <template #default="{ row }">{{ formatPercent(row.coverage_ratio) }}</template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="row.has_clean_price ? 'success' : 'warning'">
-              {{ row.has_clean_price ? '已有行情' : '待补行情' }}
+            <el-tag :type="sampleTagType(row.sample_status)">
+              {{ sampleStatusLabel(row.sample_status) }}
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="sample_message" label="提示" min-width="240" />
       </el-table>
     </section>
     <section class="panel span-12">
@@ -135,6 +147,13 @@ const calendarSource = ref('tushare')
 const marketSource = ref('tushare')
 const requestIntervalSeconds = ref(1.5)
 const incrementalSync = ref(true)
+const minBars = computed(() => {
+  const days = Math.max(1, (new Date(dateRange.value[1]).getTime() - new Date(dateRange.value[0]).getTime()) / 86400000)
+  if (days <= 120) return 40
+  if (days <= 240) return 60
+  if (days <= 540) return 120
+  return 200
+})
 
 onMounted(refresh)
 
@@ -150,7 +169,7 @@ async function refresh() {
     ;[status.value, logs.value, syncPlan.value] = await Promise.all([
       fetchDataQualityStatus(),
       fetchDataQualityLogs(),
-      fetchMarketSyncPlan(syncScope.value),
+      fetchMarketSyncPlan(syncScope.value, syncPlanParams()),
     ])
   } finally {
     loading.value = false
@@ -158,7 +177,7 @@ async function refresh() {
 }
 
 async function refreshSyncPlan() {
-  syncPlan.value = await fetchMarketSyncPlan(syncScope.value)
+  syncPlan.value = await fetchMarketSyncPlan(syncScope.value, syncPlanParams())
 }
 
 async function runCalendarSync() {
@@ -263,6 +282,34 @@ function formatCategories(categories: string[]) {
     enabled: '启用池',
   }
   return categories.map((item) => labels[item] || item).join(' / ') || '-'
+}
+
+function syncPlanParams() {
+  return {
+    start_date: dateRange.value[0],
+    end_date: dateRange.value[1],
+    min_bars: minBars.value,
+  }
+}
+
+function formatPercent(value: number | null) {
+  if (value == null) return '-'
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function sampleStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    ready: '可用',
+    insufficient: '样本不足',
+    empty: '待补行情',
+  }
+  return labels[status] || status
+}
+
+function sampleTagType(status: string) {
+  if (status === 'ready') return 'success'
+  if (status === 'insufficient') return 'warning'
+  return 'danger'
 }
 
 const syncScopeLabel = computed(() => {

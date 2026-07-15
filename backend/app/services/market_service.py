@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models.asset import AssetMaster
-from app.models.market_data import MarketDataClean, MarketDataRaw
+from app.models.market_data import MarketDataClean, MarketDataRaw, TradingCalendar
 from app.models.portfolio import InvestmentPlanSuggestion, PortfolioPosition, TargetPortfolio
 from app.services.data_quality_service import add_quality_log, check_clean_bars
 from app.services.tushare_service import fetch_fund_daily, to_tushare_code
@@ -410,11 +410,20 @@ def sync_market_data(
     }
 
 
-def build_market_sync_plan(db: Session, sync_scope: str = "core") -> dict[str, Any]:
+def build_market_sync_plan(
+    db: Session,
+    sync_scope: str = "core",
+    *,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    min_bars: int = 120,
+) -> dict[str, Any]:
     symbols = resolve_scoped_symbols(db, sync_scope)
     symbol_meta = resolve_symbol_meta(db, symbols)
     latest_dates = latest_clean_trade_dates(db, symbols)
+    coverage = clean_bar_coverage(db, symbols, start_date=start_date, end_date=end_date)
     categories = symbol_categories(db, symbols)
+    expected_bars = expected_market_bars(db, start_date=start_date, end_date=end_date)
     rows = [
         {
             "symbol": symbol,
@@ -422,6 +431,13 @@ def build_market_sync_plan(db: Session, sync_scope: str = "core") -> dict[str, A
             "categories": categories.get(symbol, []),
             "latest_trade_date": latest_dates.get(symbol),
             "has_clean_price": latest_dates.get(symbol) is not None,
+            "range_bar_count": coverage.get(symbol, {}).get("bar_count", 0),
+            "range_latest_trade_date": coverage.get(symbol, {}).get("latest_trade_date"),
+            "expected_bar_count": expected_bars,
+            "missing_bar_count": missing_bar_count(expected_bars, coverage.get(symbol, {}).get("bar_count", 0)),
+            "coverage_ratio": coverage_ratio(coverage.get(symbol, {}).get("bar_count", 0), expected_bars),
+            "sample_status": sample_status(coverage.get(symbol, {}).get("bar_count", 0), min_bars),
+            "sample_message": sample_message(coverage.get(symbol, {}).get("bar_count", 0), min_bars, expected_bars),
         }
         for symbol in symbols
     ]
@@ -429,6 +445,11 @@ def build_market_sync_plan(db: Session, sync_scope: str = "core") -> dict[str, A
         "sync_scope": sync_scope,
         "total_symbols": len(rows),
         "missing_price_count": sum(1 for row in rows if not row["has_clean_price"]),
+        "ready_count": sum(1 for row in rows if row["sample_status"] == "ready"),
+        "insufficient_count": sum(1 for row in rows if row["sample_status"] == "insufficient"),
+        "empty_count": sum(1 for row in rows if row["sample_status"] == "empty"),
+        "expected_bar_count": expected_bars,
+        "min_bars": min_bars,
         "symbols": rows,
     }
 
@@ -442,6 +463,76 @@ def latest_clean_trade_dates(db: Session, symbols: list[str]) -> dict[str, date]
         .group_by(MarketDataClean.symbol)
     ).all()
     return {symbol: trade_date for symbol, trade_date in rows if trade_date is not None}
+
+
+def clean_bar_coverage(
+    db: Session,
+    symbols: list[str],
+    *,
+    start_date: date | None,
+    end_date: date | None,
+) -> dict[str, dict[str, Any]]:
+    if not symbols:
+        return {}
+    query = (
+        select(MarketDataClean.symbol, func.count(MarketDataClean.trade_date), func.max(MarketDataClean.trade_date))
+        .where(MarketDataClean.symbol.in_(symbols))
+        .group_by(MarketDataClean.symbol)
+    )
+    if start_date:
+        query = query.where(MarketDataClean.trade_date >= start_date)
+    if end_date:
+        query = query.where(MarketDataClean.trade_date <= end_date)
+    rows = db.execute(query).all()
+    return {
+        symbol: {"bar_count": int(bar_count or 0), "latest_trade_date": latest_trade_date}
+        for symbol, bar_count, latest_trade_date in rows
+    }
+
+
+def expected_market_bars(db: Session, *, start_date: date | None, end_date: date | None) -> int | None:
+    if start_date is None or end_date is None:
+        return None
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(TradingCalendar)
+            .where(TradingCalendar.trade_date >= start_date)
+            .where(TradingCalendar.trade_date <= end_date)
+            .where(TradingCalendar.is_open.is_(True))
+        )
+        or 0
+    )
+
+
+def missing_bar_count(expected_bars: int | None, bar_count: int) -> int | None:
+    if expected_bars is None:
+        return None
+    return max(0, expected_bars - bar_count)
+
+
+def coverage_ratio(bar_count: int, expected_bars: int | None) -> float | None:
+    if not expected_bars:
+        return None
+    return round(min(1.0, bar_count / expected_bars), 4)
+
+
+def sample_status(bar_count: int, min_bars: int) -> str:
+    if bar_count <= 0:
+        return "empty"
+    if bar_count < min_bars:
+        return "insufficient"
+    return "ready"
+
+
+def sample_message(bar_count: int, min_bars: int, expected_bars: int | None) -> str:
+    if bar_count <= 0:
+        return "没有本区间清洗行情，需先同步行情"
+    if bar_count < min_bars:
+        return f"样本 {bar_count} 根，低于策略建议门槛 {min_bars} 根"
+    if expected_bars is not None and bar_count < expected_bars:
+        return f"样本满足策略门槛，但区间内仍缺 {expected_bars - bar_count} 个交易日"
+    return "样本满足策略和回测基础门槛"
 
 
 def symbol_categories(db: Session, symbols: list[str]) -> dict[str, list[str]]:

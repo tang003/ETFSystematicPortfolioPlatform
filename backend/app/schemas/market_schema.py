@@ -50,12 +50,24 @@ class MarketSyncPlanItem(BaseModel):
     categories: list[str]
     latest_trade_date: date | None = None
     has_clean_price: bool
+    range_bar_count: int = 0
+    range_latest_trade_date: date | None = None
+    expected_bar_count: int | None = None
+    missing_bar_count: int | None = None
+    coverage_ratio: float | None = None
+    sample_status: str = "empty"
+    sample_message: str | None = None
 
 
 class MarketSyncPlanResponse(BaseModel):
     sync_scope: str
     total_symbols: int
     missing_price_count: int
+    ready_count: int = 0
+    insufficient_count: int = 0
+    empty_count: int = 0
+    expected_bar_count: int | None = None
+    min_bars: int = 120
     symbols: list[MarketSyncPlanItem]
 
 

@@ -29,9 +29,12 @@ def sync_market(request: MarketSyncRequest, db: Session = Depends(get_db)) -> Ma
 @router.get("/sync-plan", response_model=MarketSyncPlanResponse)
 def get_market_sync_plan(
     sync_scope: str = Query(default="core"),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    min_bars: int = Query(default=120, ge=1, le=5000),
     db: Session = Depends(get_db),
 ) -> MarketSyncPlanResponse:
-    return build_market_sync_plan(db, sync_scope=sync_scope)
+    return build_market_sync_plan(db, sync_scope=sync_scope, start_date=start_date, end_date=end_date, min_bars=min_bars)
 
 
 @router.get("/raw", response_model=list[MarketBarRead])

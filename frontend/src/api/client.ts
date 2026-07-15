@@ -364,12 +364,24 @@ export interface MarketSyncPlanItem {
   categories: string[]
   latest_trade_date: string | null
   has_clean_price: boolean
+  range_bar_count: number
+  range_latest_trade_date: string | null
+  expected_bar_count: number | null
+  missing_bar_count: number | null
+  coverage_ratio: number | null
+  sample_status: string
+  sample_message: string | null
 }
 
 export interface MarketSyncPlan {
   sync_scope: string
   total_symbols: number
   missing_price_count: number
+  ready_count: number
+  insufficient_count: number
+  empty_count: number
+  expected_bar_count: number | null
+  min_bars: number
   symbols: MarketSyncPlanItem[]
 }
 
@@ -673,8 +685,8 @@ export const fetchEtfAgentAnalysisHistory = async (params?: { symbol?: string; l
   (await api.get<EtfAgentAnalysisLog[]>('/api/agent-analysis/etf/history', { params })).data
 export const fetchDataQualityStatus = async () => (await api.get<DataQualityStatus>('/api/data-quality/status')).data
 export const fetchDataQualityLogs = async () => (await api.get<DataQualityLog[]>('/api/data-quality/logs?limit=50')).data
-export const fetchMarketSyncPlan = async (syncScope = 'core') =>
-  (await api.get<MarketSyncPlan>(`/api/market/sync-plan?sync_scope=${encodeURIComponent(syncScope)}`)).data
+export const fetchMarketSyncPlan = async (syncScope = 'core', params?: { start_date?: string; end_date?: string; min_bars?: number }) =>
+  (await api.get<MarketSyncPlan>('/api/market/sync-plan', { params: { sync_scope: syncScope, ...params } })).data
 export const fetchFactorRanking = async () => (await api.get<Factor[]>('/api/factors/ranking?limit=50')).data
 export const fetchTargetPortfolio = async () => (await api.get<TargetPortfolio[]>('/api/portfolio/target')).data
 export const fetchPositions = async () => (await api.get<PortfolioPosition[]>('/api/portfolio/positions')).data

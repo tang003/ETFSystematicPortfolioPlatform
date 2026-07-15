@@ -205,6 +205,18 @@
 参数：
 
 - `sync_scope`：`core`、`positions`、`target`、`plans`、`enabled`、`all`
+- `start_date`：可选；用于计算该分析区间内的行情样本覆盖。
+- `end_date`：可选；用于计算该分析区间内的行情样本覆盖。
+- `min_bars`：可选；策略建议的最低样本数，默认 120。
+
+返回除了同步范围和最新行情日外，还会包含：
+
+- `range_bar_count`：该分析区间内本地清洗行情根数。
+- `expected_bar_count`：该分析区间内交易日历预期开放日数量。
+- `missing_bar_count`：区间内估算缺失行情数量。
+- `coverage_ratio`：区间覆盖率。
+- `sample_status`：`ready`、`insufficient` 或 `empty`。
+- `sample_message`：面向用户的中文提示。
 
 ### POST /api/market/sync
 
