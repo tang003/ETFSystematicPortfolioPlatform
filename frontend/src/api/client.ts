@@ -380,6 +380,7 @@ export interface MarketSyncPlan {
   ready_count: number
   insufficient_count: number
   empty_count: number
+  recommended_sync_symbols: string[]
   expected_bar_count: number | null
   min_bars: number
   symbols: MarketSyncPlanItem[]

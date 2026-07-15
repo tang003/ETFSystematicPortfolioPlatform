@@ -217,6 +217,7 @@
 - `coverage_ratio`：区间覆盖率。
 - `sample_status`：`ready`、`insufficient` 或 `empty`。
 - `sample_message`：面向用户的中文提示。
+- `recommended_sync_symbols`：建议优先补齐的 ETF 代码列表，包含当前分析区间内 `empty` 或 `insufficient` 的 ETF。
 
 ### POST /api/market/sync
 

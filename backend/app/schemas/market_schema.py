@@ -66,6 +66,10 @@ class MarketSyncPlanResponse(BaseModel):
     ready_count: int = 0
     insufficient_count: int = 0
     empty_count: int = 0
+    recommended_sync_symbols: list[str] = Field(
+        default_factory=list,
+        description="Symbols that are empty or below the minimum bar threshold in the selected analysis range",
+    )
     expected_bar_count: int | None = None
     min_bars: int = 120
     symbols: list[MarketSyncPlanItem]

@@ -441,6 +441,11 @@ def build_market_sync_plan(
         }
         for symbol in symbols
     ]
+    recommended_sync_symbols = [
+        row["symbol"]
+        for row in rows
+        if row["sample_status"] in {"empty", "insufficient"}
+    ]
     return {
         "sync_scope": sync_scope,
         "total_symbols": len(rows),
@@ -448,6 +453,7 @@ def build_market_sync_plan(
         "ready_count": sum(1 for row in rows if row["sample_status"] == "ready"),
         "insufficient_count": sum(1 for row in rows if row["sample_status"] == "insufficient"),
         "empty_count": sum(1 for row in rows if row["sample_status"] == "empty"),
+        "recommended_sync_symbols": recommended_sync_symbols,
         "expected_bar_count": expected_bars,
         "min_bars": min_bars,
         "symbols": rows,

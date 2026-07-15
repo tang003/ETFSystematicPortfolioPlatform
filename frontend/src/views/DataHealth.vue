@@ -11,7 +11,7 @@
           <span class="form-note">{{ dateRangeLabel }}</span>
         </el-form-item>
         <el-form-item v-if="presetRange === 'custom'" label="日期范围">
-          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
+          <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" @change="refreshSyncPlan" />
         </el-form-item>
         <el-form-item label="同步范围">
           <el-select v-model="syncScope" @change="refreshSyncPlan">
@@ -57,6 +57,7 @@
         <el-form-item>
           <el-button :loading="actionLoading" @click="runCalendarSync">同步交易日历</el-button>
           <el-button :loading="actionLoading" @click="runMarketSync">同步行情</el-button>
+          <el-button type="primary" plain :disabled="!repairSymbols.length" :loading="actionLoading" @click="runRepairMarketSync">补齐缺口</el-button>
           <el-button :loading="actionLoading" @click="runQualityCheck">检查缺失数据</el-button>
         </el-form-item>
       </el-form>
@@ -76,7 +77,7 @@
         <div class="metric">缺行情<strong>{{ syncPlan?.missing_price_count ?? 0 }}</strong></div>
         <div class="metric">策略可用<strong>{{ syncPlan?.ready_count ?? 0 }}</strong><span>门槛 {{ syncPlan?.min_bars ?? 120 }} 根</span></div>
         <div class="metric">样本不足<strong>{{ syncPlan?.insufficient_count ?? 0 }}</strong></div>
-        <div class="metric">空行情<strong>{{ syncPlan?.empty_count ?? 0 }}</strong></div>
+        <div class="metric">建议补齐<strong>{{ repairSymbols.length }}</strong><span>{{ repairHint }}</span></div>
       </div>
       <el-table :data="syncPlan?.symbols ?? []" height="260">
         <el-table-column prop="symbol" label="代码" width="110" />
@@ -161,6 +162,7 @@ function applyPresetRange() {
   if (presetRange.value !== 'custom') {
     dateRange.value = buildPresetRange(presetRange.value)
   }
+  refreshSyncPlan()
 }
 
 async function refresh() {
@@ -200,6 +202,27 @@ async function runMarketSync() {
       end_date: dateRange.value[1],
       symbols,
       sync_scope: symbols.length ? 'custom' : syncScope.value,
+      source: marketSource.value,
+      incremental: incrementalSync.value,
+      max_symbols: maxSymbols.value,
+      clean_after_sync: true,
+      request_interval_seconds: requestIntervalSeconds.value,
+    }),
+  )
+}
+
+async function runRepairMarketSync() {
+  if (!repairSymbols.value.length) {
+    ElMessage.success('当前分析周期内没有需要补齐的 ETF')
+    return
+  }
+  const symbols = repairSymbols.value.slice(0, maxSymbols.value)
+  await withAction(`已提交 ${symbols.length} 只 ETF 的缺口补齐`, () =>
+    syncMarket({
+      start_date: dateRange.value[0],
+      end_date: dateRange.value[1],
+      symbols,
+      sync_scope: 'custom',
       source: marketSource.value,
       incremental: incrementalSync.value,
       max_symbols: maxSymbols.value,
@@ -326,6 +349,13 @@ const syncScopeLabel = computed(() => {
 
 const dateRangeLabel = computed(() => `${dateRange.value[0]} 至 ${dateRange.value[1]}`)
 const latestBatchText = computed(() => (status.value?.latest_created_at ? `最近检查 ${status.value.latest_created_at}` : '暂无检查记录'))
+const repairSymbols = computed(() => syncPlan.value?.recommended_sync_symbols ?? [])
+const repairHint = computed(() => {
+  if (!repairSymbols.value.length) return '无需补齐'
+  const shown = repairSymbols.value.slice(0, maxSymbols.value).join('、')
+  const suffix = repairSymbols.value.length > maxSymbols.value ? ` 等 ${repairSymbols.value.length} 只` : ''
+  return shown ? `${shown}${suffix}` : `${repairSymbols.value.length} 只`
+})
 
 const sourceHintTitle = computed(() => {
   return 'Tushare-only 建议'
