@@ -10,6 +10,7 @@ from app.schemas.settings_schema import (
     DataSourceSettingsRead,
     MaintenanceStatusRead,
 )
+from app.schemas.workflow_schema import WorkflowTaskCreateResponse
 from app.services.daily_maintenance_service import get_daily_maintenance_status
 from app.services.settings_service import (
     build_provider_read,
@@ -17,6 +18,7 @@ from app.services.settings_service import (
     list_data_source_settings,
     update_data_source_config,
 )
+from app.services.workflow_service import create_daily_maintenance_task
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -29,6 +31,12 @@ def get_data_sources(db: Session = Depends(get_db)) -> DataSourceSettingsRead:
 @router.get("/maintenance", response_model=MaintenanceStatusRead)
 def get_maintenance_status() -> MaintenanceStatusRead:
     return MaintenanceStatusRead.model_validate(get_daily_maintenance_status(get_settings()))
+
+
+@router.post("/maintenance/run", response_model=WorkflowTaskCreateResponse)
+def run_maintenance_now(db: Session = Depends(get_db)) -> WorkflowTaskCreateResponse:
+    task = create_daily_maintenance_task(db)
+    return WorkflowTaskCreateResponse(task_id=task.id, status=task.status)
 
 
 @router.post("/data-sources", response_model=DataSourceProviderRead)

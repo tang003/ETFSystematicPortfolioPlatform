@@ -541,6 +541,26 @@
 - `last_run` 来自 Redis 中的最近一次维护摘要，默认保留 30 天。
 - 接口不会返回任何 Token、数据库密码或其他密钥明文。
 
+### POST /api/settings/maintenance/run
+
+手动创建一次每日维护后台任务。
+
+返回：
+
+```json
+{
+  "task_id": 12,
+  "status": "pending"
+}
+```
+
+说明：
+
+- 该接口只创建 workflow 任务，真正执行由 worker 负责。
+- 任务类型为 `daily_maintenance`，可在系统状态页“任务中心”查看进度。
+- 浏览器不会等待行情同步、因子计算和报告生成全部完成。
+- 维护流程不连接券商、不自动下单、不操作资金。
+
 ## 新闻资讯
 
 ### POST /api/news/sync

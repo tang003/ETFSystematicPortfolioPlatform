@@ -6,6 +6,7 @@ import pytest
 from app.schemas.workflow_schema import HistoricalMarketInitRequest, MarketRepairRequest, WorkflowRunRequest
 from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.workflow_service import (
+    DAILY_MAINTENANCE_STEPS,
     HISTORICAL_MARKET_INIT_STEPS,
     MARKET_REPAIR_STEPS,
     WORKFLOW_STEPS,
@@ -64,6 +65,10 @@ def test_historical_market_init_steps_keep_expected_order() -> None:
 
 def test_market_repair_steps_keep_expected_order() -> None:
     assert [step[0] for step in MARKET_REPAIR_STEPS] == ["calendar", "market", "quality"]
+
+
+def test_daily_maintenance_steps_keep_expected_order() -> None:
+    assert [step[0] for step in DAILY_MAINTENANCE_STEPS] == ["maintenance"]
 
 
 def test_historical_init_dates_defaults_to_requested_year_window() -> None:

@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import Base, SessionLocal, engine
 from app.models.asset import AssetMaster
 from app.models.market_data import MarketDataClean, TradingCalendar
@@ -16,6 +17,7 @@ from app.schemas.workflow_schema import HistoricalMarketInitRequest, MarketRepai
 from app.services.asset_service import CURATED_ETF_SYMBOLS
 from app.services.calendar_service import sync_trading_calendar
 from app.services.data_quality_service import check_clean_bars
+from app.services.daily_maintenance_service import run_daily_maintenance_from_settings
 from app.services.etf_compare_service import build_compare_metric
 from app.services.factor_service import calculate_factors
 from app.services.market_service import limit_symbols, resolve_symbols, sync_market_data
@@ -44,6 +46,10 @@ MARKET_REPAIR_STEPS = [
     ("calendar", "同步交易日历"),
     ("market", "补齐 ETF 行情"),
     ("quality", "检查补齐结果"),
+]
+
+DAILY_MAINTENANCE_STEPS = [
+    ("maintenance", "执行每日维护"),
 ]
 
 TERMINAL_STATUSES = {"success", "failed", "cancelled", "partial_success"}
@@ -124,6 +130,43 @@ def create_market_repair_task(db: Session, request: MarketRepairRequest) -> Work
                 status="pending",
             )
             for index, (step_key, step_name) in enumerate(MARKET_REPAIR_STEPS, start=1)
+        ]
+    )
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+def create_daily_maintenance_task(db: Session) -> WorkflowTask:
+    ensure_workflow_tables()
+    settings = get_settings()
+    task = WorkflowTask(
+        task_type="daily_maintenance",
+        status="pending",
+        request_payload=json_ready(
+            {
+                "scope": settings.daily_maintenance_scope,
+                "lookback_days": settings.daily_maintenance_lookback_days,
+                "max_symbols": settings.daily_maintenance_max_symbols,
+                "request_interval_seconds": settings.daily_maintenance_request_interval_seconds,
+                "strategy_code": settings.daily_maintenance_strategy_code,
+                "generate_report": settings.daily_maintenance_generate_report,
+                "manual": True,
+            }
+        ),
+    )
+    db.add(task)
+    db.flush()
+    db.add_all(
+        [
+            WorkflowTaskStep(
+                task_id=task.id,
+                step_key=step_key,
+                step_name=step_name,
+                sort_order=index,
+                status="pending",
+            )
+            for index, (step_key, step_name) in enumerate(DAILY_MAINTENANCE_STEPS, start=1)
         ]
     )
     db.commit()
@@ -254,6 +297,9 @@ def run_workflow_task(task_id: int) -> None:
             return
         if task.task_type == "market_repair":
             run_market_repair_task(db, task)
+            return
+        if task.task_type == "daily_maintenance":
+            run_daily_maintenance_task(db, task)
             return
         request = WorkflowRunRequest.model_validate(task.request_payload)
         mark_task_running(db, task)
@@ -478,6 +524,23 @@ def run_market_repair_task(db: Session, task: WorkflowTask) -> None:
             "steps": results,
         }
     )
+    task.finished_at = datetime.utcnow()
+    db.commit()
+
+
+def run_daily_maintenance_task(db: Session, task: WorkflowTask) -> None:
+    results: dict[str, Any] = dict(task.result_payload.get("steps", {}) if task.result_payload else {})
+    mark_task_running(db, task)
+
+    for step_key, _ in DAILY_MAINTENANCE_STEPS:
+        if is_step_done(db, task.id, step_key):
+            continue
+        check_cancelled(db, task.id)
+        execute_step(db, task, step_key, lambda: run_daily_maintenance_from_settings(get_settings()), results)
+
+    task.status = final_status_for_steps(db, task.id)
+    task.current_step = None
+    task.result_payload = json_ready({"steps": results})
     task.finished_at = datetime.utcnow()
     db.commit()
 

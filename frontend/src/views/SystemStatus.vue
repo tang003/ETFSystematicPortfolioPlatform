@@ -50,7 +50,10 @@
     <section class="panel span-7">
       <div class="panel-header">
         <h2>每日自动维护</h2>
-        <el-tag :type="maintenanceTagType">{{ maintenanceStatusText }}</el-tag>
+        <div class="header-actions">
+          <el-tag :type="maintenanceTagType">{{ maintenanceStatusText }}</el-tag>
+          <el-button :loading="maintenanceRunning" :disabled="maintenance?.lock_active" @click="triggerMaintenance">立即执行</el-button>
+        </div>
       </div>
       <div class="summary-grid task-summary">
         <div class="metric">
@@ -180,6 +183,7 @@ import {
   fetchMaintenanceStatus,
   fetchReadyHealth,
   fetchWorkflowTasks,
+  runMaintenanceNow,
   type DataQualityLog,
   type DataQualityStatus,
   type HealthStatus,
@@ -203,6 +207,7 @@ const qualityStatus = ref<DataQualityStatus>()
 const qualityLogs = ref<DataQualityLog[]>([])
 const tasks = ref<WorkflowTask[]>([])
 const maintenance = ref<MaintenanceStatus>()
+const maintenanceRunning = ref(false)
 
 onMounted(refresh)
 
@@ -294,6 +299,20 @@ async function refreshTasks() {
   tasks.value = await fetchWorkflowTasks()
 }
 
+async function triggerMaintenance() {
+  maintenanceRunning.value = true
+  try {
+    await runMaintenanceNow()
+    await Promise.all([refreshTasks(), refreshMaintenance()])
+  } finally {
+    maintenanceRunning.value = false
+  }
+}
+
+async function refreshMaintenance() {
+  maintenance.value = await fetchMaintenanceStatus()
+}
+
 function toProbeState(result: PromiseSettledResult<HealthStatus>, fallback: string): ProbeState {
   if (result.status === 'fulfilled') {
     const mode = result.value.workflow_execution_mode ? `，工作流模式 ${result.value.workflow_execution_mode}` : ''
@@ -343,6 +362,7 @@ function taskTypeText(type: string) {
     full_rebalance: '全流程',
     historical_market_init: '历史初始化',
     market_repair: '行情补齐',
+    daily_maintenance: '每日维护',
   }
   return map[type] || type
 }

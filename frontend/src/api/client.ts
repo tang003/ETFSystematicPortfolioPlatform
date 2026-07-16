@@ -795,6 +795,8 @@ export const runStrategy = async (payload: { strategy_code: string; run_date?: s
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
 export const fetchDataSourceSettings = async () => (await api.get<DataSourceSettings>('/api/settings/data-sources')).data
 export const fetchMaintenanceStatus = async () => (await api.get<MaintenanceStatus>('/api/settings/maintenance')).data
+export const runMaintenanceNow = async () =>
+  (await api.post<{ task_id: number; status: string }>('/api/settings/maintenance/run')).data
 export const createDataSource = async (payload: {
   provider_code: string
   provider_name: string
