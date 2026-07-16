@@ -5,6 +5,7 @@
         <h2>运行状态</h2>
         <div class="header-actions">
           <el-tag :type="overallStatus.type">{{ overallStatus.text }}</el-tag>
+          <el-tag type="info">自动刷新 {{ autoRefreshSeconds }}s</el-tag>
           <el-button :loading="loading" @click="refresh">刷新</el-button>
         </div>
       </div>
@@ -27,7 +28,7 @@
         <div class="metric">
           后台任务
           <strong>{{ activeTaskCount }}</strong>
-          <span>等待或执行中，异常 {{ failedTaskCount }}</span>
+          <span>等待或执行中，异常 {{ failedTaskCount }}；{{ lastRefreshText }}</span>
         </div>
       </div>
     </section>
@@ -103,7 +104,10 @@
     <section class="panel span-12">
       <div class="panel-header">
         <h2>任务中心</h2>
-        <el-button text @click="refreshTasks">刷新任务</el-button>
+        <div class="header-actions">
+          <el-tag v-if="activeTaskCount > 0" type="warning">有任务运行中</el-tag>
+          <el-button text @click="refreshTasks">刷新任务</el-button>
+        </div>
       </div>
       <div class="summary-grid task-summary">
         <div class="metric">等待/执行<strong>{{ activeTaskCount }}</strong></div>
@@ -194,7 +198,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   fetchDataQualityLogs,
   fetchDataQualityStatus,
@@ -234,8 +239,18 @@ const qualityLogs = ref<DataQualityLog[]>([])
 const tasks = ref<WorkflowTask[]>([])
 const maintenance = ref<MaintenanceStatus>()
 const maintenanceRunning = ref(false)
+const lastRefreshedAt = ref<Date | null>(null)
+const autoRefreshSeconds = 15
+let autoRefreshTimer: number | undefined
 
-onMounted(refresh)
+onMounted(() => {
+  refresh()
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 
 const healthRows = computed(() => [
   { name: 'health', ...health.value },
@@ -299,10 +314,30 @@ const lastMaintenanceDetail = computed(() => {
 
 const latestMaintenanceCards = computed(() => maintenanceCards(maintenance.value?.last_run))
 
+const lastRefreshText = computed(() => {
+  if (!lastRefreshedAt.value) return '尚未刷新'
+  return `上次刷新 ${lastRefreshedAt.value.toLocaleTimeString('zh-CN', { hour12: false })}`
+})
+
 async function refresh() {
   loading.value = true
   try {
-    const [healthResult, liveResult, readyResult, maintenanceResult, qualityResult, logsResult, tasksResult] = await Promise.allSettled([
+    await refreshAllData()
+  } finally {
+    loading.value = false
+  }
+}
+
+async function refreshSilently() {
+  try {
+    await refreshAllData()
+  } catch {
+    // Keep the page calm during background polling; manual refresh still surfaces errors through visible state.
+  }
+}
+
+async function refreshAllData() {
+  const [healthResult, liveResult, readyResult, maintenanceResult, qualityResult, logsResult, tasksResult] = await Promise.allSettled([
       fetchHealth(),
       fetchLiveHealth(),
       fetchReadyHealth(),
@@ -310,27 +345,27 @@ async function refresh() {
       fetchDataQualityStatus(),
       fetchDataQualityLogs(),
       fetchWorkflowTasks(),
-    ])
-    health.value = toProbeState(healthResult, '基础健康检查')
-    live.value = toProbeState(liveResult, 'API 进程存活')
-    ready.value = toProbeState(readyResult, '数据库与 worker 就绪')
-    if (maintenanceResult.status === 'fulfilled') maintenance.value = maintenanceResult.value
-    if (qualityResult.status === 'fulfilled') qualityStatus.value = qualityResult.value
-    if (logsResult.status === 'fulfilled') qualityLogs.value = logsResult.value
-    if (tasksResult.status === 'fulfilled') tasks.value = tasksResult.value
-  } finally {
-    loading.value = false
-  }
+  ])
+  health.value = toProbeState(healthResult, '基础健康检查')
+  live.value = toProbeState(liveResult, 'API 进程存活')
+  ready.value = toProbeState(readyResult, '数据库与 worker 就绪')
+  if (maintenanceResult.status === 'fulfilled') maintenance.value = maintenanceResult.value
+  if (qualityResult.status === 'fulfilled') qualityStatus.value = qualityResult.value
+  if (logsResult.status === 'fulfilled') qualityLogs.value = logsResult.value
+  if (tasksResult.status === 'fulfilled') tasks.value = tasksResult.value
+  lastRefreshedAt.value = new Date()
 }
 
 async function refreshTasks() {
   tasks.value = await fetchWorkflowTasks()
+  lastRefreshedAt.value = new Date()
 }
 
 async function triggerMaintenance() {
   maintenanceRunning.value = true
   try {
-    await runMaintenanceNow()
+    const response = await runMaintenanceNow()
+    ElMessage.success(`每日维护任务已创建，task_id=${response.task_id}`)
     await Promise.all([refreshTasks(), refreshMaintenance()])
   } finally {
     maintenanceRunning.value = false
@@ -339,6 +374,19 @@ async function triggerMaintenance() {
 
 async function refreshMaintenance() {
   maintenance.value = await fetchMaintenanceStatus()
+  lastRefreshedAt.value = new Date()
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  autoRefreshTimer = window.setInterval(refreshSilently, autoRefreshSeconds * 1000)
+}
+
+function stopAutoRefresh() {
+  if (autoRefreshTimer !== undefined) {
+    window.clearInterval(autoRefreshTimer)
+    autoRefreshTimer = undefined
+  }
 }
 
 function toProbeState(result: PromiseSettledResult<HealthStatus>, fallback: string): ProbeState {
