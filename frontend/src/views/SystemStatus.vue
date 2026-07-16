@@ -27,7 +27,7 @@
         <div class="metric">
           后台任务
           <strong>{{ activeTaskCount }}</strong>
-          <span>执行中或等待中，异常 {{ failedTaskCount }}</span>
+          <span>等待或执行中，异常 {{ failedTaskCount }}</span>
         </div>
       </div>
     </section>
@@ -52,7 +52,9 @@
         <h2>每日自动维护</h2>
         <div class="header-actions">
           <el-tag :type="maintenanceTagType">{{ maintenanceStatusText }}</el-tag>
-          <el-button :loading="maintenanceRunning" :disabled="maintenance?.lock_active" @click="triggerMaintenance">立即执行</el-button>
+          <el-button :loading="maintenanceRunning" :disabled="maintenance?.lock_active" @click="triggerMaintenance">
+            立即执行
+          </el-button>
         </div>
       </div>
       <div class="summary-grid task-summary">
@@ -63,7 +65,7 @@
         </div>
         <div class="metric">
           同步范围
-          <strong>{{ maintenance?.scope ?? '-' }}</strong>
+          <strong>{{ scopeText(maintenance?.scope) }}</strong>
           <span>最多 {{ maintenance?.max_symbols ?? '-' }} 只 ETF</span>
         </div>
         <div class="metric">
@@ -77,15 +79,24 @@
           <span>{{ lastMaintenanceDetail }}</span>
         </div>
       </div>
+
+      <div v-if="latestMaintenanceCards.length" class="result-card-grid">
+        <div v-for="card in latestMaintenanceCards" :key="card.title" class="result-card">
+          <span>{{ card.title }}</span>
+          <strong>{{ card.value }}</strong>
+          <p>{{ card.detail }}</p>
+        </div>
+      </div>
+
       <el-alert
         v-if="maintenance?.lock_active"
         type="warning"
         show-icon
         :closable="false"
-        title="每日维护正在执行中"
+        title="每日维护正在执行中，请等待当前任务完成后再手动触发。"
       />
       <p class="section-note">
-        自动维护只更新本地行情、因子、策略、风控、调仓建议和报告，不会连接券商，也不会自动下单。
+        每日维护只更新本地行情、因子、策略、风控、调仓建议和报告，不连接券商，不自动下单。
       </p>
     </section>
 
@@ -99,7 +110,7 @@
         <div class="metric">成功<strong>{{ successTaskCount }}</strong></div>
         <div class="metric">异常<strong>{{ failedTaskCount }}</strong></div>
       </div>
-      <el-table :data="tasks" height="420">
+      <el-table :data="tasks" height="440">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="task-detail">
@@ -107,6 +118,13 @@
                 <span>任务类型：{{ taskTypeText(row.task_type) }}</span>
                 <span>耗时：{{ taskDuration(row) }}</span>
                 <span>处理对象：{{ taskTargetSummary(row) }}</span>
+              </div>
+              <div v-if="taskResultCards(row).length" class="result-card-grid task-result-grid">
+                <div v-for="card in taskResultCards(row)" :key="card.title" class="result-card">
+                  <span>{{ card.title }}</span>
+                  <strong>{{ card.value }}</strong>
+                  <p>{{ card.detail }}</p>
+                </div>
               </div>
               <el-table :data="row.steps" size="small">
                 <el-table-column prop="step_name" label="步骤" width="150" />
@@ -118,8 +136,10 @@
                 <el-table-column label="耗时" width="110">
                   <template #default="{ row: step }">{{ stepDuration(step) }}</template>
                 </el-table-column>
-                <el-table-column label="说明" min-width="260">
-                  <template #default="{ row: step }">{{ userFriendlyMessage(step.message) || summarizeStepPayload(step.result_payload) }}</template>
+                <el-table-column label="说明" min-width="320">
+                  <template #default="{ row: step }">
+                    {{ userFriendlyMessage(step.message) || summarizeStepPayload(step.result_payload) }}
+                  </template>
                 </el-table-column>
               </el-table>
             </div>
@@ -146,7 +166,7 @@
           <template #default="{ row }">{{ taskDuration(row) }}</template>
         </el-table-column>
         <el-table-column prop="created_at" label="创建时间" width="170" />
-        <el-table-column label="提示" min-width="240">
+        <el-table-column label="提示" min-width="260">
           <template #default="{ row }">{{ taskHint(row) }}</template>
         </el-table-column>
       </el-table>
@@ -164,7 +184,7 @@
         <el-table-column prop="check_type" label="检查项" width="180" />
         <el-table-column label="级别" width="110">
           <template #default="{ row }">
-            <el-tag :type="severityTagType(row.severity)">{{ row.severity }}</el-tag>
+            <el-tag :type="severityTagType(row.severity)">{{ severityText(row.severity) }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="message" label="说明" min-width="280" />
@@ -196,6 +216,12 @@ type TagType = 'success' | 'warning' | 'danger' | 'info'
 interface ProbeState {
   ok: boolean
   status: string
+  detail: string
+}
+
+interface ResultCard {
+  title: string
+  value: string
   detail: string
 }
 
@@ -264,12 +290,14 @@ const lastMaintenanceStatus = computed(() => {
 
 const lastMaintenanceDetail = computed(() => {
   const lastRun = maintenance.value?.last_run
-  if (!lastRun) return '尚未产生自动维护记录'
+  if (!lastRun) return '尚未产生维护记录'
   if (lastRun.error) return String(lastRun.error)
-  const runDate = lastRun.run_date ? `日期 ${lastRun.run_date}` : ''
-  const report = typeof lastRun.report === 'object' && lastRun.report ? `报告 ${(lastRun.report as Record<string, unknown>).id ?? '-'}` : ''
+  const runDate = lastRun.run_date ? `运行日期 ${lastRun.run_date}` : ''
+  const report = isRecord(lastRun.report) ? `报告 ${lastRun.report.id ?? '-'}` : ''
   return [runDate, report].filter(Boolean).join(' / ') || '已记录'
 })
+
+const latestMaintenanceCards = computed(() => maintenanceCards(maintenance.value?.last_run))
 
 async function refresh() {
   loading.value = true
@@ -357,6 +385,16 @@ function severityTagType(severity: string): TagType {
   return 'success'
 }
 
+function severityText(severity: string) {
+  const map: Record<string, string> = {
+    error: '错误',
+    warning: '警告',
+    info: '信息',
+    success: '正常',
+  }
+  return map[severity] || severity
+}
+
 function taskTypeText(type: string) {
   const map: Record<string, string> = {
     full_rebalance: '全流程',
@@ -365,6 +403,19 @@ function taskTypeText(type: string) {
     daily_maintenance: '每日维护',
   }
   return map[type] || type
+}
+
+function scopeText(scope?: string) {
+  const map: Record<string, string> = {
+    enabled: '启用池',
+    core: '核心池',
+    positions: '当前持仓',
+    target: '目标组合',
+    plans: '定投计划',
+    all: '全市场',
+    custom: '自定义',
+  }
+  return scope ? map[scope] || scope : '-'
 }
 
 function currentStepName(task: WorkflowTask) {
@@ -412,8 +463,8 @@ function taskTargetSummary(task: WorkflowTask) {
   const result = task.result_payload || {}
   const symbols = Array.isArray(payload.symbols) ? payload.symbols : Array.isArray(result.symbols) ? result.symbols : []
   if (symbols.length) return `${symbols.slice(0, 4).join('、')}${symbols.length > 4 ? ` 等 ${symbols.length} 只` : ''}`
-  if (typeof payload.scope === 'string') return String(payload.scope)
-  if (typeof payload.sync_scope === 'string') return String(payload.sync_scope)
+  if (typeof payload.scope === 'string') return scopeText(payload.scope)
+  if (typeof payload.sync_scope === 'string') return scopeText(payload.sync_scope)
   return '-'
 }
 
@@ -433,15 +484,126 @@ function userFriendlyMessage(message?: string | null) {
   if (message.includes('missing_trading_calendar')) return '交易日历缺失，请先同步交易日历。'
   if (message.includes('insufficient_history')) return '历史样本不足，请补齐更长周期行情或缩短分析周期。'
   if (message.includes('stale_market_data')) return '最新行情不够新，请补齐最近交易日行情。'
-  if (message.includes('RemoteDisconnected') || message.includes('Connection aborted')) return '外部数据源连接中断，建议稍后重试并适当提高请求间隔。'
+  if (message.includes('RemoteDisconnected') || message.includes('Connection aborted')) {
+    return '外部数据源连接中断，建议稍后重试并适当提高请求间隔。'
+  }
   return message
 }
 
 function summarizeStepPayload(payload?: Record<string, unknown> | null) {
   if (!payload) return '-'
+  const cards = maintenanceCards(payload)
+  if (cards.length) return cards.map((card) => `${card.title}：${card.value}`).join('；')
   const keys = ['status', 'success_count', 'failed_count', 'total_clean_rows', 'total_factor_rows', 'total_logs', 'run_id', 'order_count']
-  const parts = keys.filter((key) => payload[key] != null).map((key) => `${key}=${payload[key]}`)
-  return parts.join('，') || '执行完成'
+  const parts = keys.filter((key) => payload[key] != null).map((key) => `${fieldText(key)}=${payload[key]}`)
+  return parts.join('；') || '执行完成'
+}
+
+function taskResultCards(task: WorkflowTask): ResultCard[] {
+  if (task.task_type === 'daily_maintenance') {
+    const payload = task.result_payload?.steps
+    if (isRecord(payload)) {
+      const maintenancePayload = payload.maintenance
+      if (isRecord(maintenancePayload)) return maintenanceCards(maintenancePayload)
+    }
+  }
+  return maintenanceCards(task.result_payload)
+}
+
+function maintenanceCards(payload?: Record<string, unknown> | null): ResultCard[] {
+  if (!payload) return []
+  const cards: ResultCard[] = []
+  const market = recordValue(payload.market)
+  const factors = recordValue(payload.factors)
+  const strategy = recordValue(payload.strategy)
+  const risk = recordValue(payload.risk)
+  const rebalance = recordValue(payload.rebalance)
+  const report = recordValue(payload.report)
+
+  if (market) {
+    const requested = numberText(market.requested_symbols)
+    const success = numberText(market.success_count)
+    const fresh = numberText(market.up_to_date_symbols)
+    const cleanRows = numberText(market.total_clean_rows)
+    cards.push({
+      title: '行情同步',
+      value: `${success}/${requested} 只`,
+      detail: `已是最新 ${fresh} 只，新增清洗行情 ${cleanRows} 行。`,
+    })
+  }
+  if (factors) {
+    cards.push({
+      title: '因子计算',
+      value: `${numberText(factors.success_count)} 只`,
+      detail: `本地因子总行数 ${numberText(factors.total_factor_rows)}，失败 ${numberText(factors.failed_count)} 只。`,
+    })
+  }
+  if (strategy) {
+    cards.push({
+      title: '策略运行',
+      value: `Run ${textValue(strategy.run_id)}`,
+      detail: `${textValue(strategy.strategy_code)} 生成信号 ${numberText(strategy.signal_count)} 条，目标持仓 ${numberText(strategy.target_count)} 只。`,
+    })
+  }
+  if (risk) {
+    cards.push({
+      title: '风控检查',
+      value: `${numberText(risk.result_count)} 条`,
+      detail: `需要调整 ${numberText(risk.adjusted_count)} 条，状态 ${statusText(textValue(risk.status))}。`,
+    })
+  }
+  if (rebalance) {
+    cards.push({
+      title: '调仓建议',
+      value: `${numberText(rebalance.order_count)} 条`,
+      detail: `建议单日期 ${textValue(rebalance.order_date)}，仅供人工确认。`,
+    })
+  }
+  if (report) {
+    cards.push({
+      title: '报告生成',
+      value: `ID ${textValue(report.id)}`,
+      detail: `${textValue(report.title)}。`,
+    })
+  }
+  return cards
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return isRecord(value) ? value : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function textValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '-'
+  return String(value)
+}
+
+function numberText(value: unknown) {
+  if (value === null || value === undefined || value === '') return '0'
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? String(parsed) : String(value)
+}
+
+function statusText(status: string) {
+  return taskStatusText(status)
+}
+
+function fieldText(key: string) {
+  const map: Record<string, string> = {
+    status: '状态',
+    success_count: '成功数',
+    failed_count: '失败数',
+    total_clean_rows: '清洗行情行数',
+    total_factor_rows: '因子行数',
+    total_logs: '日志数',
+    run_id: '运行ID',
+    order_count: '建议单数',
+  }
+  return map[key] || key
 }
 
 function pad2(value: number) {
