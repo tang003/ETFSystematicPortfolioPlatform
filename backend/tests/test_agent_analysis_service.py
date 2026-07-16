@@ -1,4 +1,5 @@
 from datetime import date
+from datetime import datetime
 from decimal import Decimal
 
 from app.core.config import get_settings
@@ -9,6 +10,20 @@ from app.services.agent_analysis_service import analyze_etf_with_agents
 class Db:
     def scalar(self, _statement):
         return None
+
+
+class SavingDb(Db):
+    saved = None
+
+    def add(self, row):
+        self.saved = row
+
+    def commit(self):
+        pass
+
+    def refresh(self, row):
+        row.id = 99
+        row.created_at = datetime(2026, 7, 16, 10, 0, 0)
 
 
 class Asset:
@@ -94,3 +109,15 @@ def test_agent_analysis_uses_deepseek_when_configured(monkeypatch) -> None:
     assert result["llm_used"] is True
     assert result["final_action"] == "持有观察"
     assert "DeepSeek" in result["final_summary"]
+
+
+def test_agent_analysis_returns_saved_log_id(monkeypatch) -> None:
+    monkeypatch.setattr(agent_analysis_service, "get_etf_detail", lambda *args, **kwargs: fake_detail())
+    monkeypatch.setattr(agent_analysis_service, "deepseek_configured", lambda: False)
+    db = SavingDb()
+
+    result = analyze_etf_with_agents(db, symbol="510300", start_date=date(2026, 1, 1), end_date=date(2026, 7, 1))
+
+    assert db.saved is not None
+    assert result["id"] == 99
+    assert result["created_at"] == datetime(2026, 7, 16, 10, 0, 0)

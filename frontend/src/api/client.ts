@@ -230,6 +230,7 @@ export interface AgentOpinion {
 }
 
 export interface EtfAgentAnalysisResponse {
+  id?: number | null
   symbol: string
   name: string | null
   start_date: string
@@ -244,6 +245,7 @@ export interface EtfAgentAnalysisResponse {
   manager_commentary: string
   agents: AgentOpinion[]
   warnings: string[]
+  created_at?: string | null
 }
 
 export interface EtfAgentAnalysisLog extends EtfAgentAnalysisResponse {

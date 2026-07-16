@@ -23,6 +23,7 @@ class AgentOpinionRead(BaseModel):
 
 
 class EtfAgentAnalysisResponse(BaseModel):
+    id: int | None = None
     symbol: str
     name: str | None
     start_date: date
@@ -37,6 +38,7 @@ class EtfAgentAnalysisResponse(BaseModel):
     manager_commentary: str
     agents: list[AgentOpinionRead]
     warnings: list[str]
+    created_at: datetime | None = None
 
 
 class EtfAgentAnalysisLogRead(BaseModel):

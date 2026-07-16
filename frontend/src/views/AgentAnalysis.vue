@@ -83,9 +83,12 @@
       <div class="panel-header">
         <div>
           <h2>最近分析记录</h2>
-          <p class="section-note">每次运行都会自动保存，后续可用于复盘和对比。</p>
+          <p class="section-note">每次运行都会自动保存，默认显示全部记录，也可以只看当前代码。</p>
         </div>
-        <el-button @click="loadHistory">刷新记录</el-button>
+        <div class="header-actions">
+          <el-segmented v-model="historyScope" :options="historyScopeOptions" @change="loadHistory" />
+          <el-button @click="loadHistory">刷新记录</el-button>
+        </div>
       </div>
       <el-table :data="history" size="small" empty-text="暂无历史记录">
         <el-table-column prop="created_at" label="生成时间" min-width="160" />
@@ -126,6 +129,11 @@ const autoSync = ref(true)
 const loading = ref(false)
 const analysis = ref<EtfAgentAnalysisResponse>()
 const history = ref<EtfAgentAnalysisLog[]>([])
+const historyScope = ref<'all' | 'symbol'>('all')
+const historyScopeOptions = [
+  { label: '全部记录', value: 'all' },
+  { label: '当前代码', value: 'symbol' },
+]
 
 const dataStatusText = computed(() => {
   if (!analysis.value) return '-'
@@ -150,6 +158,7 @@ async function runAnalysis() {
       auto_sync: autoSync.value,
     })
     await loadHistory()
+    ElMessage.success(`分析已保存${analysis.value.id ? `，记录 ID=${analysis.value.id}` : ''}`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : 'AI 投研分析失败')
   } finally {
@@ -158,7 +167,10 @@ async function runAnalysis() {
 }
 
 async function loadHistory() {
-  history.value = await fetchEtfAgentAnalysisHistory({ symbol: symbol.value.trim() || undefined, limit: 20 })
+  history.value = await fetchEtfAgentAnalysisHistory({
+    symbol: historyScope.value === 'symbol' ? symbol.value.trim() || undefined : undefined,
+    limit: 20,
+  })
 }
 
 function useHistory(row: EtfAgentAnalysisLog) {

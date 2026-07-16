@@ -95,7 +95,10 @@ def analyze_etf_with_agents(
         "warnings": warnings,
     }
     if save_result:
-        save_agent_analysis(db, result)
+        row = save_agent_analysis(db, result)
+        if row is not None:
+            result["id"] = row.id
+            result["created_at"] = row.created_at
     return result
 
 
