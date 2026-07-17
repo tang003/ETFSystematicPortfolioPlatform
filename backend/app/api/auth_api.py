@@ -1,4 +1,5 @@
 from collections import defaultdict, deque
+from dataclasses import dataclass
 from threading import Lock
 from time import monotonic
 
@@ -19,12 +20,30 @@ LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 5
 _attempts: dict[str, deque[float]] = defaultdict(deque)
 _attempt_lock = Lock()
+ADMIN_ROLE = "admin"
+
+
+@dataclass(frozen=True)
+class AuthenticatedUser:
+    username: str
+    role: str
 
 
 def require_authenticated_user(request: Request) -> str:
+    return get_authenticated_user(request).username
+
+
+def require_admin_user(request: Request) -> AuthenticatedUser:
+    user = get_authenticated_user(request)
+    if user.role != ADMIN_ROLE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin permission required")
+    return user
+
+
+def get_authenticated_user(request: Request) -> AuthenticatedUser:
     settings = get_settings()
     if not settings.auth_enabled:
-        return settings.auth_admin_username
+        return AuthenticatedUser(username=settings.auth_admin_username, role=ADMIN_ROLE)
     if not validate_auth_configuration(settings.auth_admin_password_hash, settings.auth_session_secret):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Authentication is not configured")
     payload = read_session_token(
@@ -33,7 +52,7 @@ def require_authenticated_user(request: Request) -> str:
     )
     if payload is None or payload.get("sub") != settings.auth_admin_username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
-    return str(payload["sub"])
+    return AuthenticatedUser(username=str(payload["sub"]), role=str(payload.get("role") or ADMIN_ROLE))
 
 
 @router.get("/status", response_model=AuthStatusResponse)
@@ -46,6 +65,7 @@ def auth_status(request: Request) -> AuthStatusResponse:
             configured=configured,
             authenticated=True,
             username=settings.auth_admin_username,
+            role=ADMIN_ROLE,
         )
     payload = None
     if configured:
@@ -59,6 +79,7 @@ def auth_status(request: Request) -> AuthStatusResponse:
         configured=configured,
         authenticated=authenticated,
         username=settings.auth_admin_username if authenticated else None,
+        role=ADMIN_ROLE if authenticated else None,
     )
 
 
@@ -84,6 +105,7 @@ def login(request: Request, response: Response, payload: LoginRequest) -> AuthSt
         settings.auth_admin_username,
         settings.auth_session_secret or "",
         settings.auth_session_ttl_hours,
+        role=ADMIN_ROLE,
     )
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -94,7 +116,7 @@ def login(request: Request, response: Response, payload: LoginRequest) -> AuthSt
         samesite="lax",
         path="/",
     )
-    return AuthStatusResponse(enabled=True, configured=True, authenticated=True, username=settings.auth_admin_username)
+    return AuthStatusResponse(enabled=True, configured=True, authenticated=True, username=settings.auth_admin_username, role=ADMIN_ROLE)
 
 
 @router.post("/logout", response_model=AuthStatusResponse)
@@ -112,6 +134,7 @@ def logout(response: Response) -> AuthStatusResponse:
         configured=validate_auth_configuration(settings.auth_admin_password_hash, settings.auth_session_secret),
         authenticated=not settings.auth_enabled,
         username=settings.auth_admin_username if not settings.auth_enabled else None,
+        role=ADMIN_ROLE if not settings.auth_enabled else None,
     )
 
 

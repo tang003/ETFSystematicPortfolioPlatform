@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
-from app.api.auth_api import require_authenticated_user
+from app.api.auth_api import require_admin_user, require_authenticated_user
 from app.api.agent_analysis_api import router as agent_analysis_router
 from app.api.auth_api import router as auth_router
 from app.api.asset_api import router as asset_router
@@ -42,23 +42,24 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(auth_router, prefix=settings.api_prefix)
     protected = [Depends(require_authenticated_user)]
+    admin_only = [Depends(require_admin_user)]
     app.include_router(asset_router, prefix=settings.api_prefix, dependencies=protected)
-    app.include_router(calendar_router, prefix=settings.api_prefix, dependencies=protected)
-    app.include_router(market_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(calendar_router, prefix=settings.api_prefix, dependencies=admin_only)
+    app.include_router(market_router, prefix=settings.api_prefix, dependencies=admin_only)
     app.include_router(news_router, prefix=settings.api_prefix, dependencies=protected)
-    app.include_router(data_quality_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(data_quality_router, prefix=settings.api_prefix, dependencies=admin_only)
     app.include_router(etf_compare_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(etf_detail_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(agent_analysis_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(factor_router, prefix=settings.api_prefix, dependencies=protected)
-    app.include_router(settings_router, prefix=settings.api_prefix, dependencies=protected)
-    app.include_router(strategy_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(settings_router, prefix=settings.api_prefix, dependencies=admin_only)
+    app.include_router(strategy_router, prefix=settings.api_prefix, dependencies=admin_only)
     app.include_router(portfolio_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(risk_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(rebalance_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(backtest_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(report_router, prefix=settings.api_prefix, dependencies=protected)
-    app.include_router(workflow_router, prefix=settings.api_prefix, dependencies=protected)
+    app.include_router(workflow_router, prefix=settings.api_prefix, dependencies=admin_only)
     return app
 
 

@@ -31,10 +31,11 @@ def verify_password(password: str, encoded_hash: str) -> bool:
         return False
 
 
-def create_session_token(username: str, secret: str, ttl_hours: int) -> str:
+def create_session_token(username: str, secret: str, ttl_hours: int, *, role: str = "admin") -> str:
     now = int(time.time())
     payload = {
         "sub": username,
+        "role": role,
         "iat": now,
         "exp": now + ttl_hours * 3600,
         "nonce": secrets.token_urlsafe(12),

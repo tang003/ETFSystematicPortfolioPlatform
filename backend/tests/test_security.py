@@ -52,10 +52,35 @@ def test_protected_api_requires_login(monkeypatch) -> None:
             )
             assert login_response.status_code == 200
             assert login_response.json()["authenticated"] is True
+            assert login_response.json()["role"] == "admin"
             assert client.get("/api/assets").status_code == 200
 
             assert client.post("/api/auth/logout").status_code == 200
             assert client.get("/api/assets").status_code == 401
+    finally:
+        get_settings.cache_clear()
+
+
+def test_admin_only_api_rejects_non_admin_role(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_ENABLED", "true")
+    monkeypatch.setenv("AUTH_ADMIN_USERNAME", "operator")
+    monkeypatch.setenv(
+        "AUTH_ADMIN_PASSWORD_HASH",
+        hash_password("a-strong-test-password", salt="role-test-salt", iterations=10_000),
+    )
+    monkeypatch.setenv("AUTH_SESSION_SECRET", "s" * 48)
+    monkeypatch.setenv("AUTH_COOKIE_SECURE", "false")
+    get_settings.cache_clear()
+
+    try:
+        with TestClient(create_app()) as client:
+            token = create_session_token("operator", "s" * 48, 1, role="viewer")
+            client.cookies.set("etf_portfolio_session", token)
+
+            assert client.get("/api/assets").status_code == 200
+            response = client.get("/api/settings/maintenance")
+            assert response.status_code == 403
+            assert response.json()["detail"] == "Admin permission required"
     finally:
         get_settings.cache_clear()
 

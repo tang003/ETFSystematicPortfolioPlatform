@@ -23,6 +23,7 @@ export interface AuthStatus {
   configured: boolean
   authenticated: boolean
   username: string | null
+  role?: string | null
 }
 
 export interface Asset {

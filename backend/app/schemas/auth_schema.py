@@ -11,3 +11,4 @@ class AuthStatusResponse(BaseModel):
     configured: bool
     authenticated: bool
     username: str | None = None
+    role: str | None = None

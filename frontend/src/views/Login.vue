@@ -11,7 +11,7 @@
 
       <el-alert v-if="configurationError" type="error" :closable="false" title="服务器尚未完成登录配置" />
       <el-form label-position="top" @submit.prevent="submitLogin">
-        <el-form-item label="管理员用户名">
+        <el-form-item label="用户名">
           <el-input v-model="username" autocomplete="username" autofocus />
         </el-form-item>
         <el-form-item label="密码">
@@ -33,7 +33,7 @@ import { fetchAuthStatus, login } from '../api/client'
 
 const route = useRoute()
 const router = useRouter()
-const username = ref('admin')
+const username = ref('')
 const password = ref('')
 const loading = ref(false)
 const configurationError = ref(false)

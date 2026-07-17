@@ -4,7 +4,7 @@
 
 默认 API 前缀：`/api`
 
-生产环境开启鉴权后，除 `/health` 和 `/api/auth/*` 外，业务 API 都需要登录。
+生产环境开启鉴权后，除 `/health` 和 `/api/auth/*` 外，业务 API 都需要登录。部分高风险接口要求 `admin` 角色。
 
 ## 健康检查
 
@@ -24,7 +24,13 @@
 
 ### GET /api/auth/status
 
-返回是否启用鉴权、是否已登录。
+返回是否启用鉴权、是否已登录，以及当前用户角色。
+
+返回重点：
+
+- `authenticated`：是否已登录。
+- `username`：当前用户名。
+- `role`：当前角色。当前第一版只有环境变量管理员账号，角色固定为 `admin`。
 
 ### POST /api/auth/login
 
@@ -39,9 +45,28 @@
 
 登录成功后服务端写入 HttpOnly Cookie。
 
+说明：
+
+- 当前生产模式为单管理员登录。
+- 高风险接口要求 `role=admin`。
+- 后续多用户体系会在此基础上扩展 `researcher`、`viewer` 等角色。
+
 ### POST /api/auth/logout
 
 退出登录。
+
+### 管理员接口范围
+
+以下接口当前要求管理员角色：
+
+- `/api/calendar/*`
+- `/api/market/*`
+- `/api/data-quality/*`
+- `/api/settings/*`
+- `/api/strategies/*`
+- `/api/workflows/*`
+
+这些接口可能触发外部数据源调用、修改数据源配置、运行策略或启动后台任务，不适合普通只读用户直接操作。
 
 ## ETF 池
 
