@@ -542,6 +542,21 @@ export interface DataSourceSettings {
   providers: DataSourceProvider[]
 }
 
+export interface AuditLog {
+  id: number
+  actor_username: string | null
+  actor_role: string | null
+  method: string
+  path: string
+  action: string
+  status_code: number | null
+  duration_ms: number | null
+  client_ip: string | null
+  request_id: string | null
+  detail: Record<string, unknown> | null
+  created_at: string
+}
+
 export interface MaintenanceStatus {
   enabled: boolean
   timezone: string
@@ -797,6 +812,8 @@ export const updateStrategy = async (strategyCode: string, payload: {
 export const runStrategy = async (payload: { strategy_code: string; run_date?: string; run_type?: string }) =>
   (await api.post<RunSummary>('/api/strategies/run', payload)).data
 export const fetchDataSourceSettings = async () => (await api.get<DataSourceSettings>('/api/settings/data-sources')).data
+export const fetchAuditLogs = async (params?: { limit?: number; actor_username?: string; action?: string }) =>
+  (await api.get<AuditLog[]>('/api/audit-logs', { params })).data
 export const fetchMaintenanceStatus = async () => (await api.get<MaintenanceStatus>('/api/settings/maintenance')).data
 export const runMaintenanceNow = async () =>
   (await api.post<{ task_id: number; status: string }>('/api/settings/maintenance/run')).data

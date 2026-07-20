@@ -22,6 +22,7 @@
         <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
         <el-menu-item index="/data-sources"><el-icon><Setting /></el-icon><span>数据源管理</span></el-menu-item>
         <el-menu-item index="/system-status"><el-icon><Setting /></el-icon><span>系统状态</span></el-menu-item>
+        <el-menu-item index="/audit-logs"><el-icon><Document /></el-icon><span>操作审计</span></el-menu-item>
         <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
         <el-menu-item index="/factor-research"><el-icon><DataAnalysis /></el-icon><span>因子研究</span></el-menu-item>
         <el-menu-item index="/portfolio"><el-icon><PieChart /></el-icon><span>目标组合</span></el-menu-item>

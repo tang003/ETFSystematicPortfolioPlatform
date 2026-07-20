@@ -3,6 +3,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.auth_api import require_admin_user, require_authenticated_user
 from app.api.agent_analysis_api import router as agent_analysis_router
+from app.api.audit_api import router as audit_router
 from app.api.auth_api import router as auth_router
 from app.api.asset_api import router as asset_router
 from app.api.backtest_api import router as backtest_router
@@ -23,6 +24,7 @@ from app.api.strategy_api import router as strategy_router
 from app.api.workflow_api import router as workflow_router
 from app.core.config import get_settings, validate_runtime_configuration
 from app.core.logging import setup_logging
+from app.services.audit_service import audit_http_request
 
 
 def create_app() -> FastAPI:
@@ -39,6 +41,7 @@ def create_app() -> FastAPI:
     )
     if production:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
+    app.middleware("http")(audit_http_request)
     app.include_router(health_router)
     app.include_router(auth_router, prefix=settings.api_prefix)
     protected = [Depends(require_authenticated_user)]
@@ -60,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(backtest_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(report_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(workflow_router, prefix=settings.api_prefix, dependencies=admin_only)
+    app.include_router(audit_router, prefix=settings.api_prefix, dependencies=admin_only)
     return app
 
 

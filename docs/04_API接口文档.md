@@ -59,6 +59,7 @@
 
 以下接口当前要求管理员角色：
 
+- `/api/audit-logs`
 - `/api/calendar/*`
 - `/api/market/*`
 - `/api/data-quality/*`
@@ -67,6 +68,24 @@
 - `/api/workflows/*`
 
 这些接口可能触发外部数据源调用、修改数据源配置、运行策略或启动后台任务，不适合普通只读用户直接操作。
+
+## 操作审计
+
+### GET /api/audit-logs
+
+查询最近操作审计日志。该接口要求 `admin` 角色。
+
+参数：
+
+- `limit`：默认 100，最大 500。
+- `actor_username`：可选，按操作者过滤。
+- `action`：可选，按动作过滤，例如 `post_market`、`patch_settings`。
+
+说明：
+
+- 审计中间件记录 `/api` 下 POST、PUT、PATCH、DELETE 请求。
+- 记录字段包括操作者、角色、方法、路径、动作、状态码、耗时、IP、request_id 和时间。
+- 审计日志不保存请求正文，不记录 token、密码、数据源密钥等敏感内容。
 
 ## ETF 池
 
