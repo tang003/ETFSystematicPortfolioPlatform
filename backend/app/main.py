@@ -21,6 +21,7 @@ from app.api.report_api import router as report_router
 from app.api.risk_api import router as risk_router
 from app.api.settings_api import router as settings_router
 from app.api.strategy_api import router as strategy_router
+from app.api.user_api import router as user_router
 from app.api.workflow_api import router as workflow_router
 from app.core.config import get_settings, validate_runtime_configuration
 from app.core.logging import setup_logging
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(report_router, prefix=settings.api_prefix, dependencies=protected)
     app.include_router(workflow_router, prefix=settings.api_prefix, dependencies=admin_only)
     app.include_router(audit_router, prefix=settings.api_prefix, dependencies=admin_only)
+    app.include_router(user_router, prefix=settings.api_prefix, dependencies=admin_only)
     return app
 
 

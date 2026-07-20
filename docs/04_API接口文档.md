@@ -30,7 +30,7 @@
 
 - `authenticated`：是否已登录。
 - `username`：当前用户名。
-- `role`：当前角色。当前第一版只有环境变量管理员账号，角色固定为 `admin`。
+- `role`：当前角色。环境变量管理员账号固定为 `admin`；数据库用户按 `app_user.role` 返回。
 
 ### POST /api/auth/login
 
@@ -47,9 +47,9 @@
 
 说明：
 
-- 当前生产模式为单管理员登录。
+- 当前生产模式支持数据库用户登录，同时保留环境变量管理员账号作为兜底。
 - 高风险接口要求 `role=admin`。
-- 后续多用户体系会在此基础上扩展 `researcher`、`viewer` 等角色。
+- 当前支持 `admin`、`researcher`、`viewer` 三类角色；业务数据隔离仍是后续工作。
 
 ### POST /api/auth/logout
 
@@ -65,9 +65,51 @@
 - `/api/data-quality/*`
 - `/api/settings/*`
 - `/api/strategies/*`
+- `/api/users/*`
 - `/api/workflows/*`
 
 这些接口可能触发外部数据源调用、修改数据源配置、运行策略或启动后台任务，不适合普通只读用户直接操作。
+
+## 用户管理
+
+### GET /api/users
+
+查询数据库用户列表。该接口要求 `admin` 角色。
+
+参数：
+
+- `limit`：默认 100，最大 500。
+
+### POST /api/users
+
+创建数据库用户。该接口要求 `admin` 角色。
+
+请求：
+
+```json
+{
+  "username": "researcher01",
+  "password": "a-strong-password",
+  "role": "researcher",
+  "display_name": "研究员 01",
+  "is_active": true
+}
+```
+
+说明：
+
+- `password` 至少 12 位。
+- `role` 可选：`admin`、`researcher`、`viewer`。
+- 响应不返回密码或密码哈希。
+
+### PATCH /api/users/{username}
+
+更新用户角色、显示名称、启用状态或密码。该接口要求 `admin` 角色。
+
+说明：
+
+- `password` 留空时不修改密码。
+- `is_active=false` 后，该用户不能重新登录；已登录 Session 在下次鉴权时也会被拒绝。
 
 ## 操作审计
 

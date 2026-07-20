@@ -14,11 +14,13 @@ from app.models.backtest import BacktestEquityCurve, BacktestMetrics, BacktestRu
 from app.models.attribution import PerformanceAttribution
 from app.models.report import ReportLog
 from app.models.settings import DataSourceConfig
+from app.models.user import AppUser
 from app.models.workflow import WorkflowTask, WorkflowTaskStep
 
 __all__ = [
     "AlphaSignal",
     "AgentAnalysisLog",
+    "AppUser",
     "AuditLog",
     "AssetMaster",
     "AssetSyncLog",

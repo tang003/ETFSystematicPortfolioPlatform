@@ -23,6 +23,7 @@
         <el-menu-item index="/data-sources"><el-icon><Setting /></el-icon><span>数据源管理</span></el-menu-item>
         <el-menu-item index="/system-status"><el-icon><Setting /></el-icon><span>系统状态</span></el-menu-item>
         <el-menu-item index="/audit-logs"><el-icon><Document /></el-icon><span>操作审计</span></el-menu-item>
+        <el-menu-item index="/users"><el-icon><User /></el-icon><span>用户管理</span></el-menu-item>
         <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
         <el-menu-item index="/factor-research"><el-icon><DataAnalysis /></el-icon><span>因子研究</span></el-menu-item>
         <el-menu-item index="/portfolio"><el-icon><PieChart /></el-icon><span>目标组合</span></el-menu-item>
@@ -54,7 +55,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CircleCheck, DataAnalysis, DataBoard, DataLine, Document, Filter, Grid, Histogram, MagicStick, Money, Monitor, Operation, PieChart, Setting, SwitchButton, TrendCharts, Wallet, Warning } from '@element-plus/icons-vue'
+import { CircleCheck, DataAnalysis, DataBoard, DataLine, Document, Filter, Grid, Histogram, MagicStick, Money, Monitor, Operation, PieChart, Setting, SwitchButton, TrendCharts, User, Wallet, Warning } from '@element-plus/icons-vue'
 import { fetchAuthStatus, fetchHealth, logout } from './api/client'
 
 const healthOk = ref(false)

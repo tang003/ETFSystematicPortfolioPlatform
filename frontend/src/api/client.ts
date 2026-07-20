@@ -557,6 +557,17 @@ export interface AuditLog {
   created_at: string
 }
 
+export interface AppUser {
+  id: number
+  username: string
+  role: string
+  display_name: string | null
+  is_active: boolean
+  created_at: string
+  updated_at: string | null
+  last_login_at: string | null
+}
+
 export interface MaintenanceStatus {
   enabled: boolean
   timezone: string
@@ -814,6 +825,21 @@ export const runStrategy = async (payload: { strategy_code: string; run_date?: s
 export const fetchDataSourceSettings = async () => (await api.get<DataSourceSettings>('/api/settings/data-sources')).data
 export const fetchAuditLogs = async (params?: { limit?: number; actor_username?: string; action?: string }) =>
   (await api.get<AuditLog[]>('/api/audit-logs', { params })).data
+export const fetchUsers = async (params?: { limit?: number }) =>
+  (await api.get<AppUser[]>('/api/users', { params })).data
+export const createUser = async (payload: {
+  username: string
+  password: string
+  role?: string
+  display_name?: string | null
+  is_active?: boolean
+}) => (await api.post<AppUser>('/api/users', payload)).data
+export const updateUser = async (username: string, payload: {
+  password?: string | null
+  role?: string | null
+  display_name?: string | null
+  is_active?: boolean | null
+}) => (await api.patch<AppUser>(`/api/users/${username}`, payload)).data
 export const fetchMaintenanceStatus = async () => (await api.get<MaintenanceStatus>('/api/settings/maintenance')).data
 export const runMaintenanceNow = async () =>
   (await api.post<{ task_id: number; status: string }>('/api/settings/maintenance/run')).data

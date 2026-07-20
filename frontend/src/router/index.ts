@@ -22,6 +22,7 @@ const Backtest = () => import('../views/Backtest.vue')
 const Reports = () => import('../views/Reports.vue')
 const SystemStatus = () => import('../views/SystemStatus.vue')
 const AuditLogs = () => import('../views/AuditLogs.vue')
+const UserManagement = () => import('../views/UserManagement.vue')
 const AgentAnalysis = () => import('../views/AgentAnalysis.vue')
 const News = () => import('../views/News.vue')
 
@@ -44,6 +45,7 @@ const router = createRouter({
     { path: '/data-sources', component: DataSourceManagement, meta: { title: '数据源管理' } },
     { path: '/system-status', component: SystemStatus, meta: { title: '系统状态' } },
     { path: '/audit-logs', component: AuditLogs, meta: { title: '操作审计' } },
+    { path: '/users', component: UserManagement, meta: { title: '用户管理' } },
     { path: '/factors', component: Factors, meta: { title: '因子排名' } },
     { path: '/factor-research', component: FactorResearch, meta: { title: '因子研究' } },
     { path: '/portfolio', component: Portfolio, meta: { title: '目标组合' } },
