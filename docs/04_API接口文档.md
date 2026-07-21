@@ -1079,3 +1079,37 @@ GET /api/agent-analysis/etf/history?symbol=510300&limit=20
 管理员角色读取时会兼容旧版无 owner 的历史数据；普通数据库用户只读取自己的数据。
 
 注意：ETF 池、行情、因子、策略运行和目标组合仍是共享研究数据，接口不按用户隔离。
+## v0.65.9 角色权限补充
+
+角色：
+
+- `admin`：管理员，拥有系统管理、共享数据维护和研究运行权限。
+- `researcher`：研究员，拥有投研、回测、个人持仓、定投和报告生成权限。
+- `viewer`：观察者，只读。
+
+只允许 `admin` 的接口动作：
+
+- `POST /api/assets/batch-upsert`
+- `POST /api/assets/seed-curated`
+- `POST /api/assets/sync-universe`
+- `POST /api/assets/sync-profiles`
+- `PATCH /api/assets/{symbol}`
+- `POST /api/news/sync`
+- 以及系统已配置为 admin-only 的日历、行情同步、数据质量、数据源设置、策略管理、全流程任务、审计、用户管理接口。
+
+允许 `admin` 或 `researcher` 的接口动作：
+
+- `POST /api/factors/calculate`
+- `POST /api/factors/research`
+- `POST /api/backtest/run`
+- `POST /api/risk/check`
+- `POST /api/rebalance/generate`
+- `POST /api/portfolio/positions`
+- `POST /api/portfolio/positions/resolve`
+- `POST /api/portfolio/holdings/analyze`
+- `POST /api/portfolio/investment-plans`
+- `POST /api/portfolio/investment-plans/{plan_id}/analyze`
+- `POST /api/reports/monthly`
+- `POST /api/agent-analysis/etf`
+
+只读接口仍允许所有已登录用户访问。前端菜单会按角色隐藏不可用入口，但真正权限以 API 为准。

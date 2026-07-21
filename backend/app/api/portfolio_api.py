@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.auth_api import ADMIN_ROLE, AuthenticatedUser, get_authenticated_user
+from app.api.auth_api import ADMIN_ROLE, AuthenticatedUser, get_authenticated_user, require_researcher_user
 from app.core.database import get_db
 from app.schemas.portfolio_schema import (
     HoldingAnalysisRead,
@@ -49,6 +49,7 @@ def get_latest_target_portfolio(db: Session = Depends(get_db)) -> list[TargetPor
 @router.post("/positions", response_model=list[PortfolioPositionRead])
 def save_position_snapshot(
     request: PortfolioSnapshotRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[PortfolioPositionRead]:
@@ -82,6 +83,7 @@ def get_portfolio_xray(
 @router.post("/positions/resolve", response_model=list[PositionResolveRead])
 def resolve_positions(
     request: PositionResolveRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
 ) -> list[PositionResolveRead]:
     return resolve_position_details(db, request.symbols, auto_sync=request.auto_sync, source=request.source)
@@ -90,6 +92,7 @@ def resolve_positions(
 @router.post("/holdings/analyze", response_model=list[HoldingAnalysisRead])
 def run_holding_analysis(
     request: HoldingAnalysisRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[HoldingAnalysisRead]:
@@ -118,6 +121,7 @@ def get_holding_analysis(
 @router.post("/investment-plans", response_model=InvestmentPlanRead)
 def create_plan(
     request: InvestmentPlanCreate,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> InvestmentPlanRead:
@@ -139,6 +143,7 @@ def get_plans(
 def run_investment_plan_analysis(
     plan_id: int,
     request: InvestmentPlanAnalyzeRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[InvestmentPlanSuggestionRead]:

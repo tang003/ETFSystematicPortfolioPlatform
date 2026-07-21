@@ -23,6 +23,8 @@ LOGIN_MAX_ATTEMPTS = 5
 _attempts: dict[str, deque[float]] = defaultdict(deque)
 _attempt_lock = Lock()
 ADMIN_ROLE = "admin"
+RESEARCHER_ROLE = "researcher"
+WRITE_ROLES = {ADMIN_ROLE, RESEARCHER_ROLE}
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,13 @@ def require_admin_user(request: Request) -> AuthenticatedUser:
     user = get_authenticated_user(request)
     if user.role != ADMIN_ROLE:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin permission required")
+    return user
+
+
+def require_researcher_user(request: Request) -> AuthenticatedUser:
+    user = get_authenticated_user(request)
+    if user.role not in WRITE_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Researcher permission required")
     return user
 
 

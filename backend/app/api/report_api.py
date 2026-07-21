@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.api.auth_api import ADMIN_ROLE, AuthenticatedUser, get_authenticated_user
+from app.api.auth_api import ADMIN_ROLE, AuthenticatedUser, get_authenticated_user, require_researcher_user
 from app.core.database import get_db
 from app.schemas.report_schema import MonthlyReportRequest, ReportRead, ReportSummary
 from app.services.report_service import generate_monthly_report, get_report, list_reports
@@ -16,6 +16,7 @@ def include_legacy_rows(user: AuthenticatedUser) -> bool:
 @router.post("/monthly", response_model=ReportSummary)
 def create_monthly_report(
     request: MonthlyReportRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
     user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> ReportSummary:

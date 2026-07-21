@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.auth_api import require_admin_user
 from app.core.database import get_db
 from app.schemas.news_schema import NewsArticleRead, NewsSyncRequest, NewsSyncResponse
 from app.services.news_service import list_news, sync_news
@@ -28,7 +29,11 @@ def get_related_news(
 
 
 @router.post("/sync", response_model=NewsSyncResponse)
-def sync_news_endpoint(request: NewsSyncRequest, db: Session = Depends(get_db)) -> NewsSyncResponse:
+def sync_news_endpoint(
+    request: NewsSyncRequest,
+    _: str = Depends(require_admin_user),
+    db: Session = Depends(get_db),
+) -> NewsSyncResponse:
     try:
         return sync_news(db, source=request.source, num=request.num, page=request.page)
     except ValueError as exc:

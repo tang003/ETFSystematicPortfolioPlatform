@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.auth_api import require_admin_user
 from app.core.database import get_db
 from app.schemas.asset_schema import (
     AssetBatchUpsertRequest,
@@ -39,6 +40,7 @@ def get_assets(
 @router.post("/batch-upsert", response_model=AssetBatchUpsertResponse)
 def upsert_assets(
     request: AssetBatchUpsertRequest,
+    _: str = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> AssetBatchUpsertResponse:
     count = batch_upsert_assets(db=db, items=request.items)
@@ -47,6 +49,7 @@ def upsert_assets(
 
 @router.post("/seed-curated", response_model=AssetBatchUpsertResponse)
 def seed_curated_assets(
+    _: str = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> AssetBatchUpsertResponse:
     result = seed_curated_etf_pool(db=db)
@@ -56,6 +59,7 @@ def seed_curated_assets(
 @router.post("/sync-universe", response_model=AssetUniverseSyncResponse)
 def sync_asset_universe(
     request: AssetUniverseSyncRequest,
+    _: str = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> AssetUniverseSyncResponse:
     try:
@@ -70,6 +74,7 @@ def sync_asset_universe(
 @router.post("/sync-profiles", response_model=AssetProfileSyncResponse)
 def sync_asset_profiles(
     request: AssetProfileSyncRequest,
+    _: str = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> AssetProfileSyncResponse:
     try:
@@ -100,6 +105,7 @@ def get_asset_sync_logs(
 def patch_asset(
     symbol: str,
     request: AssetUpdateRequest,
+    _: str = Depends(require_admin_user),
     db: Session = Depends(get_db),
 ) -> AssetRead:
     asset = update_asset(

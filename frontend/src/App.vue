@@ -10,28 +10,10 @@
         </div>
       </div>
       <el-menu :default-active="$route.path" router class="nav">
-        <el-menu-item index="/dashboard"><el-icon><DataBoard /></el-icon><span>总览</span></el-menu-item>
-        <el-menu-item index="/portfolio-workbench"><el-icon><Monitor /></el-icon><span>组合工作台</span></el-menu-item>
-        <el-menu-item index="/workflow"><el-icon><Operation /></el-icon><span>全流程</span></el-menu-item>
-        <el-menu-item index="/strategy-management"><el-icon><TrendCharts /></el-icon><span>策略管理</span></el-menu-item>
-        <el-menu-item index="/assets"><el-icon><Grid /></el-icon><span>ETF 池</span></el-menu-item>
-        <el-menu-item index="/etf-screener"><el-icon><Filter /></el-icon><span>ETF 筛选</span></el-menu-item>
-        <el-menu-item index="/etf-compare"><el-icon><DataLine /></el-icon><span>ETF 对比</span></el-menu-item>
-        <el-menu-item index="/agent-analysis"><el-icon><MagicStick /></el-icon><span>AI 投研</span></el-menu-item>
-        <el-menu-item index="/news"><el-icon><Document /></el-icon><span>新闻资讯</span></el-menu-item>
-        <el-menu-item index="/data-health"><el-icon><CircleCheck /></el-icon><span>数据健康</span></el-menu-item>
-        <el-menu-item index="/data-sources"><el-icon><Setting /></el-icon><span>数据源管理</span></el-menu-item>
-        <el-menu-item index="/system-status"><el-icon><Setting /></el-icon><span>系统状态</span></el-menu-item>
-        <el-menu-item index="/audit-logs"><el-icon><Document /></el-icon><span>操作审计</span></el-menu-item>
-        <el-menu-item index="/users"><el-icon><User /></el-icon><span>用户管理</span></el-menu-item>
-        <el-menu-item index="/factors"><el-icon><TrendCharts /></el-icon><span>因子排名</span></el-menu-item>
-        <el-menu-item index="/factor-research"><el-icon><DataAnalysis /></el-icon><span>因子研究</span></el-menu-item>
-        <el-menu-item index="/portfolio"><el-icon><PieChart /></el-icon><span>目标组合</span></el-menu-item>
-        <el-menu-item index="/holdings"><el-icon><Wallet /></el-icon><span>当前持仓</span></el-menu-item>
-        <el-menu-item index="/investment-plans"><el-icon><Money /></el-icon><span>定投计划</span></el-menu-item>
-        <el-menu-item index="/risk-rebalance"><el-icon><Warning /></el-icon><span>风控调仓</span></el-menu-item>
-        <el-menu-item index="/backtest"><el-icon><Histogram /></el-icon><span>回测</span></el-menu-item>
-        <el-menu-item index="/reports"><el-icon><Document /></el-icon><span>报告</span></el-menu-item>
+        <el-menu-item v-for="item in visibleNavItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -41,6 +23,7 @@
           <p>ETF Systematic Portfolio Platform</p>
         </div>
         <div class="topbar-actions">
+          <el-tag v-if="authEnabled" type="info" round>{{ roleLabel }}</el-tag>
           <el-tag :type="healthOk ? 'success' : 'danger'" round>{{ healthOk ? 'API 正常' : 'API 异常' }}</el-tag>
           <el-button v-if="authEnabled" :icon="SwitchButton" circle title="退出登录" @click="handleLogout" />
         </div>
@@ -53,20 +36,88 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CircleCheck, DataAnalysis, DataBoard, DataLine, Document, Filter, Grid, Histogram, MagicStick, Money, Monitor, Operation, PieChart, Setting, SwitchButton, TrendCharts, User, Wallet, Warning } from '@element-plus/icons-vue'
+import {
+  CircleCheck,
+  DataAnalysis,
+  DataBoard,
+  DataLine,
+  Document,
+  Filter,
+  Grid,
+  Histogram,
+  MagicStick,
+  Money,
+  Monitor,
+  Operation,
+  PieChart,
+  Setting,
+  SwitchButton,
+  TrendCharts,
+  User,
+  Wallet,
+  Warning,
+} from '@element-plus/icons-vue'
 import { fetchAuthStatus, fetchHealth, logout } from './api/client'
+
+type Role = 'admin' | 'researcher' | 'viewer'
+type NavItem = {
+  path: string
+  label: string
+  icon: unknown
+  roles?: Role[]
+}
+
+const navItems: NavItem[] = [
+  { path: '/dashboard', label: '总览', icon: DataBoard },
+  { path: '/portfolio-workbench', label: '组合工作台', icon: Monitor },
+  { path: '/workflow', label: '全流程', icon: Operation, roles: ['admin'] },
+  { path: '/strategy-management', label: '策略管理', icon: TrendCharts, roles: ['admin'] },
+  { path: '/assets', label: 'ETF 池', icon: Grid },
+  { path: '/etf-screener', label: 'ETF 筛选', icon: Filter },
+  { path: '/etf-compare', label: 'ETF 对比', icon: DataLine },
+  { path: '/agent-analysis', label: 'AI 投研', icon: MagicStick },
+  { path: '/news', label: '新闻资讯', icon: Document },
+  { path: '/data-health', label: '数据健康', icon: CircleCheck, roles: ['admin'] },
+  { path: '/data-sources', label: '数据源管理', icon: Setting, roles: ['admin'] },
+  { path: '/system-status', label: '系统状态', icon: Setting, roles: ['admin'] },
+  { path: '/audit-logs', label: '操作审计', icon: Document, roles: ['admin'] },
+  { path: '/users', label: '用户管理', icon: User, roles: ['admin'] },
+  { path: '/factors', label: '因子排名', icon: TrendCharts },
+  { path: '/factor-research', label: '因子研究', icon: DataAnalysis, roles: ['admin', 'researcher'] },
+  { path: '/portfolio', label: '目标组合', icon: PieChart },
+  { path: '/holdings', label: '当前持仓', icon: Wallet, roles: ['admin', 'researcher'] },
+  { path: '/investment-plans', label: '定投计划', icon: Money, roles: ['admin', 'researcher'] },
+  { path: '/risk-rebalance', label: '风控调仓', icon: Warning, roles: ['admin', 'researcher'] },
+  { path: '/backtest', label: '回测', icon: Histogram, roles: ['admin', 'researcher'] },
+  { path: '/reports', label: '报告', icon: Document },
+]
 
 const healthOk = ref(false)
 const authEnabled = ref(false)
+const currentRole = ref<Role>('viewer')
 const router = useRouter()
+
+const visibleNavItems = computed(() =>
+  navItems.filter((item) => !item.roles || item.roles.includes(currentRole.value)),
+)
+
+const roleLabel = computed(() => {
+  const map: Record<Role, string> = {
+    admin: '管理员',
+    researcher: '研究员',
+    viewer: '观察者',
+  }
+  return map[currentRole.value] || currentRole.value
+})
 
 onMounted(async () => {
   try {
     const [, authStatus] = await Promise.all([fetchHealth(), fetchAuthStatus()])
     healthOk.value = true
     authEnabled.value = authStatus.enabled
+    currentRole.value = normalizeRole(authStatus.role)
   } catch {
     healthOk.value = false
   }
@@ -75,5 +126,10 @@ onMounted(async () => {
 async function handleLogout() {
   await logout()
   await router.replace('/login')
+}
+
+function normalizeRole(role: string | null | undefined): Role {
+  if (role === 'admin' || role === 'researcher') return role
+  return 'viewer'
 }
 </script>

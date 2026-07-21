@@ -15,7 +15,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="角色说明：admin 可管理数据源、策略和后台任务；researcher 用于后续投研操作权限；viewer 用于只读观察。"
+        title="角色说明：admin 可管理数据源、策略、任务和用户；researcher 可运行投研、回测、持仓和定投分析；viewer 只读观察。"
       />
     </section>
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.api.auth_api import require_researcher_user
 from app.core.database import get_db
 from app.schemas.backtest_schema import (
     BacktestEquityCurveRead,
@@ -23,7 +24,11 @@ router = APIRouter(prefix="/backtest", tags=["backtest"])
 
 
 @router.post("/run", response_model=BacktestRunResponse)
-def run_backtest_endpoint(request: BacktestRunRequest, db: Session = Depends(get_db)) -> BacktestRunResponse:
+def run_backtest_endpoint(
+    request: BacktestRunRequest,
+    _: str = Depends(require_researcher_user),
+    db: Session = Depends(get_db),
+) -> BacktestRunResponse:
     return run_backtest(
         db,
         strategy_code=request.strategy_code,
@@ -67,4 +72,3 @@ def get_trades(backtest_id: int, db: Session = Depends(get_db)) -> list[Backtest
 @router.get("/{backtest_id}/metrics", response_model=list[BacktestMetricRead])
 def get_metrics(backtest_id: int, db: Session = Depends(get_db)) -> list[BacktestMetricRead]:
     return list_backtest_metrics(db, backtest_id)
-

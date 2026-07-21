@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.api.auth_api import require_researcher_user
 from app.core.database import get_db
 from app.schemas.factor_schema import FactorCalculateRequest, FactorCalculateResponse, FactorRead, FactorResearchRequest, FactorResearchResponse
 from app.services.factor_research_service import analyze_factor_research
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/factors", tags=["factors"])
 @router.post("/calculate", response_model=FactorCalculateResponse)
 def calculate_factor_values(
     request: FactorCalculateRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
 ) -> FactorCalculateResponse:
     return calculate_factors(db, symbols=request.symbols, start_date=request.start_date, end_date=request.end_date)
@@ -31,6 +33,7 @@ def get_factor_ranking(
 @router.post("/research", response_model=FactorResearchResponse)
 def research_factors(
     request: FactorResearchRequest,
+    _: str = Depends(require_researcher_user),
     db: Session = Depends(get_db),
 ) -> FactorResearchResponse:
     return analyze_factor_research(
