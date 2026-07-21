@@ -10,6 +10,7 @@ class AgentAnalysisLog(Base):
     __tablename__ = "agent_analysis_log"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_username: Mapped[str | None] = mapped_column(String(100), index=True)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     name: Mapped[str | None] = mapped_column(String(100))
     start_date: Mapped[date] = mapped_column(Date, nullable=False)

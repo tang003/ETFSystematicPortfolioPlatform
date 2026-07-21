@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.api.auth_api import ADMIN_ROLE, AuthenticatedUser, get_authenticated_user
 from app.core.database import get_db
 from app.schemas.portfolio_schema import (
     HoldingAnalysisRead,
@@ -36,6 +37,10 @@ from app.services.strategy_service import latest_target_portfolio
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 
+def include_legacy_rows(user: AuthenticatedUser) -> bool:
+    return user.role == ADMIN_ROLE
+
+
 @router.get("/target", response_model=list[TargetPortfolioRead])
 def get_latest_target_portfolio(db: Session = Depends(get_db)) -> list[TargetPortfolioRead]:
     return latest_target_portfolio(db)
@@ -45,21 +50,33 @@ def get_latest_target_portfolio(db: Session = Depends(get_db)) -> list[TargetPor
 def save_position_snapshot(
     request: PortfolioSnapshotRequest,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[PortfolioPositionRead]:
     try:
-        return upsert_position_snapshot(db, request)
+        return upsert_position_snapshot(
+            db,
+            request,
+            owner_username=user.username,
+            include_legacy=include_legacy_rows(user),
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/positions", response_model=list[PortfolioPositionRead])
-def get_positions(db: Session = Depends(get_db)) -> list[PortfolioPositionRead]:
-    return list_positions(db)
+def get_positions(
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+) -> list[PortfolioPositionRead]:
+    return list_positions(db, owner_username=user.username, include_legacy=include_legacy_rows(user))
 
 
 @router.get("/xray", response_model=PortfolioXrayRead)
-def get_portfolio_xray(db: Session = Depends(get_db)) -> PortfolioXrayRead:
-    return build_portfolio_xray(db)
+def get_portfolio_xray(
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+) -> PortfolioXrayRead:
+    return build_portfolio_xray(db, owner_username=user.username, include_legacy=include_legacy_rows(user))
 
 
 @router.post("/positions/resolve", response_model=list[PositionResolveRead])
@@ -74,33 +91,48 @@ def resolve_positions(
 def run_holding_analysis(
     request: HoldingAnalysisRequest,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[HoldingAnalysisRead]:
     try:
-        rows = analyze_holdings(db, run_id=request.run_id, analysis_date=request.analysis_date)
+        rows = analyze_holdings(
+            db,
+            run_id=request.run_id,
+            analysis_date=request.analysis_date,
+            owner_username=user.username,
+            include_legacy=include_legacy_rows(user),
+        )
         return enrich_holding_analysis_with_alternatives(db, rows)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/holdings/analysis", response_model=list[HoldingAnalysisRead])
-def get_holding_analysis(db: Session = Depends(get_db)) -> list[HoldingAnalysisRead]:
-    return enrich_holding_analysis_with_alternatives(db, list_holding_analysis(db))
+def get_holding_analysis(
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+) -> list[HoldingAnalysisRead]:
+    rows = list_holding_analysis(db, owner_username=user.username, include_legacy=include_legacy_rows(user))
+    return enrich_holding_analysis_with_alternatives(db, rows)
 
 
 @router.post("/investment-plans", response_model=InvestmentPlanRead)
 def create_plan(
     request: InvestmentPlanCreate,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> InvestmentPlanRead:
     try:
-        return create_investment_plan(db, request)
+        return create_investment_plan(db, request, owner_username=user.username)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/investment-plans", response_model=list[InvestmentPlanRead])
-def get_plans(db: Session = Depends(get_db)) -> list[InvestmentPlanRead]:
-    return list_investment_plans(db)
+def get_plans(
+    db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
+) -> list[InvestmentPlanRead]:
+    return list_investment_plans(db, owner_username=user.username, include_legacy=include_legacy_rows(user))
 
 
 @router.post("/investment-plans/{plan_id}/analyze", response_model=list[InvestmentPlanSuggestionRead])
@@ -108,6 +140,7 @@ def run_investment_plan_analysis(
     plan_id: int,
     request: InvestmentPlanAnalyzeRequest,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[InvestmentPlanSuggestionRead]:
     try:
         return analyze_investment_plan(
@@ -115,6 +148,8 @@ def run_investment_plan_analysis(
             plan_id=plan_id,
             period_no=request.period_no,
             suggestion_date=request.suggestion_date,
+            owner_username=user.username,
+            include_legacy=include_legacy_rows(user),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -124,5 +159,11 @@ def run_investment_plan_analysis(
 def get_investment_plan_suggestions(
     plan_id: int,
     db: Session = Depends(get_db),
+    user: AuthenticatedUser = Depends(get_authenticated_user),
 ) -> list[InvestmentPlanSuggestionRead]:
-    return list_investment_suggestions(db, plan_id=plan_id)
+    return list_investment_suggestions(
+        db,
+        plan_id=plan_id,
+        owner_username=user.username,
+        include_legacy=include_legacy_rows(user),
+    )

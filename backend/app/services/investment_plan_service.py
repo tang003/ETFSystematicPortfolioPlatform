@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import Base, engine
 from app.models.portfolio import InvestmentPlan, InvestmentPlanSuggestion, TargetPortfolio
 from app.schemas.portfolio_schema import InvestmentPlanCreate
-from app.services.holding_service import current_weight_map
+from app.services.holding_service import current_weight_map, user_owned_clause
 from app.services.strategy_service import latest_target_portfolio
 
 
@@ -19,7 +19,12 @@ def ensure_investment_plan_tables() -> None:
     Base.metadata.create_all(bind=engine, tables=[InvestmentPlan.__table__, InvestmentPlanSuggestion.__table__])
 
 
-def create_investment_plan(db: Session, request: InvestmentPlanCreate) -> InvestmentPlan:
+def create_investment_plan(
+    db: Session,
+    request: InvestmentPlanCreate,
+    *,
+    owner_username: str | None = None,
+) -> InvestmentPlan:
     ensure_investment_plan_tables()
     if request.months < MIN_MONTHS or request.months > MAX_MONTHS:
         raise ValueError("Months must be between 1 and 360")
@@ -28,6 +33,7 @@ def create_investment_plan(db: Session, request: InvestmentPlanCreate) -> Invest
         raise ValueError("Target annual return must be greater than or equal to 0")
 
     plan = InvestmentPlan(
+        owner_username=owner_username,
         plan_name=request.plan_name.strip() or "定投计划",
         run_id=request.run_id,
         start_date=request.start_date,
@@ -63,9 +69,22 @@ def resolve_budget(request: InvestmentPlanCreate) -> tuple[Decimal, Decimal]:
     return monthly_amount, total_budget
 
 
-def list_investment_plans(db: Session, limit: int = 50) -> list[InvestmentPlan]:
+def list_investment_plans(
+    db: Session,
+    limit: int = 50,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[InvestmentPlan]:
     ensure_investment_plan_tables()
-    return list(db.scalars(select(InvestmentPlan).order_by(InvestmentPlan.created_at.desc()).limit(limit)).all())
+    return list(
+        db.scalars(
+            select(InvestmentPlan)
+            .where(user_owned_clause(InvestmentPlan, owner_username, include_legacy=include_legacy))
+            .order_by(InvestmentPlan.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
 
 
 def analyze_investment_plan(
@@ -74,9 +93,16 @@ def analyze_investment_plan(
     plan_id: int,
     period_no: int = 1,
     suggestion_date: date | None = None,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
 ) -> list[InvestmentPlanSuggestion]:
     ensure_investment_plan_tables()
-    plan = db.get(InvestmentPlan, plan_id)
+    plan = db.scalar(
+        select(InvestmentPlan).where(
+            InvestmentPlan.id == plan_id,
+            user_owned_clause(InvestmentPlan, owner_username, include_legacy=include_legacy),
+        )
+    )
     if plan is None:
         raise ValueError("Investment plan not found")
     if period_no < 1 or period_no > plan.months:
@@ -88,8 +114,9 @@ def analyze_investment_plan(
 
     resolved_run_id = plan.run_id or targets[0].run_id
     resolved_date = suggestion_date or date.today()
-    current_weights = current_weight_map(db)
+    current_weights = current_weight_map(db, owner_username=owner_username, include_legacy=include_legacy)
     rows = build_investment_suggestions(
+        owner_username=owner_username,
         plan_id=plan.id,
         run_id=resolved_run_id,
         suggestion_date=resolved_date,
@@ -105,11 +132,18 @@ def analyze_investment_plan(
         delete(InvestmentPlanSuggestion).where(
             InvestmentPlanSuggestion.plan_id == plan.id,
             InvestmentPlanSuggestion.period_no == period_no,
+            user_owned_clause(InvestmentPlanSuggestion, owner_username, include_legacy=include_legacy),
         )
     )
     db.add_all(rows)
     db.commit()
-    return list_investment_suggestions(db, plan_id=plan.id, period_no=period_no)
+    return list_investment_suggestions(
+        db,
+        plan_id=plan.id,
+        period_no=period_no,
+        owner_username=owner_username,
+        include_legacy=include_legacy,
+    )
 
 
 def list_investment_suggestions(
@@ -118,9 +152,13 @@ def list_investment_suggestions(
     plan_id: int | None = None,
     period_no: int | None = None,
     limit: int = 100,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
 ) -> list[InvestmentPlanSuggestion]:
     ensure_investment_plan_tables()
-    query = select(InvestmentPlanSuggestion)
+    query = select(InvestmentPlanSuggestion).where(
+        user_owned_clause(InvestmentPlanSuggestion, owner_username, include_legacy=include_legacy)
+    )
     if plan_id is not None:
         query = query.where(InvestmentPlanSuggestion.plan_id == plan_id)
     if period_no is not None:
@@ -143,6 +181,7 @@ def resolve_plan_targets(db: Session, run_id: int | None) -> list[TargetPortfoli
 
 def build_investment_suggestions(
     *,
+    owner_username: str | None,
     plan_id: int,
     run_id: int | None,
     suggestion_date: date,
@@ -184,6 +223,7 @@ def build_investment_suggestions(
         current = current_weights.get(symbol, Decimal("0"))
         rows.append(
             InvestmentPlanSuggestion(
+                owner_username=owner_username,
                 plan_id=plan_id,
                 run_id=run_id,
                 suggestion_date=suggestion_date,

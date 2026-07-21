@@ -12,7 +12,7 @@ from app.models.factor import FactorDaily
 from app.models.portfolio import HoldingAnalysisResult, PortfolioPosition, TargetPortfolio
 from app.services.deepseek_service import DeepSeekClientError, complete_json, deepseek_configured
 from app.services.etf_detail_service import get_etf_detail
-from app.services.holding_service import ensure_position_market_data
+from app.services.holding_service import ensure_position_market_data, user_owned_clause
 
 
 def analyze_etf_with_agents(
@@ -24,6 +24,8 @@ def analyze_etf_with_agents(
     use_llm: bool = True,
     auto_sync: bool = False,
     save_result: bool = True,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
 ) -> dict:
     cleaned_symbol = symbol.strip().upper().split(".", 1)[0]
     resolved_end = end_date or date.today()
@@ -38,9 +40,9 @@ def analyze_etf_with_agents(
 
     detail = get_etf_detail(db, symbol=cleaned_symbol, start_date=resolved_start, end_date=resolved_end)
     factor = detail["latest_factor"]
-    position = latest_position(db, cleaned_symbol)
+    position = latest_position(db, cleaned_symbol, owner_username=owner_username, include_legacy=include_legacy)
     target = latest_target(db, cleaned_symbol)
-    holding = latest_holding_analysis(db, cleaned_symbol)
+    holding = latest_holding_analysis(db, cleaned_symbol, owner_username=owner_username, include_legacy=include_legacy)
     context = {
         "detail": detail,
         "factor": factor,
@@ -95,17 +97,26 @@ def analyze_etf_with_agents(
         "warnings": warnings,
     }
     if save_result:
-        row = save_agent_analysis(db, result)
+        row = save_agent_analysis(db, result, owner_username=owner_username)
         if row is not None:
             result["id"] = row.id
             result["created_at"] = row.created_at
     return result
 
 
-def latest_position(db: Session, symbol: str) -> PortfolioPosition | None:
+def latest_position(
+    db: Session,
+    symbol: str,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> PortfolioPosition | None:
     return db.scalar(
         select(PortfolioPosition)
-        .where(PortfolioPosition.symbol == symbol)
+        .where(
+            PortfolioPosition.symbol == symbol,
+            user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy),
+        )
         .order_by(PortfolioPosition.position_date.desc(), PortfolioPosition.created_at.desc())
         .limit(1)
     )
@@ -120,10 +131,19 @@ def latest_target(db: Session, symbol: str) -> TargetPortfolio | None:
     )
 
 
-def latest_holding_analysis(db: Session, symbol: str) -> HoldingAnalysisResult | None:
+def latest_holding_analysis(
+    db: Session,
+    symbol: str,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> HoldingAnalysisResult | None:
     return db.scalar(
         select(HoldingAnalysisResult)
-        .where(HoldingAnalysisResult.symbol == symbol)
+        .where(
+            HoldingAnalysisResult.symbol == symbol,
+            user_owned_clause(HoldingAnalysisResult, owner_username, include_legacy=include_legacy),
+        )
         .order_by(HoldingAnalysisResult.analysis_date.desc(), HoldingAnalysisResult.created_at.desc())
         .limit(1)
     )
@@ -353,10 +373,11 @@ def manager_system_prompt() -> str:
     )
 
 
-def save_agent_analysis(db: Session, result: dict) -> AgentAnalysisLog | None:
+def save_agent_analysis(db: Session, result: dict, *, owner_username: str | None = None) -> AgentAnalysisLog | None:
     if not hasattr(db, "add"):
         return None
     row = AgentAnalysisLog(
+        owner_username=owner_username,
         symbol=result["symbol"],
         name=result["name"],
         start_date=result["start_date"],
@@ -377,8 +398,19 @@ def save_agent_analysis(db: Session, result: dict) -> AgentAnalysisLog | None:
     return row
 
 
-def list_agent_analysis_logs(db: Session, *, symbol: str | None = None, limit: int = 20) -> list[dict]:
-    query = select(AgentAnalysisLog).order_by(AgentAnalysisLog.created_at.desc(), AgentAnalysisLog.id.desc())
+def list_agent_analysis_logs(
+    db: Session,
+    *,
+    symbol: str | None = None,
+    limit: int = 20,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[dict]:
+    query = (
+        select(AgentAnalysisLog)
+        .where(user_owned_clause(AgentAnalysisLog, owner_username, include_legacy=include_legacy))
+        .order_by(AgentAnalysisLog.created_at.desc(), AgentAnalysisLog.id.desc())
+    )
     if symbol:
         query = query.where(AgentAnalysisLog.symbol == symbol.strip().upper().split(".", 1)[0])
     rows = db.scalars(query.limit(max(1, min(limit, 100)))).all()

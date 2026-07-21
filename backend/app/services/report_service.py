@@ -13,6 +13,7 @@ from app.models.report import ReportLog
 from app.models.risk import RiskCheckResult
 from app.models.strategy import AlphaSignal, StrategyRun
 from app.services.etf_detail_service import get_etf_detail
+from app.services.holding_service import user_owned_clause
 
 
 def generate_monthly_report(
@@ -20,6 +21,8 @@ def generate_monthly_report(
     *,
     run_id: int | None = None,
     report_date: date | None = None,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
 ) -> dict[str, Any]:
     strategy_run = resolve_strategy_run(db, run_id)
     if strategy_run is None:
@@ -33,8 +36,12 @@ def generate_monthly_report(
     latest_backtest = load_latest_backtest(db)
     backtest_metrics = load_backtest_metrics(db, latest_backtest.id) if latest_backtest else []
     asset_status = load_asset_status(db)
-    latest_positions = load_latest_positions(db)
-    investment_suggestions = load_latest_investment_suggestions(db)
+    latest_positions = load_latest_positions(db, owner_username=owner_username, include_legacy=include_legacy)
+    investment_suggestions = load_latest_investment_suggestions(
+        db,
+        owner_username=owner_username,
+        include_legacy=include_legacy,
+    )
     alternative_observations = load_holding_alternative_observations(db, latest_positions)
 
     markdown = build_monthly_report_markdown(
@@ -53,6 +60,7 @@ def generate_monthly_report(
     )
 
     report = ReportLog(
+        owner_username=owner_username,
         run_id=strategy_run.id,
         report_date=resolved_report_date,
         report_type="monthly_rebalance",
@@ -131,27 +139,51 @@ def load_asset_status(db: Session) -> dict[str, int]:
     return {"total": int(total), "enabled": int(enabled), "cross_border": int(cross_border)}
 
 
-def load_latest_positions(db: Session) -> list[PortfolioPosition]:
-    latest_date = db.scalar(select(func.max(PortfolioPosition.position_date)))
+def load_latest_positions(
+    db: Session,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[PortfolioPosition]:
+    latest_date = db.scalar(
+        select(func.max(PortfolioPosition.position_date)).where(
+            user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy)
+        )
+    )
     if latest_date is None:
         return []
     return list(
         db.scalars(
             select(PortfolioPosition)
-            .where(PortfolioPosition.position_date == latest_date)
+            .where(
+                PortfolioPosition.position_date == latest_date,
+                user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy),
+            )
             .order_by(PortfolioPosition.weight.desc().nullslast(), PortfolioPosition.symbol)
         ).all()
     )
 
 
-def load_latest_investment_suggestions(db: Session) -> list[InvestmentPlanSuggestion]:
-    latest_date = db.scalar(select(func.max(InvestmentPlanSuggestion.suggestion_date)))
+def load_latest_investment_suggestions(
+    db: Session,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[InvestmentPlanSuggestion]:
+    latest_date = db.scalar(
+        select(func.max(InvestmentPlanSuggestion.suggestion_date)).where(
+            user_owned_clause(InvestmentPlanSuggestion, owner_username, include_legacy=include_legacy)
+        )
+    )
     if latest_date is None:
         return []
     return list(
         db.scalars(
             select(InvestmentPlanSuggestion)
-            .where(InvestmentPlanSuggestion.suggestion_date == latest_date)
+            .where(
+                InvestmentPlanSuggestion.suggestion_date == latest_date,
+                user_owned_clause(InvestmentPlanSuggestion, owner_username, include_legacy=include_legacy),
+            )
             .order_by(InvestmentPlanSuggestion.suggested_amount.desc())
         ).all()
     )
@@ -407,9 +439,33 @@ def fmt_percent(value: Decimal | None) -> str:
     return f"{(Decimal(value) * Decimal('100')).quantize(Decimal('0.01'))}%"
 
 
-def list_reports(db: Session, limit: int = 100) -> list[ReportLog]:
-    return list(db.scalars(select(ReportLog).order_by(ReportLog.created_at.desc()).limit(limit)).all())
+def list_reports(
+    db: Session,
+    limit: int = 100,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[ReportLog]:
+    return list(
+        db.scalars(
+            select(ReportLog)
+            .where(user_owned_clause(ReportLog, owner_username, include_legacy=include_legacy))
+            .order_by(ReportLog.created_at.desc())
+            .limit(limit)
+        ).all()
+    )
 
 
-def get_report(db: Session, report_id: int) -> ReportLog | None:
-    return db.get(ReportLog, report_id)
+def get_report(
+    db: Session,
+    report_id: int,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> ReportLog | None:
+    return db.scalar(
+        select(ReportLog).where(
+            ReportLog.id == report_id,
+            user_owned_clause(ReportLog, owner_username, include_legacy=include_legacy),
+        )
+    )

@@ -1060,3 +1060,22 @@ GET /api/agent-analysis/etf/history?symbol=510300&limit=20
 - 不要把 `TUSHARE_TOKEN`、`DEEPSEEK_API_KEY`、数据库密码写进 Git。
 - 生产环境必须开启 `AUTH_ENABLED=true`。
 - 当前所有交易相关接口只生成建议，不应直接调用券商交易。
+## v0.65.8 用户数据隔离口径
+
+所有业务 API 默认要求登录。以下接口会自动根据登录态写入或过滤 `owner_username`，前端和调用方不需要传 owner：
+
+- `/api/portfolio/positions`
+- `/api/portfolio/xray`
+- `/api/portfolio/holdings/analyze`
+- `/api/portfolio/holdings/analysis`
+- `/api/portfolio/investment-plans`
+- `/api/portfolio/investment-plans/{plan_id}/analyze`
+- `/api/portfolio/investment-plans/{plan_id}/suggestions`
+- `/api/reports`
+- `/api/reports/monthly`
+- `/api/agent-analysis/etf`
+- `/api/agent-analysis/etf/history`
+
+管理员角色读取时会兼容旧版无 owner 的历史数据；普通数据库用户只读取自己的数据。
+
+注意：ETF 池、行情、因子、策略运行和目标组合仍是共享研究数据，接口不按用户隔离。

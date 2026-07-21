@@ -23,9 +23,10 @@ class TargetPortfolio(Base):
 
 class PortfolioPosition(Base):
     __tablename__ = "portfolio_position"
-    __table_args__ = (UniqueConstraint("position_date", "symbol", name="uq_portfolio_position_date_symbol"),)
+    __table_args__ = (UniqueConstraint("owner_username", "position_date", "symbol", name="uq_portfolio_position_owner_date_symbol"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_username: Mapped[str | None] = mapped_column(String(100), index=True)
     position_date: Mapped[date] = mapped_column(Date, nullable=False)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     position_name: Mapped[str | None] = mapped_column(String(100))
@@ -45,6 +46,7 @@ class HoldingAnalysisResult(Base):
     __tablename__ = "holding_analysis_result"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_username: Mapped[str | None] = mapped_column(String(100), index=True)
     run_id: Mapped[int | None] = mapped_column(ForeignKey("strategy_run.id"))
     analysis_date: Mapped[date] = mapped_column(Date, nullable=False)
     symbol: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -61,6 +63,7 @@ class InvestmentPlan(Base):
     __tablename__ = "investment_plan"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_username: Mapped[str | None] = mapped_column(String(100), index=True)
     plan_name: Mapped[str] = mapped_column(String(100), nullable=False)
     run_id: Mapped[int | None] = mapped_column(ForeignKey("strategy_run.id"))
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
@@ -78,6 +81,7 @@ class InvestmentPlanSuggestion(Base):
     __tablename__ = "investment_plan_suggestion"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    owner_username: Mapped[str | None] = mapped_column(String(100), index=True)
     plan_id: Mapped[int] = mapped_column(ForeignKey("investment_plan.id"), nullable=False)
     run_id: Mapped[int | None] = mapped_column(ForeignKey("strategy_run.id"))
     suggestion_date: Mapped[date] = mapped_column(Date, nullable=False)

@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import Base, engine
@@ -19,8 +19,27 @@ def ensure_holding_tables() -> None:
     Base.metadata.create_all(bind=engine, tables=[HoldingAnalysisResult.__table__])
 
 
-def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> list[PortfolioPosition]:
-    db.execute(delete(PortfolioPosition).where(PortfolioPosition.position_date == request.position_date))
+def user_owned_clause(model, owner_username: str | None, *, include_legacy: bool = False):
+    if owner_username is None:
+        return model.owner_username.is_(None)
+    if include_legacy:
+        return or_(model.owner_username == owner_username, model.owner_username.is_(None))
+    return model.owner_username == owner_username
+
+
+def upsert_position_snapshot(
+    db: Session,
+    request: PortfolioSnapshotRequest,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[PortfolioPosition]:
+    db.execute(
+        delete(PortfolioPosition).where(
+            PortfolioPosition.position_date == request.position_date,
+            user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy),
+        )
+    )
     prepared_details = prepare_position_assets(db, request)
     normalized = [
         normalize_position_input(item, prepared_details.get(normalize_symbol(item.symbol)) or resolve_position_detail(db, item.symbol))
@@ -33,6 +52,7 @@ def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> 
 
     rows = [
         PortfolioPosition(
+            owner_username=owner_username,
             position_date=request.position_date,
             symbol=item["symbol"],
             position_name=item["position_name"],
@@ -50,7 +70,7 @@ def upsert_position_snapshot(db: Session, request: PortfolioSnapshotRequest) -> 
     ]
     db.add_all(rows)
     db.commit()
-    return list_positions(db, position_date=request.position_date)
+    return list_positions(db, position_date=request.position_date, owner_username=owner_username, include_legacy=include_legacy)
 
 
 def prepare_position_assets(
@@ -267,25 +287,52 @@ def infer_asset_type(asset_class: str | None) -> str:
     return "etf"
 
 
-def latest_position_date(db: Session) -> date | None:
-    return db.scalar(select(func.max(PortfolioPosition.position_date)))
+def latest_position_date(db: Session, *, owner_username: str | None = None, include_legacy: bool = False) -> date | None:
+    return db.scalar(
+        select(func.max(PortfolioPosition.position_date)).where(
+            user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy)
+        )
+    )
 
 
-def list_positions(db: Session, position_date: date | None = None) -> list[PortfolioPosition]:
-    resolved_date = position_date or latest_position_date(db)
+def list_positions(
+    db: Session,
+    position_date: date | None = None,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[PortfolioPosition]:
+    resolved_date = position_date or latest_position_date(db, owner_username=owner_username, include_legacy=include_legacy)
     if resolved_date is None:
         return []
     return list(
         db.scalars(
             select(PortfolioPosition)
-            .where(PortfolioPosition.position_date == resolved_date)
+            .where(
+                PortfolioPosition.position_date == resolved_date,
+                user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy),
+            )
             .order_by(PortfolioPosition.weight.desc().nullslast())
         ).all()
     )
 
 
-def current_weight_map(db: Session, position_date: date | None = None) -> dict[str, Decimal]:
-    return {item.symbol: Decimal(item.weight or 0) for item in list_positions(db, position_date=position_date)}
+def current_weight_map(
+    db: Session,
+    position_date: date | None = None,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> dict[str, Decimal]:
+    return {
+        item.symbol: Decimal(item.weight or 0)
+        for item in list_positions(
+            db,
+            position_date=position_date,
+            owner_username=owner_username,
+            include_legacy=include_legacy,
+        )
+    }
 
 
 def analyze_holdings(
@@ -293,6 +340,8 @@ def analyze_holdings(
     *,
     run_id: int | None = None,
     analysis_date: date | None = None,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
 ) -> list[HoldingAnalysisResult]:
     ensure_holding_tables()
     targets = resolve_targets(db, run_id)
@@ -300,12 +349,17 @@ def analyze_holdings(
         raise ValueError("没有可用的目标组合。请先在“目标组合”页面运行策略，或在“全流程”页面生成目标组合后再运行持仓分析。")
     resolved_run_id = targets[0].run_id
     resolved_date = analysis_date or targets[0].portfolio_date
-    current_weights = current_weight_map(db)
+    current_weights = current_weight_map(db, owner_username=owner_username, include_legacy=include_legacy)
     target_weights = {item.symbol: Decimal(item.final_target_weight or item.raw_target_weight or 0) for item in targets}
     symbols = sorted(set(current_weights) | set(target_weights))
     alpha_scores = latest_alpha_scores(db)
 
-    db.execute(delete(HoldingAnalysisResult).where(HoldingAnalysisResult.run_id == resolved_run_id))
+    db.execute(
+        delete(HoldingAnalysisResult).where(
+            HoldingAnalysisResult.run_id == resolved_run_id,
+            user_owned_clause(HoldingAnalysisResult, owner_username, include_legacy=include_legacy),
+        )
+    )
     rows = []
     for symbol in symbols:
         current = current_weights.get(symbol, Decimal("0"))
@@ -313,6 +367,7 @@ def analyze_holdings(
         diff = target - current
         rows.append(
             HoldingAnalysisResult(
+                owner_username=owner_username,
                 run_id=resolved_run_id,
                 analysis_date=resolved_date,
                 symbol=symbol,
@@ -326,18 +381,33 @@ def analyze_holdings(
         )
     db.add_all(rows)
     db.commit()
-    return list_holding_analysis(db, run_id=resolved_run_id)
+    return list_holding_analysis(db, run_id=resolved_run_id, owner_username=owner_username, include_legacy=include_legacy)
 
 
-def list_holding_analysis(db: Session, run_id: int | None = None, limit: int = 100) -> list[HoldingAnalysisResult]:
+def list_holding_analysis(
+    db: Session,
+    run_id: int | None = None,
+    limit: int = 100,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[HoldingAnalysisResult]:
     ensure_holding_tables()
-    resolved_run_id = run_id or db.scalar(select(HoldingAnalysisResult.run_id).order_by(HoldingAnalysisResult.created_at.desc()).limit(1))
+    resolved_run_id = run_id or db.scalar(
+        select(HoldingAnalysisResult.run_id)
+        .where(user_owned_clause(HoldingAnalysisResult, owner_username, include_legacy=include_legacy))
+        .order_by(HoldingAnalysisResult.created_at.desc())
+        .limit(1)
+    )
     if resolved_run_id is None:
         return []
     return list(
         db.scalars(
             select(HoldingAnalysisResult)
-            .where(HoldingAnalysisResult.run_id == resolved_run_id)
+            .where(
+                HoldingAnalysisResult.run_id == resolved_run_id,
+                user_owned_clause(HoldingAnalysisResult, owner_username, include_legacy=include_legacy),
+            )
             .order_by(HoldingAnalysisResult.weight_diff.desc().nullslast())
             .limit(limit)
         ).all()

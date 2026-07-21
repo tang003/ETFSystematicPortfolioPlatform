@@ -13,9 +13,14 @@ from app.services.holding_service import latest_position_date
 from app.services.strategy_service import latest_target_portfolio
 
 
-def build_portfolio_xray(db: Session) -> PortfolioXrayRead:
+def build_portfolio_xray(
+    db: Session,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> PortfolioXrayRead:
     assets = {asset.symbol: asset for asset in db.scalars(select(AssetMaster)).all()}
-    positions = latest_positions(db)
+    positions = latest_positions(db, owner_username=owner_username, include_legacy=include_legacy)
     targets = latest_target_portfolio(db)
     current_weights = {item.symbol: Decimal(item.weight or 0) for item in positions}
     target_weights = {
@@ -28,11 +33,25 @@ def build_portfolio_xray(db: Session) -> PortfolioXrayRead:
     return PortfolioXrayRead(exposures=exposures, readiness=readiness)
 
 
-def latest_positions(db: Session) -> list[PortfolioPosition]:
-    position_date = latest_position_date(db)
+def latest_positions(
+    db: Session,
+    *,
+    owner_username: str | None = None,
+    include_legacy: bool = False,
+) -> list[PortfolioPosition]:
+    from app.services.holding_service import user_owned_clause
+
+    position_date = latest_position_date(db, owner_username=owner_username, include_legacy=include_legacy)
     if position_date is None:
         return []
-    return list(db.scalars(select(PortfolioPosition).where(PortfolioPosition.position_date == position_date)).all())
+    return list(
+        db.scalars(
+            select(PortfolioPosition).where(
+                PortfolioPosition.position_date == position_date,
+                user_owned_clause(PortfolioPosition, owner_username, include_legacy=include_legacy),
+            )
+        ).all()
+    )
 
 
 def build_exposures(
