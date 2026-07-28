@@ -10,6 +10,7 @@ from app.models.audit import AuditLog
 
 AUDITED_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 SKIPPED_PREFIXES = ("/api/auth/",)
+SENSITIVE_QUERY_KEYS = ("api_key", "apikey", "key", "password", "secret", "token")
 
 
 def should_audit_request(request: Request) -> bool:
@@ -62,7 +63,7 @@ def record_audit_log(
     except Exception:
         user = None
 
-    detail = {"query": dict(request.query_params)}
+    detail = {"query": sanitize_query_params(dict(request.query_params))}
     if error_message:
         detail["error"] = error_message
 
@@ -93,6 +94,17 @@ def resolve_action(method: str, path: str) -> str:
     normalized = path.removeprefix("/api/").strip("/")
     head = normalized.split("/", 1)[0] or "api"
     return f"{method.lower()}_{head.replace('-', '_')}"
+
+
+def sanitize_query_params(params: dict[str, str]) -> dict[str, str]:
+    sanitized: dict[str, str] = {}
+    for key, value in params.items():
+        lowered = key.lower()
+        if any(marker in lowered for marker in SENSITIVE_QUERY_KEYS):
+            sanitized[key] = "***"
+        else:
+            sanitized[key] = value
+    return sanitized
 
 
 def resolve_client_ip(request: Request) -> str | None:

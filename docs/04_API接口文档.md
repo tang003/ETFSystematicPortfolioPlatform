@@ -127,7 +127,7 @@
 
 - 审计中间件记录 `/api` 下 POST、PUT、PATCH、DELETE 请求。
 - 记录字段包括操作者、角色、方法、路径、动作、状态码、耗时、IP、request_id 和时间。
-- 审计日志不保存请求正文，不记录 token、密码、数据源密钥等敏感内容。
+- 审计日志不保存请求正文；query 参数中的 `token`、`secret`、`password`、`api_key` 等敏感键会脱敏为 `***`，不记录 token、密码、数据源密钥等敏感内容。
 
 ## ETF 池
 
