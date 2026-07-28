@@ -19,9 +19,12 @@
         <el-form-item v-if="rangeKey === 'custom'" label="日期范围">
           <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" :clearable="false" />
         </el-form-item>
-        <el-form-item label="自动补数">
+        <el-form-item v-if="canAdmin" label="自动补数">
           <el-switch v-model="autoSyncMissing" />
           <span class="form-note">开启后会用 Tushare 尝试补齐本次对比缺失行情，最多 {{ maxAutoSyncSymbols }} 只。</span>
+        </el-form-item>
+        <el-form-item v-else label="自动补数">
+          <span class="form-note">当前为只读对比，不自动调用外部数据源；缺行情时请联系管理员到数据健康页补齐。</span>
         </el-form-item>
       </el-form>
       <div class="source-hint">
@@ -123,6 +126,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { compareEtfs, type EtfCompareResponse } from '../api/client'
+import { useAuthRole } from '../auth'
 import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const loading = ref(false)
@@ -134,6 +138,7 @@ const dateRange = ref<[string, string]>(buildPresetRange(rangeKey.value))
 const symbolsText = ref('510300,159915,513050')
 const autoSyncMissing = ref(false)
 const maxAutoSyncSymbols = ref(5)
+const { canAdmin } = useAuthRole()
 
 onMounted(() => {
   applyRange()
@@ -166,7 +171,7 @@ async function runCompare() {
       symbols,
       start_date: dateRange.value[0],
       end_date: dateRange.value[1],
-      auto_sync_missing: autoSyncMissing.value,
+      auto_sync_missing: canAdmin.value && autoSyncMissing.value,
       max_auto_sync_symbols: maxAutoSyncSymbols.value,
     })
     await nextTick()

@@ -51,9 +51,12 @@
         <el-form-item label="返回数量">
           <el-input-number v-model="form.limit" :min="10" :max="200" :step="10" />
         </el-form-item>
-        <el-form-item label="自动补数">
+        <el-form-item v-if="canAdmin" label="自动补数">
           <el-switch v-model="form.auto_sync_missing" />
           <span class="form-note">适合手动代码少量评估；最多自动补 {{ form.max_auto_sync_symbols }} 只。</span>
+        </el-form-item>
+        <el-form-item v-else label="自动补数">
+          <span class="form-note">当前为只读筛选，不自动调用外部数据源；缺行情时请联系管理员补齐。</span>
         </el-form-item>
       </el-form>
     </section>
@@ -112,6 +115,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { screenEtfs, type EtfCompareMetric, type EtfScreenerResponse } from '../api/client'
+import { useAuthRole } from '../auth'
 import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const loading = ref(false)
@@ -119,6 +123,7 @@ const result = ref<EtfScreenerResponse | null>(null)
 const symbolsText = ref('')
 const rangeKey = ref<AnalysisPreset>('6m')
 const customDateRange = ref<[string, string]>(buildPresetRange('1y'))
+const { canAdmin } = useAuthRole()
 
 const form = reactive({
   scope: 'enabled',
@@ -181,7 +186,7 @@ async function runScreen() {
       min_tradability_score: form.min_tradability_score,
       min_buy_score: form.min_buy_score,
       asset_class: form.asset_class || undefined,
-      auto_sync_missing: form.auto_sync_missing,
+      auto_sync_missing: canAdmin.value && form.auto_sync_missing,
       max_auto_sync_symbols: form.max_auto_sync_symbols,
     })
   } catch (error) {

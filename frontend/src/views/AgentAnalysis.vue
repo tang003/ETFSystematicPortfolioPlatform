@@ -20,11 +20,20 @@
             end-placeholder="结束日期"
             :clearable="false"
           />
-          <el-switch v-model="autoSync" active-text="自动补全数据" />
-          <el-switch v-model="useLlm" active-text="DeepSeek 总结" />
-          <el-button type="primary" :loading="loading" @click="runAnalysis">运行分析</el-button>
+          <template v-if="canResearch">
+            <el-switch v-model="autoSync" active-text="自动补全数据" />
+            <el-switch v-model="useLlm" active-text="DeepSeek 总结" />
+            <el-button type="primary" :loading="loading" @click="runAnalysis">运行分析</el-button>
+          </template>
         </div>
       </div>
+      <el-alert
+        v-if="!canResearch"
+        class="permission-alert"
+        type="info"
+        :closable="false"
+        title="当前为只读观察者，可以查看已保存的分析记录；运行新的 AI 投研需要研究员或管理员权限。"
+      />
       <el-alert
         v-if="analysis?.warnings.length"
         type="warning"
@@ -119,6 +128,7 @@ import {
   type EtfAgentAnalysisLog,
   type EtfAgentAnalysisResponse,
 } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 import { analysisPresetOptions, buildPresetRange, type AnalysisPreset } from '../datePresets'
 
 const symbol = ref('510300')
@@ -134,6 +144,7 @@ const historyScopeOptions = [
   { label: '全部记录', value: 'all' },
   { label: '当前代码', value: 'symbol' },
 ]
+const { canResearch } = useAuthRole()
 
 const dataStatusText = computed(() => {
   if (!analysis.value) return '-'
@@ -160,7 +171,7 @@ async function runAnalysis() {
     await loadHistory()
     ElMessage.success(`分析已保存${analysis.value.id ? `，记录 ID=${analysis.value.id}` : ''}`)
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'AI 投研分析失败')
+    ElMessage.error(errorMessage(error, 'AI 投研分析失败'))
   } finally {
     loading.value = false
   }

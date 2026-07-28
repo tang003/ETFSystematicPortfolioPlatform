@@ -27,10 +27,17 @@
             end-placeholder="结束日期"
             @change="refresh"
           />
-          <el-button :loading="syncLoading" @click="syncCurrentEtf">同步本 ETF 行情</el-button>
+          <el-button v-if="canAdmin" :loading="syncLoading" @click="syncCurrentEtf">同步本 ETF 行情</el-button>
           <el-button type="primary" :loading="loading" @click="refresh">刷新</el-button>
         </div>
       </div>
+      <el-alert
+        v-if="!canAdmin"
+        class="permission-alert"
+        type="info"
+        :closable="false"
+        title="当前为只读查看详情；同步行情会调用外部数据源并写入共享行情，需要管理员权限。"
+      />
 
       <div class="decision-grid">
         <div class="decision-main">
@@ -195,6 +202,7 @@ import { useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { fetchEtfDetail, syncMarket, type EtfDetailResponse } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const route = useRoute()
@@ -213,6 +221,7 @@ const holdingOptions = [
   { label: '1年+', value: '1y' },
 ]
 const dateRange = ref<[string, string]>(buildPresetRange('6m'))
+const { canAdmin } = useAuthRole()
 
 onMounted(refresh)
 
@@ -291,7 +300,7 @@ async function syncCurrentEtf() {
     ElMessage.success('已同步本 ETF 行情')
     await refresh()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '同步本 ETF 行情失败')
+    ElMessage.error(errorMessage(error, '同步本 ETF 行情失败'))
   } finally {
     syncLoading.value = false
   }

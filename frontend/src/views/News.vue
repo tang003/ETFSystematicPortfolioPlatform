@@ -8,7 +8,7 @@
         </div>
         <div class="task-tags">
           <el-button :loading="loading" @click="loadNews">刷新列表</el-button>
-          <el-button type="primary" :loading="syncing" @click="syncLatest">同步最新新闻</el-button>
+          <el-button v-if="canAdmin" type="primary" :loading="syncing" @click="syncLatest">同步最新新闻</el-button>
         </div>
       </div>
       <el-form class="filter-form" :inline="true">
@@ -60,6 +60,10 @@
     <section class="panel span-4">
       <h2>同步策略</h2>
       <div class="insight-list">
+        <div v-if="!canAdmin" class="insight-item">
+          <span>当前权限</span>
+          <p>你可以浏览本地新闻。同步外部新闻会消耗数据源额度，需要管理员权限。</p>
+        </div>
         <div class="insight-item">
           <span>接口</span>
           <p>当前使用数据源管理中的 `juhe_finance_news`，每次最多同步 50 条。</p>
@@ -81,6 +85,7 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchNews, syncNews, type NewsArticle } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 
 const articles = ref<NewsArticle[]>([])
 const loading = ref(false)
@@ -88,6 +93,7 @@ const syncing = ref(false)
 const q = ref('')
 const symbol = ref('')
 const limit = ref(50)
+const { canAdmin } = useAuthRole()
 
 onMounted(loadNews)
 
@@ -111,7 +117,7 @@ async function syncLatest() {
     ElMessage.success(`同步完成：新增 ${String(result.inserted ?? 0)}，更新 ${String(result.updated ?? 0)}`)
     await loadNews()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '同步新闻失败')
+    ElMessage.error(errorMessage(error, '同步新闻失败'))
   } finally {
     syncing.value = false
   }

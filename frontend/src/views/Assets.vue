@@ -6,11 +6,14 @@
           <h2>ETF 池管理</h2>
           <p class="section-note">维护 ETF 基础池和研究池；基础池保存 ETF 档案，启用后才进入行情、因子、策略和回测流程。</p>
         </div>
-        <div class="header-actions">
+        <div v-if="canAdmin" class="header-actions">
           <el-button :loading="actionLoading" @click="syncUniverse">同步 ETF 基础池</el-button>
           <el-button :loading="actionLoading" @click="syncProfiles">补全当前筛选资料</el-button>
           <el-button type="primary" :loading="actionLoading" @click="importPresetAssets">导入精选示例池</el-button>
           <el-button @click="copyEnabledSymbols">复制已启用代码</el-button>
+        </div>
+        <div v-else class="header-actions">
+          <el-alert type="info" :closable="false" title="当前为只读浏览；同步、导入、启停和编辑 ETF 资料需要管理员权限。" />
         </div>
       </div>
 
@@ -35,7 +38,7 @@
       </div>
     </section>
 
-    <section class="panel span-4">
+    <section v-if="canAdmin" class="panel span-4">
       <div class="panel-header">
         <h2>批量导入</h2>
       </div>
@@ -200,12 +203,17 @@
         </el-table-column>
         <el-table-column label="启用" width="90">
           <template #default="{ row }">
-            <el-switch :model-value="row.enabled" :loading="togglingSymbol === row.symbol" @change="(value: string | number | boolean) => toggleAsset(row.symbol, value)" />
+            <el-switch
+              :model-value="row.enabled"
+              :disabled="!canAdmin"
+              :loading="togglingSymbol === row.symbol"
+              @change="(value: string | number | boolean) => toggleAsset(row.symbol, value)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openProfile(row)">编辑</el-button>
+            <el-button v-if="canAdmin" link type="primary" @click="openProfile(row)">编辑</el-button>
             <el-button link type="primary" @click="$router.push(`/etf-detail/${row.symbol}`)">详情</el-button>
           </template>
         </el-table-column>
@@ -253,6 +261,7 @@ import {
   type AssetUpsertItem,
   type EtfCompareMetric,
 } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 
 type ProfileForm = {
   symbol: string
@@ -285,6 +294,7 @@ const tradabilityScoreMin = ref(0)
 const togglingSymbol = ref('')
 const profileDialogVisible = ref(false)
 const profileForm = ref<ProfileForm | null>(null)
+const { canAdmin } = useAuthRole()
 
 const classQuickFilters = [
   { label: '权益', value: 'equity' },
@@ -722,9 +732,4 @@ function fromPercentNumber(value: number | null | undefined) {
   return value == null ? null : value / 100
 }
 
-function errorMessage(error: unknown, fallback: string) {
-  const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-  if (detail) return detail
-  return error instanceof Error ? error.message : fallback
-}
 </script>

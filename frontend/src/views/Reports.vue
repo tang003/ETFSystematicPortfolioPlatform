@@ -3,9 +3,16 @@
     <section class="panel span-12">
       <div class="panel-header">
         <h2>生成报告</h2>
-        <el-button type="primary" :loading="actionLoading" @click="runReportGeneration">生成月度报告</el-button>
+        <el-button v-if="canResearch" type="primary" :loading="actionLoading" @click="runReportGeneration">生成月度报告</el-button>
       </div>
-      <el-form class="action-form" label-width="92px">
+      <el-alert
+        v-if="!canResearch"
+        class="permission-alert"
+        type="info"
+        :closable="false"
+        title="当前为只读查看报告；生成新报告会写入个人报告记录，需要研究员或管理员权限。"
+      />
+      <el-form v-if="canResearch" class="action-form" label-width="92px">
         <el-form-item label="运行 ID">
           <el-input-number v-model="runId" :min="1" />
           <span class="form-note">可留用默认值；后端也支持不指定 run_id。</span>
@@ -34,6 +41,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchReport, fetchReports, generateMonthlyReport, type Report } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 
 const reports = ref<Report[]>([])
 const selected = ref<Report>()
@@ -41,6 +49,7 @@ const loading = ref(true)
 const actionLoading = ref(false)
 const runId = ref(1)
 const reportDate = ref(new Date().toISOString().slice(0, 10))
+const { canResearch } = useAuthRole()
 
 onMounted(refresh)
 
@@ -111,7 +120,7 @@ async function runReportGeneration() {
     ElMessage.success(`报告生成完成，report_id=${String(result.id ?? '-')}`)
     await refresh()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '报告生成失败')
+    ElMessage.error(errorMessage(error, '报告生成失败'))
   } finally {
     actionLoading.value = false
   }

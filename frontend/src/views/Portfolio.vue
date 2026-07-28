@@ -7,9 +7,16 @@
     <section class="panel span-7">
       <div class="panel-header">
         <h2>目标组合</h2>
-        <el-button type="primary" :loading="actionLoading" @click="runStrategyFlow">运行策略</el-button>
+        <el-button v-if="canAdmin" type="primary" :loading="actionLoading" @click="runStrategyFlow">运行策略</el-button>
       </div>
-      <el-form class="action-form" label-width="92px">
+      <el-alert
+        v-if="!canAdmin"
+        class="permission-alert"
+        type="info"
+        :closable="false"
+        title="当前为只读查看目标组合；运行策略会改写共享目标权重，需要管理员权限。"
+      />
+      <el-form v-if="canAdmin" class="action-form" label-width="92px">
         <el-form-item label="策略代码">
           <el-select v-model="strategyCode" placeholder="选择启用策略">
             <el-option
@@ -41,6 +48,7 @@ import { computed, nextTick, onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { fetchStrategies, fetchTargetPortfolio, runStrategy, type StrategyConfig, type TargetPortfolio } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 
 const targets = ref<TargetPortfolio[]>([])
 const loading = ref(true)
@@ -49,6 +57,7 @@ const chartRef = ref<HTMLElement>()
 const strategyCode = ref('core_etf_rotation')
 const runDate = ref(new Date().toISOString().slice(0, 10))
 const strategies = ref<StrategyConfig[]>([])
+const { canAdmin } = useAuthRole()
 const enabledStrategies = computed(() => strategies.value.filter((item) => item.enabled))
 
 onMounted(refresh)
@@ -76,7 +85,7 @@ async function runStrategyFlow() {
     ElMessage.success(`策略运行完成，run_id=${String(result.run_id ?? '-')}`)
     await refresh()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '策略运行失败')
+    ElMessage.error(errorMessage(error, '策略运行失败'))
   } finally {
     actionLoading.value = false
   }

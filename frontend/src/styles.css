@@ -161,6 +161,10 @@ body {
   line-height: 1.5;
 }
 
+.permission-alert {
+  margin: 0 0 12px;
+}
+
 .header-actions {
   display: flex;
   flex-wrap: wrap;

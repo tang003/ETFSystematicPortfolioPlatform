@@ -3,8 +3,15 @@
     <section class="panel span-12">
       <div class="panel-header">
         <h2>因子排名</h2>
-        <el-button type="primary" :loading="actionLoading" @click="runFactorCalculation">计算因子</el-button>
+        <el-button v-if="canResearch" type="primary" :loading="actionLoading" @click="runFactorCalculation">计算因子</el-button>
       </div>
+      <el-alert
+        v-if="!canResearch"
+        class="permission-alert"
+        type="info"
+        :closable="false"
+        title="当前为只读查看因子排名；重新计算因子会写入共享研究数据，需要研究员或管理员权限。"
+      />
       <el-form class="action-form" label-width="92px">
         <el-form-item label="分析周期">
           <el-segmented v-model="datePreset" :options="analysisPresetOptions" @change="applyPreset" />
@@ -49,6 +56,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { calculateFactors, fetchFactorRanking, scoreEtfTradability, type EtfCompareMetric, type Factor } from '../api/client'
+import { errorMessage, useAuthRole } from '../auth'
 import { analysisPresetOptions, buildPresetRange, presetLabel, type AnalysisPreset } from '../datePresets'
 
 const factors = ref<Factor[]>([])
@@ -59,6 +67,7 @@ const datePreset = ref<AnalysisPreset>('1y')
 const dateRange = ref<[string, string]>(buildPresetRange(datePreset.value))
 const symbolsText = ref('')
 const rangeLabel = computed(() => `${presetLabel(datePreset.value)}：${dateRange.value[0]} 至 ${dateRange.value[1]}`)
+const { canResearch } = useAuthRole()
 
 onMounted(refresh)
 
@@ -93,7 +102,7 @@ async function runFactorCalculation() {
     ElMessage.success('因子计算完成')
     await refresh()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '因子计算失败')
+    ElMessage.error(errorMessage(error, '因子计算失败'))
   } finally {
     actionLoading.value = false
   }

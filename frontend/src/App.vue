@@ -60,8 +60,8 @@ import {
   Warning,
 } from '@element-plus/icons-vue'
 import { fetchAuthStatus, fetchHealth, logout } from './api/client'
+import { normalizeRole, roleLabel as formatRoleLabel, type Role } from './auth'
 
-type Role = 'admin' | 'researcher' | 'viewer'
 type NavItem = {
   path: string
   label: string
@@ -104,12 +104,7 @@ const visibleNavItems = computed(() =>
 )
 
 const roleLabel = computed(() => {
-  const map: Record<Role, string> = {
-    admin: '管理员',
-    researcher: '研究员',
-    viewer: '观察者',
-  }
-  return map[currentRole.value] || currentRole.value
+  return formatRoleLabel(currentRole.value)
 })
 
 onMounted(async () => {
@@ -128,8 +123,4 @@ async function handleLogout() {
   await router.replace('/login')
 }
 
-function normalizeRole(role: string | null | undefined): Role {
-  if (role === 'admin' || role === 'researcher') return role
-  return 'viewer'
-}
 </script>

@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { fetchAuthStatus } from '../api/client'
-
-type Role = 'admin' | 'researcher' | 'viewer'
+import { normalizeRole, type Role } from '../auth'
 
 const Login = () => import('../views/Login.vue')
 const Dashboard = () => import('../views/Dashboard.vue')
@@ -78,10 +77,5 @@ router.beforeEach(async (to) => {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
 })
-
-function normalizeRole(role: string | null | undefined): Role {
-  if (role === 'admin' || role === 'researcher') return role
-  return 'viewer'
-}
 
 export default router
