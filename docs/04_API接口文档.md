@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.64.7-tushare-doc-and-default-source-cleanup`
+当前版本：`v0.65.12-docs-deploy-consistency`
 
 默认 API 前缀：`/api`
 
