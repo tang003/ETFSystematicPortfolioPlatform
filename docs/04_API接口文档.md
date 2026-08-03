@@ -1,6 +1,6 @@
 # 04 API 接口文档
 
-当前版本：`v0.65.12-docs-deploy-consistency`
+当前版本：`v0.65.14-doc-version-alignment`
 
 默认 API 前缀：`/api`
 
